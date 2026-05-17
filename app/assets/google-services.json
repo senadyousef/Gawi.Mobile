@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "385397679457",
+    "project_id": "gawi-581d8",
+    "storage_bucket": "gawi-581d8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:385397679457:android:8ce35f10ca6e2a9d68d120",
+        "android_client_info": {
+          "package_name": "com.smartUse.Gawi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD41XC5RU-ZytunA36Iy7afDt2LK99YB30"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

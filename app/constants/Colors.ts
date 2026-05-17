@@ -1,0 +1,18 @@
+export default {
+  tertiary: '#ff7002',
+  // primary: '#1575A9',
+  primary: '#0189ff',
+  secondary: '#404041',
+  gray: '#828282',
+  lightGray: '#BABABA',
+  error: '#ff0000',
+  lightRed: '#FFcccc',
+  darkRed: '#C70039',
+  white: '#fff',
+  black: '#000',
+  borderGray: '#F2F2F2',
+  backgroundBlue: '#006BA6',
+  backgroundGray: '#F6F7FB',
+  green: '#33FF00',
+  success: '#6FCF97',
+};

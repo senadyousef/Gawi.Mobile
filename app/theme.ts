@@ -1,0 +1,20 @@
+export const theme = {
+  bg:       "#0F0F0F",
+  surface:  "#1A1A1A",
+  surface2: "#242424",
+  border:   "#2E2E2E",
+  hairline: "#262626",
+  ink:      "#F0EBE0",
+  muted:    "#6B6560",
+  accent:   "#C8F04A",
+  green:    "#4CAF50",
+  blue:     "#4A90D9",
+  orange:   "#E8742A",
+  purple:   "#8B6BC4",
+  butter:   "#2A2410",
+  butterInk:"#E8D080",
+  coral:    "#2A1510",
+  coralInk: "#E89080",
+
+  radius: { sm: 12, md: 16, lg: 20, xl: 24, xxl: 28 },
+} as const;
