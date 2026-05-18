@@ -68,11 +68,11 @@ const SettingsSection = () => {
     //   onPress: () => navigate("manageMyAccount"),
     //   hideForGuest: true,
     // },
-    {
-      AntDesignIconName: "lock",
-      title: i18n.t("privacy_and_safety"),
-      onPress: () => {},
-    },
+    // {
+    //   AntDesignIconName: "lock",
+    //   title: i18n.t("privacy_and_safety"),
+    //   onPress: () => {},
+    // },
     // {
     //   IoniconsIconName: "notifications-outline",
     //   title: i18n.t("notification"),

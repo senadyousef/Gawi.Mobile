@@ -150,6 +150,7 @@ export default function MyProfileScreen() {
         expiryDate: formatDate(data.subscriptionExpiryDate),
         startDate: formatDate(data.subscriptionStartDate),
       });
+      
       setLoading(false);
     } catch (error) {
       Alert.alert("Error", "Failed to load membership");

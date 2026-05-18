@@ -178,12 +178,12 @@ export const ContextProvider: React.FC<Iprops> = ({
     setTotalCartItems(0);
     setUserType(null); // 👈 Reset userType on logout
 
-    shouldToast &&
-      handleShowToast({
-        type: "error",
-        text1: "error",
-        text2: "session_expired",
-      });
+    // shouldToast &&
+    //   handleShowToast({
+    //     type: "error",
+    //     text1: "error",
+    //     text2: "session_expired",
+    //   });
   };
 
   // -----------------------------

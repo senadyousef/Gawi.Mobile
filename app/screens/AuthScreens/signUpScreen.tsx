@@ -7,7 +7,12 @@ import { useNavigation, CommonActions } from "@react-navigation/native";
 import { useForm, Controller, SubmitHandler } from "react-hook-form";
 import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet, Image, View as RNView, Alert } from "react-native";
-import { Text, View, TouchableOpacity, KeyboardAvoidingView } from "../../components/overridedComponents";
+import {
+  Text,
+  View,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+} from "../../components/overridedComponents";
 import AuthInput from "../../components/Auth/AuthInput";
 import AuthButton from "../../components/Auth/AuthButton";
 import ErrorMessage from "../../components/ErrorMessage";
@@ -62,14 +67,17 @@ const SignUpScreen = () => {
 
       console.log("📦 Sending payload:", payload);
 
-      const response = await fetch("https://gym.useitsmart.com/api/User/signUp", {
-        method: "POST",
-        headers: {
-          "accept": "text/plain",
-          "Content-Type": "application/json",
+      const response = await fetch(
+        "https://gym.useitsmart.com/api/User/signUp",
+        {
+          method: "POST",
+          headers: {
+            accept: "text/plain",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+      );
 
       console.log("🔹 Response status:", response.status);
 
@@ -83,11 +91,17 @@ const SignUpScreen = () => {
       } else {
         const errorText = await response.text();
         console.log("❌ Registration failed:", errorText);
-        Alert.alert("Registration Failed", errorText || "Unable to register. Please try again.");
+        Alert.alert(
+          "Registration Failed",
+          errorText || "Unable to register. Please try again.",
+        );
       }
     } catch (error: any) {
       console.log("🔥 Error during registration:", error);
-      Alert.alert("Error", error.message || "Something went wrong. Please try again.");
+      Alert.alert(
+        "Error",
+        error.message || "Something went wrong. Please try again.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -100,7 +114,7 @@ const SignUpScreen = () => {
       CommonActions.reset({
         index: 0,
         routes: [{ name: "Root" }],
-      })
+      }),
     );
   };
 
@@ -122,27 +136,25 @@ const SignUpScreen = () => {
         />
 
         <RNView
-          style={[
-            styles.wrapper,
-            { direction: isArabic() ? "rtl" : "ltr" },
-          ]}
+          style={[styles.wrapper, { direction: isArabic() ? "rtl" : "ltr" }]}
         >
           <ErrorMessage width={width - 50} message={errorMessage} />
 
           {/* 🗣️ Name Arabic */}
-          <RNView>
+          <RNView style={{ width: "100%" }}>
             <Controller
               name="nameAr"
               control={control}
-              rules={{ required: "Arabic name is required" }}
+              rules={{ required: i18n.t("errors.name_ar_required") }}
               render={({ field: { onChange, onBlur, value } }) => (
                 <AuthInput
                   value={value}
                   onBlur={onBlur}
                   onChangeText={onChange}
                   iconName="account-outline"
-                  placeholder="Name Arabic"
- textAlign={isArabic() ? "right" : "left"}                />
+placeholder={i18n.t("name_ar")}
+                  textAlign={isArabic() ? "right" : "left"}
+                />
               )}
             />
             {errors.nameAr?.message && (
@@ -155,15 +167,16 @@ const SignUpScreen = () => {
             <Controller
               name="nameEn"
               control={control}
-              rules={{ required: "English name is required" }}
+              rules={{ required: i18n.t("errors.name_en_required") }}
               render={({ field: { onChange, onBlur, value } }) => (
                 <AuthInput
                   value={value}
                   onBlur={onBlur}
                   onChangeText={onChange}
                   iconName="account-outline"
-                  placeholder="Name English"
- textAlign={isArabic() ? "right" : "left"}                />
+placeholder={i18n.t("name_en")}
+                  textAlign={isArabic() ? "right" : "left"}
+                />
               )}
             />
             {errors.nameEn?.message && (
@@ -177,10 +190,10 @@ const SignUpScreen = () => {
               name="phoneNumber"
               control={control}
               rules={{
-                required: "Phone number is required",
+                required: i18n.t("errors.phone_required"),
                 pattern: {
                   value: /^[0-9]{8,15}$/,
-                  message: "Enter a valid phone number",
+                  message: i18n.t("errors.invalid_phone"),
                 },
               }}
               render={({ field: { onChange, onBlur, value } }) => (
@@ -190,7 +203,7 @@ const SignUpScreen = () => {
                   onChangeText={onChange}
                   iconName="phone-outline"
                   keyboardType="phone-pad"
-                  placeholder="Phone Number"
+                  placeholder={i18n.t("phone")}
                   textAlign={isArabic() ? "right" : "left"}
                 />
               )}
@@ -206,10 +219,10 @@ const SignUpScreen = () => {
               name="email"
               control={control}
               rules={{
-                required: "Email is required",
+                required: i18n.t("errors.email_required"),
                 pattern: {
                   value: /^\S+@\S+$/i,
-                  message: "Enter a valid email",
+                  message: i18n.t("errors.invalid_email"),
                 },
               }}
               render={({ field: { onChange, onBlur, value } }) => (
@@ -219,7 +232,7 @@ const SignUpScreen = () => {
                   onChangeText={onChange}
                   iconName="email-outline"
                   keyboardType="email-address"
-                  placeholder="Email"
+                  placeholder={i18n.t("email")}
                   textAlign={isArabic() ? "right" : "left"}
                 />
               )}
@@ -235,8 +248,8 @@ const SignUpScreen = () => {
               name="password"
               control={control}
               rules={{
-                required: "Password is required",
-                minLength: { value: 6, message: "At least 6 characters" },
+                required: i18n.t("errors.password_required"),
+                minLength: { value: 6, message: i18n.t("errors.password_length") },
               }}
               render={({ field: { onChange, onBlur, value } }) => (
                 <AuthInput
@@ -245,12 +258,16 @@ const SignUpScreen = () => {
                   onBlur={onBlur}
                   onChangeText={onChange}
                   iconName="lock-outline"
-                  placeholder="Password"
+                  placeholder={i18n.t("password")}
                   textAlign={isArabic() ? "right" : "left"}
                   rightIcon={
-                    <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
+                    <TouchableOpacity
+                      onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+                    >
                       <MaterialCommunityIcons
-                        name={!isPasswordVisible ? "eye-off-outline" : "eye-outline"}
+                        name={
+                          !isPasswordVisible ? "eye-off-outline" : "eye-outline"
+                        }
                         size={22}
                         color={Colors.gray}
                       />
@@ -270,9 +287,9 @@ const SignUpScreen = () => {
               name="confirmPassword"
               control={control}
               rules={{
-                required: "Confirm your password",
+                required: i18n.t("errors.password_match"),
                 validate: (value) =>
-                  value === password || "Passwords do not match",
+                  value === password || i18n.t("errors.password_match"),
               }}
               render={({ field: { onChange, onBlur, value } }) => (
                 <AuthInput
@@ -281,12 +298,16 @@ const SignUpScreen = () => {
                   onBlur={onBlur}
                   onChangeText={onChange}
                   iconName="lock-check-outline"
-                  placeholder="Confirm Password"
+                  placeholder={i18n.t("confirm_password")}
                   textAlign={isArabic() ? "right" : "left"}
                   rightIcon={
-                    <TouchableOpacity onPress={() => setIsConfirmVisible(!isConfirmVisible)}>
+                    <TouchableOpacity
+                      onPress={() => setIsConfirmVisible(!isConfirmVisible)}
+                    >
                       <MaterialCommunityIcons
-                        name={!isConfirmVisible ? "eye-off-outline" : "eye-outline"}
+                        name={
+                          !isConfirmVisible ? "eye-off-outline" : "eye-outline"
+                        }
                         size={22}
                         color={Colors.gray}
                       />
@@ -304,12 +325,16 @@ const SignUpScreen = () => {
         <AuthButton
           isLoading={isLoading}
           style={{ width: width - 50 }}
-          label="Create Account"
+          label={i18n.t("create_account")}
           onPress={handleSubmit(onSubmit)}
         />
 
-        <TouchableOpacity disabled={isLoading} style={styles.guestButton} onPress={handleGuestLogin}>
-          <Text style={styles.guestText}>Continue as Guest</Text>
+        <TouchableOpacity
+          disabled={isLoading}
+          style={styles.guestButton}
+          onPress={handleGuestLogin}
+        >
+          <Text style={styles.guestText}>{i18n.t("continue_as_guest")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -317,7 +342,7 @@ const SignUpScreen = () => {
           style={styles.signInButton}
           onPress={() => navigation.navigate("Login" as never)}
         >
-          <Text style={styles.signInText}>Already have an account? Login</Text>
+          <Text style={styles.signInText}>{i18n.t("already_have_account")}</Text>
         </TouchableOpacity>
 
         <StatusBar style="light" />
@@ -355,7 +380,7 @@ const styles = StyleSheet.create({
   },
   wrapper: {
     width: "100%",
-    alignItems: "center",
+    alignItems: "stretch",
     gap: 16,
     marginBottom: 20,
   },

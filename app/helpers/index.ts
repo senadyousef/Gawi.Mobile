@@ -105,13 +105,13 @@ export const handleShowToast = ({
   });
 };
 
-export const defaultErrorToast = () => {
-  handleShowToast({
-    type: 'error',
-    text1: 'error',
-    text2: 'an_error_occured',
-  });
-};
+// export const defaultErrorToast = () => {
+//   handleShowToast({
+//     type: 'error',
+//     text1: 'error',
+//     text2: 'an_error_occured',
+//   });
+// };
 
 export const log = (data: any) => {
   console.log(JSON.stringify({ data }, null, 2));

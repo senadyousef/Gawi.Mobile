@@ -164,7 +164,7 @@ export default function AnnouncementsNewsScreen() {
         {newsData.length === 0 && (
           <View style={{ padding: 20 }}>
             <Text style={{ textAlign: "center", color: theme.muted }}>
-              {i18n.t("no_news") || "No announcements available."}
+              {i18n.t("no_news_found") || "No announcements available."}
             </Text>
           </View>
         )}

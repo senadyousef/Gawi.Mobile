@@ -3,9 +3,10 @@ import { View, Image, StyleSheet, ActivityIndicator } from "react-native";
 import CardWrapper from "../CardWrapper";
 import Colors from "../../constants/Colors";
 import { useI18n } from "../../hooks/useI18n";
-import { Text } from "../overridedComponents";
+import { Text, TouchableOpacity } from "../overridedComponents";
 import { fetchCurrentUserProfile, IUserProfile } from "../../api/profile";
 import { useAppContext } from "../../context";
+import { useNavigation } from "@react-navigation/native";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -20,7 +21,7 @@ const ProfileInfoSection = () => {
   const [profile, setProfile] = useState<IUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const { userProfile, isDarkMode } = useAppContext();
-
+  const navigation = useNavigation();
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
   const s = React.useMemo(() => createStyles(theme), [theme]);
 
@@ -28,40 +29,52 @@ const ProfileInfoSection = () => {
     const loadProfile = async () => {
       setLoading(true);
       const data = await fetchCurrentUserProfile();
+      console.log("FULL PROFILE:", JSON.stringify(data, null, 2));
       setProfile(data);
       setLoading(false);
     };
     loadProfile();
   }, []);
 
-  const imageUri = userProfile?.photoUri || null;
+  const imageUri = profile?.photoUrl || null;
 
   return (
-    // 👇 pass background color directly into CardWrapper's style prop
-    <CardWrapper
-      style={[s.container, getDirection(), { backgroundColor: theme.bg }]}
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() =>
+        navigation.navigate(
+          "MyProfileNavigator" as never,
+          {
+            screen: "MyProfileMain",
+          } as never,
+        )
+      }
     >
-      <View style={[s.wrapper, getDirection()]}>
-        {loading ? (
-          <ActivityIndicator size="small" color={theme.ink} />
-        ) : imageUri ? (
-          <Image style={s.image} source={{ uri: imageUri }} />
-        ) : (
-          <View
-            style={[
-              s.image,
-              { backgroundColor: theme.imageBg, borderRadius: 22 },
-            ]}
-          />
-        )}
-        <View style={{ gap: 5 }}>
-          <View style={{ alignItems: "flex-start" }}>
-            <Text style={s.name}>{userProfile?.nameEn || "Loading..."}</Text>
-            <Text style={s.email}>{userProfile?.email || ""}</Text>
+      <CardWrapper
+        style={[s.container, getDirection(), { backgroundColor: theme.bg }]}
+      >
+        <View style={[s.wrapper, getDirection()]}>
+          {loading ? (
+            <ActivityIndicator size="small" color={theme.ink} />
+          ) : imageUri ? (
+            <Image style={s.image} source={{ uri: imageUri }} />
+          ) : (
+            <View
+              style={[
+                s.image,
+                { backgroundColor: theme.imageBg, borderRadius: 22 },
+              ]}
+            />
+          )}
+          <View style={{ gap: 5 }}>
+            <View style={{ alignItems: "flex-start" }}>
+              <Text style={s.name}>{userProfile?.nameEn || "Loading..."}</Text>
+              <Text style={s.email}>{userProfile?.email || ""}</Text>
+            </View>
           </View>
         </View>
-      </View>
-    </CardWrapper>
+      </CardWrapper>
+    </TouchableOpacity>
   );
 };
 

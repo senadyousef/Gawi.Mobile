@@ -221,9 +221,9 @@ const ProductDetailsScreen: React.FC<
               >
                 <Text style={s.cartButtonText}>{i18n.t("add_to_cart")}</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleBuyNow}>
+              {/* <TouchableOpacity onPress={handleBuyNow}>
                 <Text style={s.buyButtonText}>{i18n.t("buy_now")}</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </RNView>
           )}
 

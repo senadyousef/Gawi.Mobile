@@ -22,12 +22,12 @@ import Video from "expo-av/build/Video";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
-  bg:      dark ? "#121212" : "#F5F0E8",
+  bg: dark ? "#121212" : "#F5F0E8",
   surface: dark ? "#1E1E1E" : "#FDFAF5",
-  border:  dark ? "#2C2C2C" : "#E8E0D0",
-  ink:     dark ? "#F0F0F0" : "#1A1A1A",
-  muted:   dark ? "#888888" : "#8A8070",
-  accent:  "#C8F04A",
+  border: dark ? "#2C2C2C" : "#E8E0D0",
+  ink: dark ? "#F0F0F0" : "#1A1A1A",
+  muted: dark ? "#888888" : "#8A8070",
+  accent: "#C8F04A",
 });
 
 interface Props {
@@ -37,8 +37,8 @@ interface Props {
 const GallerySection = ({ refreshTrigger = 0 }: Props) => {
   const { navigate } = useNavigation();
   const { handleLogout, isDarkMode } = useAppContext(); // 👈 pull isDarkMode
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);  // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]);              // 👈 reactive styles
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
+  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
 
   const { isArabic } = useI18n();
   const BASE_URL = "https://gym.useitsmart.com";
@@ -119,6 +119,7 @@ const GallerySection = ({ refreshTrigger = 0 }: Props) => {
                     style={s.tileImage}
                     resizeMode="cover"
                     paused={true}
+                    shouldPlay={false}
                   />
                 ) : (
                   <Image

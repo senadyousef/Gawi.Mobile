@@ -33,6 +33,14 @@ const GalleryView: React.FC<Props> = ({
   isArabic,
 }) => {
   const carouselRef = React.useRef<ICarouselInstance>();
+  const videoRef = React.useRef<Video | null>(null);
+  React.useEffect(() => {
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.stopAsync(); // أو pauseAsync()
+      }
+    };
+  }, [currentIndex]);
 
   React.useEffect(() => {
     if (currentIndex !== undefined && isModalVisible) {
@@ -43,7 +51,12 @@ const GalleryView: React.FC<Props> = ({
     }
   }, [currentIndex, isModalVisible]);
 
-  const handleClose = () => setIsModalVisible(false);
+  const handleClose = async () => {
+    if (videoRef.current) {
+      await videoRef.current.stopAsync();
+    }
+    setIsModalVisible(false);
+  };
   const handlePrev = () => carouselRef.current?.prev();
   const handleNext = () => carouselRef.current?.next();
 
@@ -81,7 +94,7 @@ const GalleryView: React.FC<Props> = ({
           // @ts-ignore
           ref={carouselRef}
           onSnapToItem={setCurrentIndex}
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             const rawUrl = item.url || item.photoUrl;
 
             // ✅ حل المشكلة: تحويل الرابط الكامل
@@ -125,10 +138,11 @@ const GalleryView: React.FC<Props> = ({
               return (
                 <View style={styles.videoContainer}>
                   <Video
+                    ref={videoRef}
                     source={{ uri: mediaUri }}
                     style={styles.video}
                     resizeMode="contain"
-                    shouldPlay // 🔥 يشغل مباشرة
+                    shouldPlay={index === currentIndex}
                     useNativeControls
                   />
                   {caption ? (

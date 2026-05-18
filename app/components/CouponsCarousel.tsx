@@ -113,12 +113,12 @@ const CouponsCarousel: React.FC<Props> = ({ refreshTrigger = 0 }) => {
           />
 
           {/* Tag pill */}
-          <View style={s.tagPill}>
+          {/* <View style={s.tagPill}>
             <View style={s.tagDot} />
             <Text style={s.tagText}>
               {isArabic() ? "عرض مميز" : "Featured"}
             </Text>
-          </View>
+          </View> */}
 
           {/* Title */}
           <Text style={[s.title, { textAlign: isArabic() ? "right" : "left" }]}>
