@@ -57,9 +57,9 @@ export default function OffersScreen() {
     try {
       setLoading(true);
 
-      const MemberId = await AsyncStorage.getItem("MemberId");
+      const MemberId = await AsyncStorage.getItem("MemberId")|| "0";
 
-      if (!MemberId || MemberId === "null" || MemberId === "0") {
+      if (!MemberId || MemberId === "null" ) {
         throw new Error("Invalid MemberId");
       }
 

@@ -41,14 +41,15 @@ const ProfileInfoSection = () => {
   return (
     <TouchableOpacity
       activeOpacity={0.8}
-      onPress={() =>
+      onPress={() => {
+        if (!userProfile) return;
         navigation.navigate(
           "MyProfileNavigator" as never,
           {
             screen: "MyProfileMain",
           } as never,
-        )
-      }
+        );
+      }}
     >
       <CardWrapper
         style={[s.container, getDirection(), { backgroundColor: theme.bg }]}
@@ -68,8 +69,10 @@ const ProfileInfoSection = () => {
           )}
           <View style={{ gap: 5 }}>
             <View style={{ alignItems: "flex-start" }}>
-              <Text style={s.name}>{userProfile?.nameEn || "Loading..."}</Text>
-              <Text style={s.email}>{userProfile?.email || ""}</Text>
+              <Text style={s.name}>{userProfile?.nameEn || "Guest"}</Text>
+              <Text style={s.email}>
+                {userProfile?.email || "guest@example.com"}
+              </Text>
             </View>
           </View>
         </View>

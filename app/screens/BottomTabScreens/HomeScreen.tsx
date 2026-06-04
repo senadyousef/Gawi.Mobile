@@ -624,7 +624,7 @@ const HomeScreen = () => {
           )}
           <GymStoreSection refreshTrigger={refreshTrigger} />
           <GallerySection refreshTrigger={refreshTrigger} />
-          <LatestNewsSection refreshTrigger={refreshTrigger} />
+         <LatestNewsSection refreshTrigger={refreshTrigger} />
         </View>
       </ScrollView>
 

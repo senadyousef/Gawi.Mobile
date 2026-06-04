@@ -98,13 +98,18 @@ export default function AttendanceHistoryScreen() {
   }
   const formatTo12Hour = (timeStr: string): string => {
     if (!timeStr) return i18n.t("no_data");
-    const [hourStr, minuteStr] = timeStr.split(":");
-    let hour = parseInt(hourStr, 10);
-    const minute = minuteStr || "00";
+
+    const parts = timeStr.split(":");
+
+    let hour = Number(parts[0]);
+    const minute = String(Number(parts[1] || 0)).padStart(2, "0");
+
     const period = hour >= 12 ? "PM" : "AM";
+
     if (hour > 12) hour -= 12;
     if (hour === 0) hour = 12;
-    return `${hour.toString().padStart(2, "0")}:${minute} ${period}`;
+
+    return `${String(hour).padStart(2, "0")}:${minute} ${period}`;
   };
 
   return (

@@ -113,6 +113,7 @@ export enum API_ENDPOINTS {
   SHOP_ITEM = "/Gyms/getAllGymsStoreItems?userId=",
   GALLERY = "/api/Gyms/getAllGymsGallery?userId=",
   CARTS = "/carts",
+  NEWS_GET_ALL = "/News/getallNews",
 }
 
 export interface IapiResponse<T> {

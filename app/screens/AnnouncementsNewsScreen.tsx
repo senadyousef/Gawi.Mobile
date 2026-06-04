@@ -54,21 +54,24 @@ export default function AnnouncementsNewsScreen() {
   // ---------------- FETCH ----------------
   const fetchNews = async () => {
     try {
-      const MemberId = await AsyncStorage.getItem("MemberId");
+      const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
+      console.log("Fetching news for MemberId:", MemberId);
       setLoading(true);
 
       const response = await fetch(
         `https://gym.useitsmart.com/api/News/getallNews?userId=${MemberId}`,
-        { method: "GET", headers: { accept: "application/json" } }
+        { method: "GET", headers: { accept: "application/json" } },
       );
 
       if (!response.ok) throw new Error("Failed to fetch news");
 
       const json = await response.json();
+
       setNewsData(json || []);
     } catch (err: any) {
       console.error("Fetch news error:", err);
       Alert.alert("Error", err.message || "Failed to load news");
+      console.log("news error:", err?.response?.status, err?.message);
     } finally {
       setLoading(false);
     }
@@ -131,17 +134,16 @@ export default function AnnouncementsNewsScreen() {
                   name="bullhorn-outline"
                   size={22}
                   color={theme.primary}
-                  style={
-                    isArabic()
-                      ? { marginLeft: 8 }
-                      : { marginRight: 8 }
-                  }
+                  style={isArabic() ? { marginLeft: 8 } : { marginRight: 8 }}
                 />
 
                 <Text
                   style={[
                     s.cardTitle,
-                    isArabic() && { textAlign: "right", writingDirection: "rtl" },
+                    isArabic() && {
+                      textAlign: "right",
+                      writingDirection: "rtl",
+                    },
                   ]}
                 >
                   {i18n.locale === "ar" ? item.nameAr : item.nameEn}
