@@ -164,16 +164,7 @@ const NotesSection = ({
           >
             {i18n.t("no_notes")}
           </Text>
-          <Text
-            style={{
-              fontSize: 12,
-              color: theme.muted,
-              opacity: 0.6,
-              fontFamily: "SF-Medium",
-            }}
-          >
-            {i18n.t("add_first_note")}
-          </Text>
+         
         </View>
       ) : (
         <FlatList

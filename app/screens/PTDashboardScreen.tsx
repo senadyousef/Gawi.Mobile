@@ -438,7 +438,8 @@ const PTDashboardScreen = ({ navigation }: any) => {
     [T],
   );
 
-  const DAY_MAP_AR_TO_EN = {
+  const DAY_MAP = {
+    // Arabic → English
     الاثنين: "monday",
     الثلاثاء: "tuesday",
     الأربعاء: "wednesday",
@@ -446,22 +447,31 @@ const PTDashboardScreen = ({ navigation }: any) => {
     الجمعة: "friday",
     السبت: "saturday",
     الأحد: "sunday",
+
+    // Short English → Full English
+    mon: "monday",
+    tue: "tuesday",
+    wed: "wednesday",
+    thu: "thursday",
+    fri: "friday",
+    sat: "saturday",
+    sun: "sunday",
   };
 
-  const normalizeDayToEnglish = (day) => {
+  const normalizeDay = (day) => {
     if (!day) return "";
 
-    const lower = day.toLowerCase();
+    const value = day.toString().trim();
+    const lower = value.toLowerCase();
 
-    // إذا أصلاً إنجليزي
-    if (API_DAYS.includes(lower)) return lower;
+    // إذا كان أصلاً Monday / Sunday ...
+    if (API_DAYS.includes(lower)) {
+      return lower;
+    }
 
-    // إذا عربي
-    if (DAY_MAP_AR_TO_EN[day]) return DAY_MAP_AR_TO_EN[day];
-
-    return lower;
+    // إذا كان عربي أو مختصر إنجليزي
+    return DAY_MAP[value] || DAY_MAP[lower] || lower;
   };
-
   const formatTime = useCallback(
     (s: string) => {
       if (!s) return T.time.na;
@@ -522,8 +532,9 @@ const PTDashboardScreen = ({ navigation }: any) => {
       setLoading(true);
       setError("");
       const userId = await AsyncStorage.getItem("MemberId");
+      console.log("Fetching PTs for userId:", userId);
       const res = await fetch(
-        `https://gym.useitsmart.com/api/PT/GetPTWithHourShift?userId=${userId}`,
+        `http://192.168.1.27/api/PT/GetPTWithHourShift?userId=${userId}`,
         {
           method: "GET",
           headers: { accept: "text/plain", "Content-Type": "application/json" },
@@ -593,12 +604,14 @@ const PTDashboardScreen = ({ navigation }: any) => {
     }
     setAddingShift(true);
     try {
+      const UserId = await AsyncStorage.getItem("MemberId");
+
       const token = await getToken();
       if (!token) {
         Alert.alert("Error", "No token");
         return;
       }
-      const res = await fetch("https://gym.useitsmart.com/api/PTWorkShifts", {
+      const res = await fetch("http://192.168.1.27/api/PTWorkShifts", {
         method: "POST",
         headers: {
           accept: "text/plain",
@@ -606,11 +619,17 @@ const PTDashboardScreen = ({ navigation }: any) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          day: normalizeDayToEnglish(shiftDay),
+          day: normalizeDay(shiftDay),
           fromHour: fmtAPI(shiftFromTime),
           toHour: fmtAPI(shiftToTime),
-          ptId: selectedPT.ptId,
+          ptId: UserId,
         }),
+      });
+      console.log("Add Shift Body:", {
+        day: normalizeDay(shiftDay),
+        fromHour: fmtAPI(shiftFromTime),
+        toHour: fmtAPI(shiftToTime),
+        ptId: UserId,
       });
       if (!res.ok) throw new Error(`${res.status}`);
       closeAddModal();
@@ -659,7 +678,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            day: normalizeDayToEnglish(editShiftDay),
+            day: normalizeDay(editShiftDay),
             fromHour: fmtAPI2(editFromTime),
             toHour: fmtAPI2(editToTime),
             ptId: selectedPT.ptId,
@@ -807,85 +826,87 @@ const PTDashboardScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
 
-          {item.workDays?.length > 0 ? (
+          {item.workDays && item.workDays.length > 0 ? (
             <View style={{ gap: 10 }}>
-              {item.workDays.map((wd: any, i: number) => (
-                <View
-                  key={i}
-                  style={[
-                    S.shiftRow,
-                    dir(isRTL),
-                    dark && {
-                      backgroundColor: "#000000",
-                      borderColor: "#222222",
-                    },
-                  ]}
-                >
-                  <TouchableOpacity
+              {item.workDays
+                .filter((wd: any) => wd.fromHour && wd.toHour)
+                .map((wd: any, i: number) => (
+                  <View
+                    key={i}
                     style={[
-                      S.shiftCircle,
-                      dark && { backgroundColor: "#001133" },
+                      S.shiftRow,
+                      dir(isRTL),
+                      dark && {
+                        backgroundColor: "#000000",
+                        borderColor: "#222222",
+                      },
                     ]}
-                    onPress={() => openEditModal(item, wd)}
                   >
-                    <Text style={S.shiftCircleTxt}>
-                      {cap(wd.day).substring(0, 3)}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[{ flex: 1 }, aEnd(isRTL), ml(isRTL, 14)]}
-                    onPress={() => openEditModal(item, wd)}
-                  >
-                    <Text
-                      style={[
-                        S.shiftDayName,
-                        ta(isRTL),
-                        dark && { color: "#EEEEEE" },
-                      ]}
-                    >
-                      {getDayLabel(wd.day)}
-                    </Text>
-                    <Text
-                      style={[
-                        S.shiftTime,
-                        ta(isRTL),
-                        dark && { color: "#888888" },
-                      ]}
-                    >
-                      {formatTime(wd.fromHour)} - {formatTime(wd.toHour)}
-                    </Text>
-                    <Text style={[S.shiftId, ta(isRTL)]}>
-                      {T.modals.deleteShift.shiftId} {wd.workshiftId}
-                    </Text>
-                  </TouchableOpacity>
-                  <View style={[dir(isRTL), { gap: 8 }]}>
                     <TouchableOpacity
                       style={[
-                        S.editIconBtn,
-                        dark && {
-                          backgroundColor: "#001133",
-                          borderColor: "#003399",
-                        },
+                        S.shiftCircle,
+                        dark && { backgroundColor: "#001133" },
                       ]}
                       onPress={() => openEditModal(item, wd)}
                     >
-                      <Icon name="create-outline" size={16} color="#3B82F6" />
+                      <Text style={S.shiftCircleTxt}>
+                        {cap(wd.day).substring(0, 3)}
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[
-                        S.delIconBtn,
-                        dark && {
-                          backgroundColor: "#220000",
-                          borderColor: "#550000",
-                        },
-                      ]}
-                      onPress={() => openDeleteModal(item, wd)}
+                      style={[{ flex: 1 }, aEnd(isRTL), ml(isRTL, 14)]}
+                      onPress={() => openEditModal(item, wd)}
                     >
-                      <Icon name="trash-outline" size={16} color="#EF4444" />
+                      <Text
+                        style={[
+                          S.shiftDayName,
+                          ta(isRTL),
+                          dark && { color: "#EEEEEE" },
+                        ]}
+                      >
+                        {getDayLabel(wd.day)}
+                      </Text>
+                      <Text
+                        style={[
+                          S.shiftTime,
+                          ta(isRTL),
+                          dark && { color: "#888888" },
+                        ]}
+                      >
+                        {formatTime(wd.fromHour)} - {formatTime(wd.toHour)}
+                      </Text>
+                      <Text style={[S.shiftId, ta(isRTL)]}>
+                        {T.modals.deleteShift.shiftId} {wd.workshiftId}
+                      </Text>
                     </TouchableOpacity>
+                    <View style={[dir(isRTL), { gap: 8 }]}>
+                      <TouchableOpacity
+                        style={[
+                          S.editIconBtn,
+                          dark && {
+                            backgroundColor: "#001133",
+                            borderColor: "#003399",
+                          },
+                        ]}
+                        onPress={() => openEditModal(item, wd)}
+                      >
+                        <Icon name="create-outline" size={16} color="#3B82F6" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          S.delIconBtn,
+                          dark && {
+                            backgroundColor: "#220000",
+                            borderColor: "#550000",
+                          },
+                        ]}
+                        onPress={() => openDeleteModal(item, wd)}
+                      >
+                        <Icon name="trash-outline" size={16} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
-              ))}
+                ))}
             </View>
           ) : (
             <View style={S.emptySection}>

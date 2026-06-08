@@ -10,6 +10,7 @@ import { Text, TouchableOpacity } from "../overridedComponents";
 import { height, statusBarHeight, width } from "../../constants";
 import Carousel, { ICarouselInstance } from "react-native-reanimated-carousel";
 import { Video } from "expo-av";
+import { useI18n } from "../../hooks/useI18n";
 
 interface Props {
   totalItems: number;
@@ -30,10 +31,11 @@ const GalleryView: React.FC<Props> = ({
   isModalVisible,
   setCurrentIndex,
   setIsModalVisible,
-  isArabic,
+ 
 }) => {
   const carouselRef = React.useRef<ICarouselInstance>();
   const videoRef = React.useRef<Video | null>(null);
+   const { isArabic } = useI18n();
   React.useEffect(() => {
     return () => {
       if (videoRef.current) {
@@ -104,7 +106,10 @@ const GalleryView: React.FC<Props> = ({
                 : rawUrl;
 
             const isVideo = item.isPhoto === false;
-            const caption = isArabic?.()
+            console.log("isArabic:", isArabic?.());
+            console.log("contentAr:", item.contentAr);
+            console.log("contentEn:", item.contentEn);
+            const caption = isArabic()
               ? item.contentAr || ""
               : item.contentEn || "";
 

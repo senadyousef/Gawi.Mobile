@@ -41,6 +41,7 @@ export default function PTListScreen() {
     try {
       setIsLoading(true);
       const userId = (await AsyncStorage.getItem("MemberId")) || "0";
+      
       const res = await fetch(
         `https://gym.useitsmart.com/api/PT/getPTWithUser?userId=${userId}`,
       );

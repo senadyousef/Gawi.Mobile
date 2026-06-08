@@ -9,12 +9,17 @@ import {
   Text,
   Alert,
   FlatList,
+  Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useAppContext } from "../../context";
 import { defaultErrorToast, handleGetToken } from "../../helpers";
 import { Calendar as RNCalendar } from "react-native-calendars";
 import i18n from "../../localization";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNavigation } from "@react-navigation/native";
+import { navigationRef } from "../../context/RootNavigation";
+import { useState } from "react";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -39,6 +44,7 @@ interface INote {
   userId?: number;
 }
 
+
 const CalendarScreen = () => {
   const { userProfile, isDarkMode } = useAppContext(); // 👈 pull isDarkMode
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
@@ -52,7 +58,25 @@ const CalendarScreen = () => {
   const [noteText, setNoteText] = React.useState("");
   const [noteColor, setNoteColor] = React.useState(NOTE_COLORS[0]);
   const isRTL = i18n.locale === "ar";
+  const [gyms, setGyms] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const navigation = useNavigation<any>();
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [weekOffset, setWeekOffset] = useState(0);
+  const getWeekDates = () => {
+    const today = new Date();
 
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay() + weekOffset * 7);
+
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      return date;
+    });
+  };
+
+  const weekDates = getWeekDates();
   const fetchNotes = async () => {
     try {
       const token = await handleGetToken();
@@ -83,6 +107,38 @@ const CalendarScreen = () => {
     }
   };
 
+  const fetchGyms = async () => {
+    try {
+      setLoading(true);
+
+      const memberId = await AsyncStorage.getItem("MemberId");
+
+      const response = await fetch(
+        `https://gym.useitsmart.com/api/Gyms/GetAllGymsCarouselWithClass?userId=${memberId}&selectedDate=${selected}`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "*/*",
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      console.log("Gyms Response:", data);
+
+      setGyms(data.result || data || []);
+    } catch (error) {
+      console.log("Error fetching gyms:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  React.useEffect(() => {
+    if (selected) {
+      fetchGyms();
+    }
+  }, [selected]);
   React.useEffect(() => {
     if (userProfile?.id) fetchNotes();
   }, [userProfile]);
@@ -146,29 +202,214 @@ const CalendarScreen = () => {
     selectedColor: "#2A64F6",
   };
 
+  const renderItem = ({ item }: any) => {
+    const handlePress = () => {
+      switch (item.type) {
+        case "News":
+          navigation.navigate("NewsDetails", {
+            item: {
+              title: i18n.locale === "ar" ? item.nameAr : item.nameEn,
+              photo:
+                item.photoUrl && !item.photoUrl.startsWith("http")
+                  ? `https://gym.useitsmart.com${item.photoUrl}`
+                  : item.photoUrl,
+              description:
+                i18n.locale === "ar" ? item.contentAr : item.contentEn,
+            },
+          });
+          break;
+
+        case "Class":
+          if (navigationRef.isReady()) {
+            navigationRef.navigate(
+              "Root" as never,
+              {
+                screen: "BookClassDrawer",
+                params: {
+                  screen: "ClassDetails",
+                  params: { classId: item.classId },
+                },
+              } as never,
+            );
+          }
+          break;
+
+        case "Offer":
+          navigation.navigate("OfferDetails", {
+            offer: item,
+          });
+          break;
+
+        default:
+          break;
+      }
+    };
+
+    switch (item.type) {
+      case "News":
+        return (
+          <TouchableOpacity activeOpacity={0.9} onPress={handlePress}>
+            <View style={s.newsCard}>
+              <Image
+                source={{
+                  uri: `https://gym.useitsmart.com${item.photoUrl}`,
+                }}
+                style={s.image}
+              />
+
+              <View style={s.cardContent}>
+                <Text style={s.newsTitle}>{item.nameEn || item.nameAr}</Text>
+
+                <Text style={s.newsContent}>
+                  {item.contentEn || item.contentAr}
+                </Text>
+
+                <Text style={s.date}>
+                  {new Date(item.createdAt).toLocaleDateString()}
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+
+      case "Offer":
+        return (
+          <TouchableOpacity activeOpacity={0.9} onPress={handlePress}>
+            <View style={s.offerCard}>
+              <Image
+                source={{
+                  uri: `https://gym.useitsmart.com${item.photoUrl}`,
+                }}
+                style={s.offerImage}
+              />
+
+              <View style={{ flex: 1 }}>
+                <Text style={s.offerTitle}>
+                  🎉 {item.nameEn || item.nameAr}
+                </Text>
+
+                <Text style={s.offerText}>
+                  {item.contentEn || item.contentAr}
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+
+      case "Class":
+        return (
+          <TouchableOpacity activeOpacity={0.9} onPress={handlePress}>
+            <View style={s.classCard}>
+              <Image source={{ uri: item.photoUrl }} style={s.classImage} />
+
+              <View style={s.classInfo}>
+                <Text style={s.classTitle}>{item.nameEn || item.nameAr}</Text>
+
+                <Text style={s.classTime}>
+                  🕒 {item.from} - {item.to}
+                </Text>
+
+                <Text style={s.classCapacity}>
+                  Capacity: {item.bookedCount}/{item.capacity}
+                </Text>
+
+                <View
+                  style={{
+                    marginTop: 12,
+                    alignSelf: "flex-start",
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    backgroundColor: item.isBooked ? "#E8F5E9" : "#FFEBEE",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: item.isBooked ? "#2E7D32" : "#C62828",
+                      fontWeight: "700",
+                    }}
+                  >
+                    {item.isBooked ? "✓ Booked" : "Available"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+
+      case "Note":
+        return (
+          <View
+            style={[s.noteCard, { backgroundColor: item.color || "#66ccff38" }]}
+          >
+            <Text style={s.noteTitle}>📝 Note</Text>
+
+            <Text style={s.noteText}>
+              {item.note || item.contentEn || item.contentAr}
+            </Text>
+          </View>
+        );
+
+      default:
+        return null;
+    }
+  };
+  const dates = Array.from({ length: 14 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() + i);
+
+    return {
+      fullDate: format(date, "yyyy-MM-dd"),
+      day: format(date, "EEE"),
+      number: format(date, "dd"),
+    };
+  });
   return (
     <View style={s.screenContainer}>
       {/* 👇 Calendar with dynamic theme */}
-      <RNCalendar
-        key={isDarkMode ? "dark" : "light"}
-        onDayPress={(day) => setSelected(day.dateString)}
-        markedDates={markedDates}
-        markingType="multi-dot"
-        theme={{
-          backgroundColor: theme.bg,
-          calendarBackground: theme.bg,
-          dayTextColor: theme.ink,
-          monthTextColor: theme.ink,
-          textDisabledColor: theme.muted,
-          textSectionTitleColor: theme.muted,
-          selectedDayBackgroundColor: "#2A64F6",
-          selectedDayTextColor: "#FFFFFF",
-          todayTextColor: "#2A64F6",
-          dotColor: "#2A64F6",
-          selectedDotColor: "#fff",
-          arrowColor: "#2A64F6",
-        }}
-      />
+      <View style={s.weekCalendar}>
+        <View style={s.monthHeader}>
+          <TouchableOpacity onPress={() => setWeekOffset((prev) => prev - 1)}>
+            <Text style={s.arrow}>‹</Text>
+          </TouchableOpacity>
+
+          <Text style={s.monthText}>{format(weekDates[0], "MMMM yyyy")}</Text>
+
+          <TouchableOpacity onPress={() => setWeekOffset((prev) => prev + 1)}>
+            <Text style={s.arrow}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={s.daysRow}>
+          {weekDates.map((date) => {
+            const formattedDate = format(date, "yyyy-MM-dd");
+
+            const isSelected =
+              formattedDate === format(selectedDate, "yyyy-MM-dd");
+
+            return (
+              <TouchableOpacity
+                key={formattedDate}
+                style={[s.dayContainer, isSelected && s.selectedDayContainer]}
+                onPress={() => {
+                  console.log("Selected Date:", formattedDate);
+
+                  setSelectedDate(date);
+                  setSelected(formattedDate); // triggers API call
+                }}
+              >
+                <Text style={[s.dayNumber, isSelected && s.selectedDayNumber]}>
+                  {format(date, "d")}
+                </Text>
+
+                <Text style={[s.dayName, isSelected && s.selectedDayName]}>
+                  {format(date, "EEE")}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
       {/* Add Note Button */}
       <TouchableOpacity
         style={s.addNoteButton}
@@ -180,26 +421,14 @@ const CalendarScreen = () => {
       </TouchableOpacity>
       {/* Notes list */}
       <FlatList
-        data={notesForSelectedDate}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={[s.noteItem, { backgroundColor: item.color }]}>
-            <Text style={s.noteText}>{item.note}</Text>
-          </View>
+        data={gyms}
+        keyExtractor={(item, index) => `${item.type}-${item.classId}-${index}`}
+        renderItem={renderItem}
+        extraData={selected}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        ListEmptyComponent={() => (
+          <Text style={s.emptyText}>{i18n.t("calendar.no_events")}</Text>
         )}
-        ListEmptyComponent={
-          <Text
-            style={[
-              s.emptyText,
-              {
-                textAlign: isRTL ? "right" : "left",
-                writingDirection: isRTL ? "rtl" : "ltr",
-              },
-            ]}
-          >
-            {i18n.t("calendar.no_notes")}
-          </Text>
-        }
       />
       {/* Note Modal */}
       <Modal visible={isNoteModalOpen} animationType="slide" transparent>
@@ -257,6 +486,200 @@ export default CalendarScreen;
 // ─── Styles factory ───────────────────────────────────────────────────────────
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
+    weekCalendar: {
+      margin: 16,
+      padding: 20,
+      borderRadius: 24,
+      backgroundColor: theme.surface,
+      elevation: 4,
+    },
+
+    monthHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 20,
+    },
+
+    monthText: {
+      fontSize: 28,
+      fontWeight: "600",
+      color: theme.ink,
+    },
+
+    arrow: {
+      fontSize: 36,
+      color: "#FF7A00",
+      fontWeight: "bold",
+    },
+
+    daysRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+
+    dayContainer: {
+      alignItems: "center",
+      flex: 1,
+    },
+
+    dayNumber: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: theme.ink,
+    },
+
+    dayName: {
+      marginTop: 8,
+      color: "#9AA4B2",
+      fontSize: 15,
+    },
+
+    selectedDayNumber: {
+      color: "#2A64F6",
+    },
+
+    selectedDayName: {
+      color: "#2A64F6",
+      fontWeight: "600",
+    },
+
+    selectedDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: "#2A64F6",
+      marginTop: 8,
+    },
+    noteCard: {
+      marginHorizontal: 16,
+      marginVertical: 8,
+      borderRadius: 18,
+      padding: 18,
+      borderLeftWidth: 6,
+      borderLeftColor: "#2A64F6",
+    },
+
+    noteTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      marginBottom: 8,
+    },
+
+    noteText: {
+      fontSize: 15,
+      lineHeight: 22,
+      color: "#333",
+    },
+    newsCard: {
+      backgroundColor: theme.surface,
+      borderRadius: 20,
+      marginHorizontal: 16,
+      marginVertical: 8,
+      overflow: "hidden",
+      elevation: 4,
+      shadowColor: "#000",
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+    },
+
+    image: {
+      width: "100%",
+      height: 220,
+    },
+
+    cardContent: {
+      padding: 16,
+    },
+
+    newsTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.ink,
+    },
+
+    newsContent: {
+      fontSize: 14,
+      color: "#777",
+      marginTop: 8,
+      lineHeight: 22,
+    },
+
+    date: {
+      marginTop: 12,
+      color: "#999",
+      fontSize: 12,
+    },
+    offerCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginHorizontal: 16,
+      marginVertical: 8,
+      padding: 16,
+      borderRadius: 20,
+      backgroundColor: "#FFF5E5",
+      borderWidth: 1,
+      borderColor: "#FFD699",
+    },
+
+    offerImage: {
+      width: 80,
+      height: 80,
+      borderRadius: 15,
+      marginRight: 15,
+    },
+
+    offerTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: "#FF9800",
+    },
+
+    offerText: {
+      marginTop: 5,
+      color: "#666",
+      fontSize: 14,
+    },
+    classCard: {
+      backgroundColor: theme.surface,
+      borderRadius: 24,
+      marginHorizontal: 16,
+      marginVertical: 10,
+      overflow: "hidden",
+      elevation: 6,
+      shadowColor: "#000",
+      shadowOpacity: 0.15,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 5 },
+    },
+
+    classImage: {
+      width: "100%",
+      height: 220,
+    },
+
+    classInfo: {
+      padding: 18,
+    },
+
+    classTitle: {
+      fontSize: 22,
+      fontWeight: "700",
+      color: theme.ink,
+    },
+
+    classTime: {
+      marginTop: 10,
+      fontSize: 15,
+      color: "#666",
+    },
+
+    classCapacity: {
+      marginTop: 6,
+      fontSize: 14,
+      color: "#888",
+    },
     screenContainer: {
       flex: 1,
       backgroundColor: theme.bg, // 👈

@@ -57,18 +57,24 @@ export default function OffersScreen() {
     try {
       setLoading(true);
 
-      const MemberId = await AsyncStorage.getItem("MemberId")|| "0";
+      const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
+      const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
 
-      if (!MemberId || MemberId === "null" ) {
+      console.log("Fetching offers for:", {
+        MemberId,
+        UserRole,
+      });
+
+      if (!MemberId || MemberId === "null") {
         throw new Error("Invalid MemberId");
       }
 
       const response = await fetch(
-        `https://gym.useitsmart.com/api/Offers/getallOffers?userId=${MemberId}`,
+        `https://gym.useitsmart.com/api/Offers/getallOffers?userId=${MemberId}&role=${UserRole}`,
         {
           method: "GET",
           headers: { Accept: "application/json" },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -102,57 +108,69 @@ export default function OffersScreen() {
   return (
     <View style={s.container}>
       <ScrollView contentContainerStyle={s.content}>
-        {offers.map((offer) => (
-          <TouchableOpacity
-            key={offer.id}
-            style={[
-              s.card,
-              isArabic() && { flexDirection: "row-reverse" },
-            ]}
-            onPress={() =>
-              navigation.navigate("OfferDetails" as never, { offer } as never)
-            }
-          >
-            <Image
-              source={{ uri: `${BASE_URL}${offer.photoUrl}` }}
+        {offers.length === 0 ? (
+          <View style={s.emptyContainer}>
+            <Text
               style={[
-                s.image,
-                isArabic() && { marginLeft: 15, marginRight: 0 },
-              ]}
-            />
-
-            <View
-              style={[
-                s.cardInfo,
-                isArabic() && { alignItems: "flex-end" },
+                s.emptyText,
+                isArabic() && {
+                  textAlign: "right",
+                  writingDirection: "rtl",
+                },
               ]}
             >
-              <Text
+              {i18n.locale === "ar"
+                ? "لا توجد عروض متاحة حالياً"
+                : "No offers available at the moment"}
+            </Text>
+          </View>
+        ) : (
+          offers.map((offer) => (
+            <TouchableOpacity
+              key={offer.id}
+              style={[s.card, isArabic() && { flexDirection: "row-reverse" }]}
+              onPress={() =>
+                navigation.navigate("OfferDetails" as never, { offer } as never)
+              }
+            >
+              <Image
+                source={{ uri: `${BASE_URL}${offer.photoUrl}` }}
                 style={[
-                  s.title,
-                  isArabic() && {
-                    textAlign: "right",
-                    writingDirection: "rtl",
-                  },
+                  s.image,
+                  isArabic() && { marginLeft: 15, marginRight: 0 },
                 ]}
-              >
-                {i18n.locale === "ar" ? offer.nameAr : offer.nameEn}
-              </Text>
+              />
 
-              <Text
-                style={[
-                  s.desc,
-                  isArabic() && {
-                    textAlign: "right",
-                    writingDirection: "rtl",
-                  },
-                ]}
+              <View
+                style={[s.cardInfo, isArabic() && { alignItems: "flex-end" }]}
               >
-                {i18n.locale === "ar" ? offer.contentAr : offer.contentEn}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+                <Text
+                  style={[
+                    s.title,
+                    isArabic() && {
+                      textAlign: "right",
+                      writingDirection: "rtl",
+                    },
+                  ]}
+                >
+                  {i18n.locale === "ar" ? offer.nameAr : offer.nameEn}
+                </Text>
+
+                <Text
+                  style={[
+                    s.desc,
+                    isArabic() && {
+                      textAlign: "right",
+                      writingDirection: "rtl",
+                    },
+                  ]}
+                >
+                  {i18n.locale === "ar" ? offer.contentAr : offer.contentEn}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -161,6 +179,18 @@ export default function OffersScreen() {
 // ---------------- STYLES ----------------
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
+    emptyContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingVertical: 50,
+    },
+
+    emptyText: {
+      fontSize: 16,
+      color: theme.muted,
+      fontWeight: "500",
+    },
     container: {
       flex: 1,
       backgroundColor: theme.bg,

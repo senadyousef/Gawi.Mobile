@@ -1135,9 +1135,9 @@ const MuselsePlanPtList = () => {
         <Text style={[S.headerTitle, txtAlign]}>{t.title}</Text>
         <Text style={[S.headerSubtitle, txtAlign]}>{t.subtitle}</Text>
         <View style={[rowStyle, S.userInfoRow]}>
-          <Text style={S.exerciseCount}>
+          {/* <Text style={S.exerciseCount}>
             {t.totalExercises}: {exerciseSchedules.length}
-          </Text>
+          </Text> */}
           <Text style={S.clientCount}>
             {users.length > 0 ? `${users.length} ${t.clients}` : t.noClients}
           </Text>
@@ -1155,6 +1155,9 @@ const MuselsePlanPtList = () => {
           setRefreshing(true);
           fetchExerciseSchedules();
         }}
+        ListEmptyComponent={() => (
+          <Text style={[{ color: d.textSub }]}>{"No clients found."}</Text>
+        )}
       />
 
       <TouchableOpacity

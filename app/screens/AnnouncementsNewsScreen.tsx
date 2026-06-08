@@ -55,28 +55,42 @@ export default function AnnouncementsNewsScreen() {
   const fetchNews = async () => {
     try {
       const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
-      console.log("Fetching news for MemberId:", MemberId);
+      const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
+      console.log("Fetching news for:", {
+        MemberId,
+        UserRole,
+      });
+
       setLoading(true);
 
       const response = await fetch(
-        `https://gym.useitsmart.com/api/News/getallNews?userId=${MemberId}`,
-        { method: "GET", headers: { accept: "application/json" } },
+        `https://gym.useitsmart.com/api/News/getallNews?userId=${MemberId}&role=${UserRole}`,
+        {
+          method: "GET",
+          headers: {
+            accept: "application/json",
+          },
+        },
       );
 
-      if (!response.ok) throw new Error("Failed to fetch news");
+      console.log("News Status:", response.status);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch news (${response.status})`);
+      }
 
       const json = await response.json();
 
-      setNewsData(json || []);
+      console.log("News Response:", json);
+
+      setNewsData(Array.isArray(json) ? json : []);
     } catch (err: any) {
       console.error("Fetch news error:", err);
       Alert.alert("Error", err.message || "Failed to load news");
-      console.log("news error:", err?.response?.status, err?.message);
     } finally {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     fetchNews();
   }, []);

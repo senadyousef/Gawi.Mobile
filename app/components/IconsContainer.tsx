@@ -66,9 +66,11 @@ const IconsContainer: React.FC<Props> = ({ icons, isHomeScreen = false }) => {
       );
 
       const data = await res.json();
+     
       const count = data?.count ?? 0;
       const id = data?.cartId ?? null;
 
+      console.log("Fetched cart count:", count, "Cart ID:", id);
       if (count !== cartCount) {
         const cartIconIndex = icons.findIndex((icon) => icon.name === "cart-outline");
         if (cartIconIndex !== -1) animateBadge(cartIconIndex);

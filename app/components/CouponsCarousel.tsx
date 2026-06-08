@@ -10,6 +10,7 @@ import { Text, TouchableOpacity } from "./overridedComponents";
 import { HOMESCREEN_HEADER_paddingHorizontal, width } from "../constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
+import { useNavigation } from "@react-navigation/native";
 
 const carouselHight = 200;
 const carouselWidth = width - HOMESCREEN_HEADER_paddingHorizontal * 2;
@@ -30,6 +31,7 @@ interface IGymCarousel {
   photoUrl: string;
   contentAr: string;
   contentEn: string;
+  type: string;
 }
 interface Props {
   refreshTrigger?: number;
@@ -39,18 +41,18 @@ const CouponsCarousel: React.FC<Props> = ({ refreshTrigger = 0 }) => {
   const { isArabic } = useI18n();
   const [carouselData, setCarouselData] = useState<IGymCarousel[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const navigation = useNavigation<any>();
   useEffect(() => {
     const fetchCarousel = async () => {
       try {
         setLoading(true);
         let MemberId = await AsyncStorage.getItem("MemberId");
-
+        const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
         if (!MemberId || MemberId === "0" || MemberId === "null") {
           MemberId = "0";
         }
 
-        const url = `https://gym.useitsmart.com/api/Gyms/getAllGymsCarousel?userId=${MemberId}`;
+        const url = `https://gym.useitsmart.com/api/Gyms/getAllGymsCarousel?userId=${MemberId}&role=${UserRole}`;
         const res = await fetch(url, {
           headers: { Accept: "application/json" },
         });
@@ -144,9 +146,23 @@ const CouponsCarousel: React.FC<Props> = ({ refreshTrigger = 0 }) => {
             <TouchableOpacity
               style={s.accentButton}
               onPress={() => {
-                // 👇 put your action here
-                console.log("Learn more pressed");
-                // navigation.navigate("YourScreen"); 👈 example
+                if (item.type === "News") {
+                  navigation.navigate("NewsDetails", {
+                    item: {
+                      title: i18n.locale === "ar" ? item.nameAr : item.nameEn,
+                      photo:
+                        item.photoUrl && !item.photoUrl.startsWith("http")
+                          ? `https://gym.useitsmart.com${item.photoUrl}`
+                          : item.photoUrl,
+                      description:
+                        i18n.locale === "ar" ? item.contentAr : item.contentEn,
+                    },
+                  });
+                } else if (item.type === "Offer") {
+                  navigation.navigate("OfferDetails", {
+                    offer: item,
+                  });
+                }
               }}
               activeOpacity={0.7}
             >

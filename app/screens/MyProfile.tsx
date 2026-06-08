@@ -129,7 +129,7 @@ export default function MyProfileScreen() {
         email: data.email || "",
         phoneNumber: data.phoneNumber || "",
         photo: "",
-        photoUrl: "",
+        photoUrl: data.photoUrl || "",
         bio: "",
         dob: "",
         location: "",
@@ -150,7 +150,7 @@ export default function MyProfileScreen() {
         expiryDate: formatDate(data.subscriptionExpiryDate),
         startDate: formatDate(data.subscriptionStartDate),
       });
-      
+
       setLoading(false);
     } catch (error) {
       Alert.alert("Error", "Failed to load membership");
@@ -221,7 +221,7 @@ export default function MyProfileScreen() {
           if (!result.canceled && result.assets?.length > 0) {
             setPersonalData((prev) => ({
               ...prev,
-              photo: result.assets[0].uri,
+              photoUrl: result.assets[0].uri,
             }));
           }
         },
@@ -247,7 +247,7 @@ export default function MyProfileScreen() {
           if (!result.canceled && result.assets?.length > 0) {
             setPersonalData((prev) => ({
               ...prev,
-              photo: result.assets[0].uri,
+              photoUrl: result.assets[0].uri,
             }));
           }
         },
@@ -273,15 +273,26 @@ export default function MyProfileScreen() {
         form.append("nameEn", personalData.nameEn || "");
         form.append("nameAr", personalData.nameAr || "");
         form.append("phoneNumber", personalData.phoneNumber || "");
-        if (personalData.photo && personalData.photo.startsWith("file://")) {
-          const uriParts = personalData.photo.split(".");
-          const fileType = uriParts[uriParts.length - 1];
+
+        // ✅ log BEFORE any processing
+        console.log("RAW photoUrl:", JSON.stringify(personalData.photoUrl));
+
+        if (personalData.photoUrl) {
+          const fileUri = personalData.photoUrl;
+          const fileName = fileUri.split("/").pop();
+          const fileExt = fileName?.split(".").pop()?.toLowerCase() ?? "jpg";
+
           form.append("file", {
-            uri: personalData.photo,
-            name: `photo.${fileType}`,
-            type: `image/${fileType}`,
+            uri: fileUri,
+            name: fileName ?? `photo.${fileExt}`,
+            type: `image/${fileExt === "jpg" ? "jpeg" : fileExt}`,
           } as any);
+        } else {
+          console.log("⚠️ No photo selected, skipping file append");
         }
+
+        console.log("form parts:", form._parts);
+
         const response = await fetch(
           `https://gym.useitsmart.com/api/User/updateuser`,
           {
@@ -290,11 +301,15 @@ export default function MyProfileScreen() {
             body: form,
           },
         );
+
         const text = await response.text();
+        console.log("response:", response.status, text);
+
         if (!response.ok) {
           Alert.alert("❌ Update failed", text || "Unknown error");
           return;
         }
+
         Alert.alert(
           i18n.t("profile.success"),
           i18n.t("profile.personal_updated"),
@@ -542,16 +557,7 @@ export default function MyProfileScreen() {
         {/* Profile Header */}
         <View style={s.headerSection}>
           <TouchableOpacity onPress={handleSelectPhoto}>
-            <Image
-              source={
-                personalData.photo
-                  ? { uri: personalData.photo }
-                  : personalData.photoUrl
-                    ? { uri: personalData.photoUrl }
-                    : require("../assets/images/adaptive-icon.png")
-              }
-              style={s.avatar}
-            />
+            <Image source={{ uri: personalData.photoUrl }} style={s.avatar} />
             <View style={s.editIconContainer}>
               <Ionicons name="camera" size={20} color="#fff" />
             </View>

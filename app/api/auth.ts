@@ -3,10 +3,10 @@ import {
   IloginForm,
   API_ENDPOINTS,
   IloginInfoCheckRes,
-} from '../types';
-import i18n from '../localization';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_ENDPOINT, REFRESH_TOKEN, TOKEN } from '../constants';
+} from "../types";
+import i18n from "../localization";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_BASE_ENDPOINT, REFRESH_TOKEN, TOKEN } from "../constants";
 
 export const handleAuthenticateUser = async (form: IloginForm) => {
   const res = await fetch(
@@ -20,7 +20,7 @@ export const handleAuthenticateUser = async (form: IloginForm) => {
       headers: {
         "Content-Type": "application/json",
       },
-    }
+    },
   );
 
   let resjson: IloginRes;
@@ -44,6 +44,7 @@ export const handleAuthenticateUser = async (form: IloginForm) => {
 
     if (resjson.role) {
       await AsyncStorage.setItem("UserRole", resjson.role);
+
       console.log("💾 Saved UserRole:", resjson.role);
     }
 
@@ -63,17 +64,15 @@ export const handleAuthenticateUser = async (form: IloginForm) => {
   }
 };
 
-
-
 export const checkEmailOrPhoneNumber = async (
   loginInfo: string | number,
 ): Promise<boolean> => {
   const res = await fetch(
     `${API_BASE_ENDPOINT}${API_ENDPOINTS.USER}${API_ENDPOINTS.CHECK_EMAIL_AND_MOBILE}?loginInfo=${loginInfo}`,
     {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     },
   );
@@ -83,6 +82,6 @@ export const checkEmailOrPhoneNumber = async (
 
     return !!resjson?.isValid;
   } else {
-    throw new Error(i18n.t('an_error_occured'));
+    throw new Error(i18n.t("an_error_occured"));
   }
 };

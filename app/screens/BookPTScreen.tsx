@@ -84,8 +84,25 @@ export default function BookPTScreen() {
     return `${hour.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
   };
 
-  const normalizeDay = (day: string) =>
-    day.charAt(0).toUpperCase() + day.slice(1).toLowerCase();
+  const normalizeDay = (day: string) => {
+    const DAY_SHORT_TO_FULL = {
+      sun: "Sunday",
+      mon: "Monday",
+      tue: "Tuesday",
+      wed: "Wednesday",
+      thu: "Thursday",
+      fri: "Friday",
+      sat: "Saturday",
+    };
+
+    if (!day) return "";
+
+    const lower = day.toLowerCase();
+
+    return (
+      DAY_SHORT_TO_FULL[lower] || lower.charAt(0).toUpperCase() + lower.slice(1)
+    );
+  };
 
   const isDayAvailable = (date: Date) => {
     const dayIndex = date.getDay();

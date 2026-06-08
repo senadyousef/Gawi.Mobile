@@ -93,14 +93,30 @@ export default function CustomDrawerContent(props) {
 
   const iconSize = 22;
 
-  const handlePressProfile = () => {
-    if (guestMode) {
-      props.navigation.closeDrawer();
+  const handlePressProfile = async () => {
+    props.navigation.closeDrawer();
+
+    const userType = await AsyncStorage.getItem("UserType");
+
+    if (userType === "Guest") {
       const rootNavigation = navigation.getParent()?.getParent();
-      rootNavigation?.dispatch(CommonActions.navigate({ name: "Login" }));
+
+      rootNavigation?.dispatch(
+        CommonActions.navigate({
+          name: "Login",
+        }),
+      );
       return;
     }
-    navigation.navigate("MyProfileNavigator");
+
+    if (userType === "GymMember") {
+      navigation.navigate(
+        "MyProfileNavigator" as never,
+        {
+          screen: "MyProfileMain",
+        } as never,
+      );
+    }
   };
 
   const handleLogoutOrLogin = async () => {

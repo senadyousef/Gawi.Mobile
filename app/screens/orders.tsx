@@ -35,6 +35,7 @@ const OrdersScreen = () => {
       }
 
       const data = await res.json();
+      console.log("Fetched orders:", data);
       setOrders(data);
     } catch (err) {
       Alert.alert("Error", err.message);

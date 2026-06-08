@@ -103,10 +103,7 @@ const LoginScreen = () => {
   }, []);
 
   const handleAutoFill = () => {
-  Alert.alert(
-    "Auto Fill",
-    "Choose account",
-    [
+    Alert.alert("Auto Fill", "Choose account", [
       {
         text: "GymMember@admin.com",
         onPress: () => {
@@ -125,9 +122,8 @@ const LoginScreen = () => {
         text: "Cancel",
         style: "cancel",
       },
-    ]
-  );
-};
+    ]);
+  };
 
   const setLanguage = async (locale: string) => {
     i18n.locale = locale;
@@ -177,7 +173,11 @@ const LoginScreen = () => {
       // 4️⃣ Determine PT
       const isPT = role === "PT";
 
-      await AsyncStorage.setItem("UserRole", isPT ? "PT" : "GymMember");
+      const currentRole = await AsyncStorage.getItem("UserRole");
+
+      if (!currentRole) {
+        await AsyncStorage.setItem("UserRole", isPT ? "PT" : "GymMember");
+      }
 
       // 5️⃣ Build IUserProfile (FINAL)
       const userProfile: IUserProfile = {

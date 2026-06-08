@@ -21,7 +21,7 @@ const CartScreen: React.FC = () => {
     useAppContext(); // 👈 pull isDarkMode
 
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]);             // 👈 reactive styles
+  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
 
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [cartItems, setCartItems] = React.useState<IcartItem[]>([]);
@@ -32,6 +32,7 @@ const CartScreen: React.FC = () => {
       const token = await handleGetToken();
       const res = await fetch(
         `https://gym.useitsmart.com/api/Cart/getCartWithItems?cartId=${cartId}`,
+
         {
           method: "GET",
           headers: {
@@ -40,13 +41,14 @@ const CartScreen: React.FC = () => {
           },
         },
       );
-
+      console.log("cartId", cartId);
       if (!res.ok) {
         if (res.status === 401) return handleLogout();
         return defaultErrorToast();
       }
 
       const data = await res.json();
+      console.log("Cart data:", data);
 
       if (data.cartId && data.cartId !== cartId) {
         setCartId(data.cartId);
@@ -86,13 +88,11 @@ const CartScreen: React.FC = () => {
           />
         )}
       />
-
       <BottomButton
         label={i18n.t("checkout")}
         disabled={cartItems.length === 0}
         isDarkMode={isDarkMode} // 👈 pass down
       />
-
       <StatusBar style={isDarkMode ? "light" : "dark"} /> {/* 👈 */}
     </RNView>
   );

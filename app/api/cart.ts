@@ -28,6 +28,7 @@ export const handleFetchCartItems = async ({
   ]);
 
   const res = await fetch(
+
     `${API_BASE_ENDPOINT}${API_ENDPOINTS.CARTS}${query}`,
     {
       method: 'GET',
@@ -36,10 +37,12 @@ export const handleFetchCartItems = async ({
         Authorization: `Bearer ${token}`,
       },
     },
+    
   );
 
   if (res.status === 200) {
     return (await res.json()) as IapiResponse<IcartItem[]>;
+    
   } else if (res.status === 401) {
     await handleLogout();
     return;

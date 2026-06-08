@@ -394,6 +394,7 @@ export default {
     error: "خطأ",
     load_error: "تعذر تحميل الملاحظات",
     success: "تمت إضافة الملاحظة بنجاح",
+    no_events: "لا توجد فعاليات مجدولة لهذا التاريخ",
   },
   profile: {
     loading: "جاري التحميل...",
@@ -933,4 +934,5 @@ export default {
   chat_title: "المساعد الذكي",
   chat_welcome: "مرحباً! كيف يمكنني مساعدتك؟",
   chat_reply: "شكراً لرسالتك! سيتم الرد عليك قريباً.",
+  class_finished: "تم الانتهاء من الحصة",
 };

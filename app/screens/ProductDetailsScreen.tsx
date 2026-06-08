@@ -118,6 +118,7 @@ const ProductDetailsScreen: React.FC<
         body: null,
       });
       if (!res.ok) throw new Error(`Failed to add to cart: ${res.status}`);
+      
       fetchCartItems(userProfile.id);
       Alert.alert(i18n.t("success"), i18n.t("added_to_cart"));
     } catch (err: any) {

@@ -37,7 +37,6 @@ interface IExtendedContext extends Icontext {
   
   setUserType?: (type: "pt" | "member" | null) => void; // 👈 Add setUserType
 }
-
 const Context = React.createContext<IExtendedContext>({
   bookedEvents: {},
   totalCartItems: 0,
@@ -142,10 +141,13 @@ export const ContextProvider: React.FC<Iprops> = ({
   // -----------------------------
   // CART FETCH (GLOBAL)
   // -----------------------------
+  
   const fetchCartItems = async (
+    
     userId: number,
     page?: number,
   ): Promise<IapiResponse<IcartItem[]> | undefined> => {
+
     const res = await handleFetchCartItems({
       userId,
       handleLogout,
@@ -159,6 +161,7 @@ export const ContextProvider: React.FC<Iprops> = ({
     // Save cart ID from backend if exists
     if (res.cartId) {
       setCartId(res.cartId);
+
     }
 
     return res;

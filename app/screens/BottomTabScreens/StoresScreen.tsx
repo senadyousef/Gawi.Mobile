@@ -65,6 +65,7 @@ const StoresScreen = () => {
       }
 
       const result = await response.json();
+      console.log("Fetched stores:", result);
       const stores = Array.isArray(result) ? result : [];
       const filtered =
         searchText && searchText.trim().length > 0
@@ -124,17 +125,18 @@ const StoresScreen = () => {
         ref={ref}
         numColumns={2}
         data={shopItems}
-        contentContainerStyle={[
-          s.contentContainerStyle,
-          { flexDirection: isRTL ? "row-reverse" : "row" },
-        ]}
+        contentContainerStyle={s.contentContainerStyle}
+        columnWrapperStyle={{
+          flexDirection: isRTL ? "row-reverse" : "row",
+          justifyContent: "space-between",
+        }}
         keyExtractor={(item) => item.id.toString()}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor={isDarkMode ? "#F0F0F0" : "#1A1A1A"} // 👈
-            colors={[isDarkMode ? "#F0F0F0" : "#1A1A1A"]} // 👈
+            tintColor={isDarkMode ? "#F0F0F0" : "#1A1A1A"}
+            colors={[isDarkMode ? "#F0F0F0" : "#1A1A1A"]}
           />
         }
         ItemSeparatorComponent={() => <View style={{ height: 15 }} />}
@@ -142,17 +144,22 @@ const StoresScreen = () => {
         ListEmptyComponent={
           <ListEmptyComponent
             isLoading={isLoading}
-
             message={String(i18n.t("no_stores_found"))}
           />
         }
         renderItem={({ item, index }) => (
-          <View style={{ marginRight: index % 2 !== 0 ? 0 : 15 }}>
+          <View
+            style={{
+              flex: 1,
+              marginBottom: 15,
+              marginRight: !isRTL && index % 2 === 0 ? 15 : 0,
+              marginLeft: isRTL && index % 2 === 0 ? 15 : 0,
+            }}
+          >
             <StoreCard
-              key={item.id}
               item={item}
               onPress={() => handleNavigate(item)}
-              isDarkMode={isDarkMode} // 👈 pass down to StoreCard
+              isDarkMode={isDarkMode}
             />
           </View>
         )}
