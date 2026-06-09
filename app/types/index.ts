@@ -175,7 +175,7 @@ export interface Icontext {
   >;
   fetchCartItems: (
     userId: number,
-    page?: number
+    page?: number,
   ) => Promise<IapiResponse<IcartItem[]> | undefined>;
 }
 type homeScreenFetcher =
@@ -254,11 +254,13 @@ export interface Inews {
 }
 
 export interface IshopItem {
-  type: any;
+  categoryNameAr: string;
+  categoryNameEn: string;
   photoUrl: string;
   data(data: any): unknown;
   id: number;
   nameEn: string;
+  categoryId: number;
   nameAr: string;
   price: number;
   descriptionAr: string;

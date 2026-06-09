@@ -23,6 +23,7 @@ interface Props {
   containerStyles?: StyleProp<ViewStyle>;
   handleShowProductDetails: (e: IshopItem) => void;
   isDarkMode?: boolean; // 👈 ADD
+  language?: "en" | "ar"; // 👈 ADD
 }
 
 const CARD_HEIGHT = 250;
@@ -32,6 +33,7 @@ const ProductCard: React.FC<Props> = ({
   containerStyles,
   handleShowProductDetails,
   isDarkMode, // 👈 ADD
+  language, // 👈 ADD
 }) => {
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
   const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
@@ -72,7 +74,11 @@ const ProductCard: React.FC<Props> = ({
             <Text style={s.title} numberOfLines={2} ellipsizeMode="tail">
               {handleGetLocalizedField("nameEn", "nameAr", item)}
             </Text>
-            <Text style={s.typeText}>{item.type || "—"}</Text>
+            <Text style={[s.typeText , language === "ar" ? { textAlign: "right" } : { textAlign: "left" }]}>
+              {language === "ar"
+                ? item.categoryNameAr || "—"
+                : item.categoryNameEn || "—"}
+            </Text>
           </View>
           <View style={[s.iconWrapper]}>
             <MaterialCommunityIcons

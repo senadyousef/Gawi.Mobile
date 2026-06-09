@@ -419,50 +419,50 @@ const PTDashboardScreen = ({ navigation }: any) => {
   const [deletingShift, setDeletingShift] = useState(false);
 
   const API_DAYS = [
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-    "sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
   ];
 
   // غيّر daysOfWeek ليرجع objects بدل strings
-  const daysOfWeek = useMemo(
-    () =>
-      API_DAYS.map((key) => ({
-        key, // القيمة المرسلة للـ API دايماً إنجليزي
-        label: (T.days as any)[key], // القيمة المعروضة (عربي أو إنجليزي)
-      })),
-    [T],
-  );
+ const daysOfWeek = useMemo(
+  () =>
+    API_DAYS.map((key) => ({
+      key,
+      label: (T?.days as any)?.[key] || key,
+    })),
+  [T],
+);
 
   const DAY_MAP = {
     // Arabic → English
-    الاثنين: "monday",
-    الثلاثاء: "tuesday",
-    الأربعاء: "wednesday",
-    الخميس: "thursday",
-    الجمعة: "friday",
-    السبت: "saturday",
-    الأحد: "sunday",
+    الاثنين: "Monday",
+    الثلاثاء: "Tuesday",
+    الأربعاء: "Wednesday",
+    الخميس: "Thursday",
+    الجمعة: "Friday",
+    السبت: "Saturday",
+    الأحد: "Sunday",
 
     // Short English → Full English
-    mon: "monday",
-    tue: "tuesday",
-    wed: "wednesday",
-    thu: "thursday",
-    fri: "friday",
-    sat: "saturday",
-    sun: "sunday",
+    mon: "Monday",
+    tue: "Tuesday",
+    wed: "Wednesday",
+    thu: "Thursday",
+    fri: "Friday",
+    sat: "Saturday",
+    sun: "Sunday",
   };
 
   const normalizeDay = (day) => {
     if (!day) return "";
 
     const value = day.toString().trim();
-    const lower = value.toLowerCase();
+    const lower = value;
 
     // إذا كان أصلاً Monday / Sunday ...
     if (API_DAYS.includes(lower)) {

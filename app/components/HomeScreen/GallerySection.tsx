@@ -41,7 +41,7 @@ const GallerySection = ({ refreshTrigger = 0 }: Props) => {
   const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
 
   const { isArabic } = useI18n();
-  const BASE_URL = "https://gym.useitsmart.com";
+  const BASE_URL = "http://192.168.1.27";
 
   const [data, setData] = React.useState<any[]>([]);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
@@ -55,7 +55,8 @@ const GallerySection = ({ refreshTrigger = 0 }: Props) => {
     setDidFail(false);
     try {
       const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
-      const url = `https://gym.useitsmart.com/api/Gyms/getAllGymsGallery?userId=${MemberId}`;
+      const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
+      const url = `http://192.168.1.27/api/Gyms/getAllGymsGallery?userId=${MemberId}&role=${UserRole}`;
       const res = await fetch(url, {
         method: "GET",
         headers: { Accept: "application/json" },

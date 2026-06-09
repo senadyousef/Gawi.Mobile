@@ -22,7 +22,7 @@ export const HOMESCREEN_HEADER_headerBodyHeight =
   HOMESCREEN_HEADER_translateY -
   statusBarHeight;
 
-export const API_BASE_ENDPOINT = 'https://gym.useitsmart.com/api';
+export const API_BASE_ENDPOINT = 'http://192.168.1.27/api';
 export const TOKEN = 'token';
 export const REFRESH_TOKEN = 'refreshToken';
 export const USER_EMAIL = 'userEmail';

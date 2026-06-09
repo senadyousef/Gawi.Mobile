@@ -18,10 +18,11 @@ export const handleFetchGalleryItems = async ({
   try {
     // 🪪 Retrieve MemberId or default to "0"
     const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
+    const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
     console.log("🪪 MemberId:", MemberId);
 
     // ✅ Always fetch from API (even if MemberId = 0)
-    const url = `https://gym.useitsmart.com/api/Gyms/getAllGymsGallery?userId=${MemberId}`;
+    const url = `http://192.168.1.27/api/Gyms/getAllGymsGallery?userId=${MemberId}&role=${UserRole}`;
     console.log("📸 Fetching gallery from:", url);
 
     const res = await fetch(url, {

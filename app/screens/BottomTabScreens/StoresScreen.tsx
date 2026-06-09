@@ -5,6 +5,8 @@ import {
   StyleSheet,
   View,
   RefreshControl,
+  TouchableOpacity,
+  Text,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
@@ -37,14 +39,40 @@ const StoresScreen = () => {
 
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
   const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
+  const [categories, setCategories] = React.useState<any[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] =
+    React.useState<number>(-1);
 
+  const [allShopItems, setAllShopItems] = React.useState<Istore[]>([]);
   const [shopItems, setShopItems] = React.useState<Istore[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState<string>("");
   const [searchTimeout, setSearchTimeout] = React.useState<NodeJS.Timeout>();
   const isRTL = i18n.locale === "ar";
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE_ENDPOINT}/Category/getallCategory`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        },
+      );
 
+      if (!response.ok) return;
+
+      const result = await response.json();
+
+      console.log("Categories API:", result);
+
+      setCategories(Array.isArray(result?.result) ? result.result : []);
+    } catch (error) {
+      console.log("Category Error", error);
+    }
+  };
   const fetchShopItems = async (searchText?: string) => {
     try {
       setIsLoading(true);
@@ -76,6 +104,7 @@ const StoresScreen = () => {
             )
           : stores;
 
+      setAllShopItems(stores);
       setShopItems(filtered);
     } catch (error) {
       console.error("❌ Error fetching stores:", error);
@@ -85,9 +114,30 @@ const StoresScreen = () => {
       setIsRefreshing(false);
     }
   };
+  const handleCategoryPress = (categoryId: number | null) => {
+    setSelectedCategoryId(categoryId);
 
+    let filtered = [...allShopItems];
+
+    if (categoryId !== -1) {
+      filtered = filtered.filter(
+        (item) => Number(item.categoryId) === Number(categoryId),
+      );
+    }
+
+    if (searchValue.trim()) {
+      filtered = filtered.filter((item) =>
+        (i18n.locale === "ar" ? item.nameAr : item.nameEn)
+          ?.toLowerCase()
+          .includes(searchValue.toLowerCase()),
+      );
+    }
+
+    setShopItems(filtered);
+  };
   React.useEffect(() => {
     fetchShopItems();
+    fetchCategories();
   }, []);
 
   const handleRefresh = () => {
@@ -121,6 +171,54 @@ const StoresScreen = () => {
       {isLoading && !shopItems.length && (
         <LoadingIndicator isLoading={isLoading} />
       )}
+      <View style={{ height: 50 }}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={[
+            {
+              id: -1,
+              categoryNameEn: "All",
+              categoryNameAr: "الكل",
+            },
+            ...(Array.isArray(categories) ? categories : []),
+          ]}
+          keyExtractor={(item, index) => item.id?.toString() || `all-${index}`}
+          contentContainerStyle={{
+            paddingVertical: 10,
+          }}
+          renderItem={({ item }) => {
+            const selected = selectedCategoryId === item.id;
+
+            return (
+              <TouchableOpacity
+                onPress={() => handleCategoryPress(item.id)}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  marginRight: 10,
+                  backgroundColor: selected
+                    ? "#4F46E5"
+                    : isDarkMode
+                      ? "#222"
+                      : "#F2F2F2",
+                }}
+              >
+                <Text
+                  style={{
+                    color: selected ? "#FFF" : isDarkMode ? "#FFF" : "#000",
+                  }}
+                >
+                  {i18n.locale === "ar"
+                    ? item.categoryNameAr || item.nameAr
+                    : item.categoryNameEn || item.nameEn}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </View>
       <FlatList
         ref={ref}
         numColumns={2}
