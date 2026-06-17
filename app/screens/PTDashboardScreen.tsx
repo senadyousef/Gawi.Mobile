@@ -534,7 +534,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
       const userId = await AsyncStorage.getItem("MemberId");
       console.log("Fetching PTs for userId:", userId);
       const res = await fetch(
-        `http://192.168.1.27/api/PT/GetPTWithHourShift?userId=${userId}`,
+        `https://gym.useitsmart.com/api/PT/GetPTWithHourShift?userId=${userId}`,
         {
           method: "GET",
           headers: { accept: "text/plain", "Content-Type": "application/json" },
@@ -611,7 +611,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
         Alert.alert("Error", "No token");
         return;
       }
-      const res = await fetch("http://192.168.1.27/api/PTWorkShifts", {
+      const res = await fetch("https://gym.useitsmart.com/api/PTWorkShifts", {
         method: "POST",
         headers: {
           accept: "text/plain",

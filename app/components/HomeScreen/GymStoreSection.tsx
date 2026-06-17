@@ -31,12 +31,12 @@ const GymStoreSection = ({ refreshTrigger = 0 }: Props) => {
       setDidFail(false);
 
       let storedId = await AsyncStorage.getItem("MemberId");
-
+      const UserRole = (await AsyncStorage.getItem("UserRole"))|| "Guest"
       if (!storedId || storedId === "0" || storedId === "null") {
         storedId = "0";
       }
 
-      const url = `http://192.168.1.27/api/Gyms/getAllGymsStoreItems?userId=${storedId}`;
+      const url = `https://gym.useitsmart.com/api/Gyms/getAllGymsStoreItems?userId=${storedId}&role=${UserRole}`;
       const res = await fetch(url, { headers: { Accept: "application/json" } });
 
       if (!res.ok) {

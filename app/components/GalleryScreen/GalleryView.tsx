@@ -102,7 +102,7 @@ const GalleryView: React.FC<Props> = ({
             // ✅ حل المشكلة: تحويل الرابط الكامل
             const mediaUri =
               rawUrl && !rawUrl.startsWith("http")
-                ? `http://192.168.1.27${rawUrl}`
+                ? `https://gym.useitsmart.com${rawUrl}`
                 : rawUrl;
 
             const isVideo = item.isPhoto === false;

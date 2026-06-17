@@ -3,7 +3,7 @@ import i18n from "../../localization";
 import Colors from "../../constants/Colors";
 import { useI18n } from "../../hooks/useI18n";
 import { AntDesign } from "@expo/vector-icons";
-import { StyleSheet, TextInput } from "react-native";
+import { StyleSheet, TextInput , Text } from "react-native";
 import { TouchableOpacity, View } from "../overridedComponents";
 import { useAppContext } from "../../context";
 
@@ -72,7 +72,9 @@ const SearchBar: React.FC<Props> = ({ onSearchTextChanged }) => {
 
       {searchText ? (
         <TouchableOpacity onPress={handleReset}>
+       
           <AntDesign name="close" size={18} color={theme.icon} />
+    
         </TouchableOpacity>
       ) : null}
     </View>

@@ -366,7 +366,7 @@ const CalendarScreen = () => {
   });
   return (
     <View style={s.screenContainer}>
-      {/* 👇 Calendar with dynamic theme */}
+    
       <View style={s.weekCalendar}>
         <View style={s.monthHeader}>
           <TouchableOpacity onPress={() => setWeekOffset((prev) => prev - 1)}>
@@ -697,10 +697,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       padding: 12,
       borderRadius: 8,
     },
-    noteText: {
-      color: theme.ink, // 👈
-      fontWeight: "500",
-    },
+    
     emptyText: {
       margin: 10,
       color: theme.emptyText, // 👈

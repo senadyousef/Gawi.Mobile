@@ -72,7 +72,8 @@ const ProductDetailsScreen: React.FC<
       try {
         setIsLoading(true);
         const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
-        const url = `${API_BASE_ENDPOINT}/Gyms/getAllGymsStoreItems?userId=${MemberId}`;
+        const UserRole= (await AsyncStorage.getItem("UserRole")) || "Guest";
+        const url = `${API_BASE_ENDPOINT}/Gyms/getAllGymsStoreItems?userId=${MemberId}&role=${UserRole}`;
         const response = await fetch(url, {
           method: "GET",
           headers: { Accept: "application/json" },

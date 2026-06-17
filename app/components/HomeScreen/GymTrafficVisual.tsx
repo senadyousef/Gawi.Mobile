@@ -8,13 +8,13 @@ import { useFocusEffect } from "@react-navigation/native";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
-  bg:      dark ? "#121212" : "#F5F0E8",
+  bg: dark ? "#121212" : "#F5F0E8",
   surface: dark ? "#1E1E1E" : "#FDFAF5",
-  border:  dark ? "#2C2C2C" : "#E8E0D0",
-  hairline:dark ? "#252525" : "#EDE8DF",
-  ink:     dark ? "#F0F0F0" : "#1A1A1A",
-  muted:   dark ? "#888888" : "#8A8070",
-  accent:  "#C8F04A",
+  border: dark ? "#2C2C2C" : "#E8E0D0",
+  hairline: dark ? "#252525" : "#EDE8DF",
+  ink: dark ? "#F0F0F0" : "#1A1A1A",
+  muted: dark ? "#888888" : "#8A8070",
+  accent: "#C8F04A",
 });
 
 interface Props {
@@ -24,7 +24,7 @@ interface Props {
 export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
   const { guestMode, isDarkMode } = useAppContext(); // 👈 pull isDarkMode
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]);             // 👈 reactive styles
+  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
 
   const [currentUsers, setCurrentUsers] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -46,7 +46,7 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
             Accept: "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-        }
+        },
       );
 
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
@@ -56,8 +56,8 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
         typeof result === "number"
           ? result
           : Array.isArray(result)
-          ? result.length
-          : result?.count || 0;
+            ? result.length
+            : result?.count || 0;
 
       setCurrentUsers(realUsers);
     } catch (err) {
@@ -70,7 +70,7 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
   useFocusEffect(
     useCallback(() => {
       fetchCurrentUsers();
-    }, [guestMode])
+    }, [guestMode]),
   );
 
   useEffect(() => {
@@ -80,7 +80,9 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
   // ─── Guest state ──────────────────────────────────────────────────────────
   if (guestMode) {
     return (
-      <View style={[s.guestContainer, isArabic && { flexDirection: "row-reverse" }]}>
+      <View
+        style={[s.guestContainer, isArabic && { flexDirection: "row-reverse" }]}
+      >
         <View style={s.guestIconWrap}>
           <Ionicons name="lock-closed-outline" size={24} color={theme.muted} />
         </View>
@@ -109,19 +111,44 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
   return (
     <View style={s.card}>
       {/* Header row */}
-      <View style={[s.headerRow, { flexDirection: isArabic ? "row-reverse" : "row" }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.eyebrow}>
-            {loading ? "..." : "Live · " + i18n.t("gym_traffic_title")}
-          </Text>
-          <Text style={s.cardTitle}>{trafficStatus}</Text>
-        </View>
-        <View style={s.metricChip}>
-          <View style={[s.dot, { backgroundColor: statusColor }]} />
-          <Text style={s.metricText}>
-            {currentUsers} / {maxCapacity}
-          </Text>
-        </View>
+      <View
+        style={[
+          s.headerRow,
+          { flexDirection: isArabic ? "row-reverse" : "row" },
+        ]}
+      >
+        {isArabic ? (
+          <>
+            <View style={{ flex: 1, alignItems: "flex-end" }}>
+              <Text style={s.eyebrow}>
+                {loading ? "..." : "Live · " + i18n.t("gym_traffic_title")}
+              </Text>
+              <Text style={s.cardTitle}>{trafficStatus}</Text>
+            </View>
+            <View style={s.metricChip}>
+              <View style={[s.dot, { backgroundColor: statusColor }]} />
+              <Text style={s.metricText}>
+                {currentUsers} / {maxCapacity}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={{ flex: 1 }}>
+              <Text style={s.eyebrow}>
+                {loading ? "..." : "Live · " + i18n.t("gym_traffic_title")}
+              </Text>
+              <Text style={s.cardTitle}>{trafficStatus}</Text>
+            </View>
+
+            <View style={s.metricChip}>
+              <View style={[s.dot, { backgroundColor: statusColor }]} />
+              <Text style={s.metricText}>
+                {currentUsers} / {maxCapacity}
+              </Text>
+            </View>
+          </>
+        )}
       </View>
 
       {/* Bar chart */}
@@ -130,7 +157,10 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
           const filled = i < filledBars;
           const h = Math.max(
             8,
-            14 + Math.sin(i * 0.7) * 8 + (i % 5 === 0 ? 12 : 0) + (filled ? 10 : 0)
+            14 +
+              Math.sin(i * 0.7) * 8 +
+              (i % 5 === 0 ? 12 : 0) +
+              (filled ? 10 : 0),
           );
           return (
             <View
@@ -149,7 +179,9 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
       {/* Time labels */}
       <View style={s.timeRow}>
         {["6a", "10a", "2p", "6p", "10p"].map((t) => (
-          <Text key={t} style={s.timeLabel}>{t}</Text>
+          <Text key={t} style={s.timeLabel}>
+            {t}
+          </Text>
         ))}
       </View>
 

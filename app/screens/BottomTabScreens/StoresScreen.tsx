@@ -24,6 +24,7 @@ import SearchBar from "../../components/ShopScreen/SearchBar";
 import StoreCard from "../../components/StoreScreen/StoreCard";
 import { LoadingIndicator } from "../../components/LoadingIndicator";
 import { ListEmptyComponent } from "../../components/ListEmptyComponent";
+import Colors from "../../constants/Colors";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -77,7 +78,8 @@ const StoresScreen = () => {
     try {
       setIsLoading(true);
       const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
-      const url = `${API_BASE_ENDPOINT}/Gyms/getAllGymsStoreItems?userId=${MemberId}`;
+      const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
+      const url = `${API_BASE_ENDPOINT}/Gyms/getAllGymsStoreItems?userId=${MemberId}&role=${UserRole}`;
       const response = await fetch(url, {
         method: "GET",
         headers: { Accept: "application/json" },
@@ -199,7 +201,7 @@ const StoresScreen = () => {
                   borderRadius: 20,
                   marginRight: 10,
                   backgroundColor: selected
-                    ? "#4F46E5"
+                    ? Colors.tertiary
                     : isDarkMode
                       ? "#222"
                       : "#F2F2F2",

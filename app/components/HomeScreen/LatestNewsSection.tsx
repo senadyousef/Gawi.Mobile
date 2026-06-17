@@ -3,7 +3,7 @@ import ErrorBox from "../ErrorBox";
 import i18n from "../../localization";
 import SectionTitle from "./SectionTitle";
 import { useAppContext } from "../../context";
-import { Alert, StyleSheet, View } from "react-native";
+import { Alert, StyleSheet, View , Text} from "react-native";
 import NoItemsComponent from "../NoItemsComponent";
 import NewsCard from "../LatestNewsScreen/NewsCard";
 import { returnRandomArrayItem } from "../../helpers";
@@ -101,7 +101,9 @@ const LatestNewsSection = ({ refreshTrigger = 0 }: Props) => {
     if (!item) return <NoItemsComponent />;
     return (
       <View style={s.newsCardWrap}>
+        <Text>
         <NewsCard item={item} isDarkMode={isDarkMode} /> {/* 👈 pass down */}
+        </Text>
       </View>
     );
   };
