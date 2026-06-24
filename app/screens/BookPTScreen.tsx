@@ -163,6 +163,17 @@ export default function BookPTScreen() {
       Alert.alert(i18n.t("invalid_time"), i18n.t("invalid_time_message"));
       return;
     }
+    const diffInMinutes = (toTime.getTime() - fromTime.getTime()) / (1000 * 60);
+
+    if (diffInMinutes !== 60) {
+      Alert.alert(
+        i18n.t("invalid_time"),
+        i18n.locale === "ar"
+          ? "يجب أن تكون مدة الحجز ساعة واحدة فقط"
+          : "Booking duration must be exactly 1 hour",
+      );
+      return;
+    }
 
     const dateObj = new Date(selectedDate);
     const workingDay = trainer.ptDaysDto?.find(
@@ -368,6 +379,9 @@ export default function BookPTScreen() {
               return;
             }
             setFromTime(newTime);
+            const oneHourLater = new Date(newTime);
+            oneHourLater.setHours(oneHourLater.getHours() + 1);
+            setToTime(oneHourLater);
           }}
         />
       )}

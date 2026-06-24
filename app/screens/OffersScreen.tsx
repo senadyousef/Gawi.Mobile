@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from "react-native";
 import i18n from "../localization";
 import Colors from "../constants/Colors";
@@ -43,7 +44,7 @@ export default function OffersScreen() {
   const navigation = useNavigation();
   const { isArabic } = useI18n();
   const { isDarkMode } = useAppContext();
-
+  const [refreshing, setRefreshing] = useState(false);
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
   const s = React.useMemo(() => createStyles(theme), [theme]);
 
@@ -53,9 +54,11 @@ export default function OffersScreen() {
   const BASE_URL = "https://gym.useitsmart.com";
 
   // ---------------- FETCH ----------------
-  const fetchOffers = async () => {
+  const fetchOffers = async (showLoader = true) => {
     try {
-      setLoading(true);
+      if (showLoader) {
+        setLoading(true);
+      }
 
       const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
       const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
@@ -87,7 +90,18 @@ export default function OffersScreen() {
       console.error("Fetch Offers Error:", err);
       Alert.alert(i18n.t("error"), err.message || "Something went wrong");
     } finally {
-      setLoading(false);
+      if (showLoader) {
+        setLoading(false);
+      }
+    }
+  };
+  const onRefresh = async () => {
+    setRefreshing(true);
+
+    try {
+      await fetchOffers(false);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -107,7 +121,17 @@ export default function OffersScreen() {
   // ---------------- UI ----------------
   return (
     <View style={s.container}>
-      <ScrollView contentContainerStyle={s.content}>
+      <ScrollView
+        contentContainerStyle={s.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.primary]} // Android
+            tintColor={theme.primary} // iOS
+          />
+        }
+      >
         {offers.length === 0 ? (
           <View style={s.emptyContainer}>
             <Text

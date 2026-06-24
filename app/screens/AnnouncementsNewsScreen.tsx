@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from "react-native";
 import Colors from "../constants/Colors";
 import { useNavigation } from "@react-navigation/native";
@@ -44,16 +45,26 @@ export default function AnnouncementsNewsScreen() {
   const navigation = useNavigation();
   const { isArabic } = useI18n();
   const { isDarkMode } = useAppContext();
-
+  const [refreshing, setRefreshing] = useState(false);
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
   const s = React.useMemo(() => createStyles(theme), [theme]);
 
   const [newsData, setNewsData] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // ---------------- FETCH ----------------
-  const fetchNews = async () => {
+  const onRefresh = async () => {
     try {
+      setRefreshing(true);
+      await fetchNews();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  // ---------------- FETCH ----------------
+  const fetchNews = async (showLoader = true) => {
+    try {
+      if (showLoader) {
+        setLoading(true);
+      }
       const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
       const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
       console.log("Fetching news for:", {
@@ -88,8 +99,9 @@ export default function AnnouncementsNewsScreen() {
       console.error("Fetch news error:", err);
       Alert.alert("Error", err.message || "Failed to load news");
     } finally {
+    if (showLoader) {
       setLoading(false);
-    }
+    }}
   };
   useEffect(() => {
     fetchNews();
@@ -107,7 +119,17 @@ export default function AnnouncementsNewsScreen() {
   // ---------------- UI ----------------
   return (
     <View style={s.container}>
-      <ScrollView contentContainerStyle={s.content}>
+      <ScrollView
+        contentContainerStyle={s.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.primary]} // Android
+            tintColor={theme.primary} // iOS
+          />
+        }
+      >
         {newsData.map((item) => (
           <TouchableOpacity
             key={item.id}

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -51,7 +52,7 @@ interface IDay {
 // ---------------- COMPONENT ----------------
 export default function WorkoutScheduleAlt() {
   const { isDarkMode } = useAppContext();
-
+  const [refreshing, setRefreshing] = useState(false);
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
   const s = React.useMemo(() => createStyles(theme), [theme]);
 
@@ -65,38 +66,49 @@ export default function WorkoutScheduleAlt() {
   const isArabic = i18n.locale === "ar";
 
   // ---------------- FETCH ----------------
-  useEffect(() => {
-    const fetchSchedule = async () => {
-      try {
-        const MemberId = await AsyncStorage.getItem("MemberId");
+  const fetchSchedule = async (showLoader = true) => {
+    try {
+      if (showLoader) {
+        setLoading(true);
+      }
 
-        const response = await fetch(
-          `https://gym.useitsmart.com/api/MSSMExercises/getallMSSMExersesforUser?userId=${MemberId}`,
-          { headers: { accept: "text/plain" } }
-        );
+      const MemberId = await AsyncStorage.getItem("MemberId");
 
-        if (!response.ok) throw new Error("Failed to load schedule");
+      const response = await fetch(
+        `https://gym.useitsmart.com/api/MSSMExercises/getallMSSMExersesforUser?userId=${MemberId}`,
+        { headers: { accept: "text/plain" } },
+      );
 
-        const data = await response.json();
+      if (!response.ok) {
+        throw new Error("Failed to load schedule");
+      }
 
-        setDays(data.days || []);
+      const data = await response.json();
 
-        if (data.from && data.to) {
-          setDateRange({
-            from: data.from,
-            to: data.to,
-          });
-        }
-      } catch (err) {
-        console.log(err);
-      } finally {
+      setDays(data.days || []);
+
+      if (data.from && data.to) {
+        setDateRange({
+          from: data.from,
+          to: data.to,
+        });
+      }
+    } catch (err) {
+      console.log(err);
+    } finally {
+      if (showLoader) {
         setLoading(false);
       }
-    };
-
+      setRefreshing(false);
+    }
+  };
+  useEffect(() => {
     fetchSchedule();
   }, []);
-
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchSchedule(false);
+  };
   // ---------------- FORMAT DATE ----------------
   const formatDate = (dateString: string) => {
     try {
@@ -128,13 +140,16 @@ export default function WorkoutScheduleAlt() {
         />
       </View>
 
-      <View style={{ flex: 1, alignItems: isArabic ? "flex-end" : "flex-start" }}>
+      <View
+        style={{ flex: 1, alignItems: isArabic ? "flex-end" : "flex-start" }}
+      >
         <Text style={s.exerciseName}>
           {isArabic ? exercise.exerciseNameAr : exercise.exerciseName}
         </Text>
 
         <Text style={s.repsText}>
-          {i18n.t("sets")}: {exercise.rounds} | {i18n.t("reps")}: {exercise.oneRoundCount}
+          {i18n.t("sets")}: {exercise.rounds} | {i18n.t("reps")}:{" "}
+          {exercise.oneRoundCount}
         </Text>
       </View>
     </TouchableOpacity>
@@ -154,12 +169,7 @@ export default function WorkoutScheduleAlt() {
       <View style={s.sideBar} />
 
       <View style={s.dayContent}>
-        <Text
-          style={[
-            s.dayTitle,
-            { textAlign: isArabic ? "right" : "left" },
-          ]}
-        >
+        <Text style={[s.dayTitle, { textAlign: isArabic ? "right" : "left" }]}>
           {item.dayName}
         </Text>
 
@@ -179,9 +189,7 @@ export default function WorkoutScheduleAlt() {
   // ---------------- UI ----------------
   return (
     <SafeAreaView style={s.container}>
-      <Text style={s.header}>
-        {i18n.t("weekly_schedule")}
-      </Text>
+      <Text style={s.header}>{i18n.t("weekly_schedule")}</Text>
 
       {dateRange && (
         <Text style={s.dateRange}>
@@ -194,6 +202,14 @@ export default function WorkoutScheduleAlt() {
         keyExtractor={(item) => item.dayId.toString()}
         renderItem={renderDay}
         contentContainerStyle={s.listContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.primary]} // Android
+            tintColor={theme.primary} // iOS
+          />
+        }
       />
     </SafeAreaView>
   );

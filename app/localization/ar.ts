@@ -935,4 +935,5 @@ export default {
   chat_welcome: "مرحباً! كيف يمكنني مساعدتك؟",
   chat_reply: "شكراً لرسالتك! سيتم الرد عليك قريباً.",
   class_finished: "تم الانتهاء من الحصة",
+  noPersonalTrainersYet: "لا يوجد مدربون شخصيون حتى الآن",
 };

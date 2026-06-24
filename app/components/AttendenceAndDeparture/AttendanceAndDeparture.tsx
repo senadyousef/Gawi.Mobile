@@ -17,17 +17,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 import i18n from "../../localization";
 import { useAppContext } from "../../context"; // 👈
+import HtmlRenderer from "../renderHtml";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
-  bg:           dark ? "#121212" : "#FFFFFF",
-  surface:      dark ? "#1E1E1E" : "#F0F0F0",
-  ink:          dark ? "#F0F0F0" : "#111111",
-  muted:        dark ? "#888888" : "#555555",
-  cameraBg:     dark ? "#2C2C2C" : "#F0F0F0",
-  cancelBg:     dark ? "#2C2C2C" : "#E0E0E0",
-  cancelText:   dark ? "#F0F0F0" : "#555555",
-  accent:       "#4C63AF",
+  bg: dark ? "#121212" : "#FFFFFF",
+  surface: dark ? "#1E1E1E" : "#F0F0F0",
+  ink: dark ? "#F0F0F0" : "#111111",
+  muted: dark ? "#888888" : "#555555",
+  cameraBg: dark ? "#2C2C2C" : "#F0F0F0",
+  cancelBg: dark ? "#2C2C2C" : "#E0E0E0",
+  cancelText: dark ? "#F0F0F0" : "#555555",
+  accent: "#4C63AF",
 });
 
 interface IProps {
@@ -36,9 +37,9 @@ interface IProps {
 }
 
 export default function QRCodeScreen({ handleClose, memberId }: IProps) {
-  const { isDarkMode } = useAppContext();                                    // 👈
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);  // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]);              // 👈 reactive styles
+  const { isDarkMode } = useAppContext(); // 👈
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
+  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
 
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
@@ -50,7 +51,8 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
 
   const { width } = useWindowDimensions();
   const navigation = useNavigation();
-  const gymApiUrl = "https://gym.useitsmart.com/api/MemberShips/checkMemberInOrOut";
+  const gymApiUrl =
+    "https://gym.useitsmart.com/api/MemberShips/checkMemberInOrOut";
   const isRTL = i18n.locale === "ar";
 
   useEffect(() => {
@@ -98,7 +100,9 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
   const fetchQRInfo = async (qrId: string) => {
     setLoading(true);
     try {
-      const response = await fetch("https://gym.useitsmart.com/api/QR/getallQR");
+      const response = await fetch(
+        "https://gym.useitsmart.com/api/QR/getallQR",
+      );
       if (!response.ok) throw new Error("Failed to fetch QR codes");
       const result = await response.json();
       const qrItem = result.result.find(
@@ -112,7 +116,10 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
         setQrBody(qrItem.body);
       }
     } catch (error: any) {
-      Alert.alert(i18n.t("error"), error.message || i18n.t("something_went_wrong"));
+      Alert.alert(
+        i18n.t("error"),
+        error.message || i18n.t("something_went_wrong"),
+      );
     } finally {
       setLoading(false);
     }
@@ -121,9 +128,9 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
   const handleBarCodeScanned = ({ data }: BarcodeScanningResult) => {
     if (scanned) return;
     setScanned(true);
-    if (data === "checkMemberInOrOut") {
+    if (data === "Attendance") {
       handleCheckInOut();
-    } else if (data === "GymInfo") {
+    } else if (data === "Gyminfo") {
       if (handleClose) handleClose();
       navigation.navigate("GymInfo" as never);
     } else {
@@ -142,7 +149,9 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
   if (hasPermission === null) {
     return (
       <View style={[s.center, { backgroundColor: theme.bg }]}>
-        <Text style={s.permissionText}>{i18n.t("request_camera_permission")}</Text>
+        <Text style={s.permissionText}>
+          {i18n.t("request_camera_permission")}
+        </Text>
       </View>
     );
   }
@@ -180,10 +189,10 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
           )}
 
           {/* 👇 Pass dark mode color to HTML renderer */}
-          <RenderHtml
-            contentWidth={width}
-            source={{ html: qrBody }}
-            baseStyle={{ color: theme.ink }}
+          <HtmlRenderer
+            html={qrBody}
+            theme={theme}
+            
           />
 
           <TouchableOpacity
@@ -221,11 +230,12 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       >
         📷 {i18n.t("scan_qr_code")}
       </Text>
-
       <TouchableOpacity
         activeOpacity={0.9}
         style={s.cameraContainer}
-        onPress={() => Alert.alert(i18n.t("scanning_message") || "Scanning in progress...")}
+        onPress={() =>
+          Alert.alert(i18n.t("scanning_message") || "Scanning in progress...")
+        }
       >
         {!scanned && hasPermission ? (
           <CameraView
@@ -241,7 +251,6 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
           />
         )}
       </TouchableOpacity>
-
       {loading && (
         <ActivityIndicator
           size="large"
@@ -249,13 +258,11 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
           style={{ marginVertical: 12 }}
         />
       )}
-
       {scanned && !loading && (
         <TouchableOpacity style={s.primaryButton} onPress={resetScanner}>
           <Text style={s.buttonText}>{i18n.t("scan_again")}</Text>
         </TouchableOpacity>
       )}
-
       {handleClose && (
         <TouchableOpacity
           style={[s.cancelButton, { marginTop: 10 }]}
@@ -264,7 +271,6 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
           <Text style={s.cancelText}>{i18n.t("cancel")}</Text>
         </TouchableOpacity>
       )}
-
       <StatusBar style={isDarkMode ? "light" : "dark"} /> {/* 👈 */}
     </View>
   );
@@ -275,7 +281,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: theme.bg,    // 👈
+      backgroundColor: theme.bg, // 👈
       padding: 16,
       paddingTop: 30,
     },
@@ -283,25 +289,25 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
-      backgroundColor: theme.bg,    // 👈
+      backgroundColor: theme.bg, // 👈
     },
     permissionText: {
       fontSize: 15,
       textAlign: "center",
       paddingHorizontal: 24,
-      color: theme.ink,             // 👈
+      color: theme.ink, // 👈
     },
     title: {
       fontSize: 20,
       fontWeight: "700",
       marginBottom: 12,
-      color: theme.ink,             // 👈
+      color: theme.ink, // 👈
     },
     headerText: {
       fontSize: 22,
       fontWeight: "800",
       marginBottom: 16,
-      color: theme.ink,             // 👈
+      color: theme.ink, // 👈
     },
     cameraContainer: {
       width: "100%",
@@ -330,7 +336,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       fontSize: 15,
     },
     cancelText: {
-      color: theme.cancelText,          // 👈
+      color: theme.cancelText, // 👈
       fontWeight: "600",
       textAlign: "center",
       fontSize: 15,

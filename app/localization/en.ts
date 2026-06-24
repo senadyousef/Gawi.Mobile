@@ -400,7 +400,7 @@ export default {
     error: "Error",
     load_error: "Could not load notes",
     success: "Note added successfully!",
-    no_events: "No events scheduled for this date"
+    no_events: "No events scheduled for this date",
   },
   profile: {
     loading: "Loading...",
@@ -955,5 +955,6 @@ export default {
   chat_welcome: "Hello! How can I help you today?",
   chat_reply:
     "Thanks for your message! Our assistant will get back to you soon.",
-    class_finished: "Class Finished",
+  class_finished: "Class Finished",
+  noPersonalTrainersYet: "There are no personal trainers yet",
 };

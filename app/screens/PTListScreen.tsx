@@ -7,16 +7,20 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAppContext } from "../context"; // 👈
+import i18n from "../localization";
+import { useI18n } from "../hooks/useI18n";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
-  bg:      dark ? "#121212" : "#F8FAFF",
+  bg: dark ? "#121212" : "#F8FAFF",
   surface: dark ? "#1E1E1E" : "#000000",
+  muted: dark ? "#AAAAAA" : "#555555",
 });
 
 interface PT {
@@ -29,19 +33,30 @@ interface PT {
 }
 
 export default function PTListScreen() {
+  const { isArabic } = useI18n();
   const navigation = useNavigation<any>();
-  const { isDarkMode } = useAppContext();                                    // 👈
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);  // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]);              // 👈 reactive styles
-
+  const { isDarkMode } = useAppContext(); // 👈
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
+  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
+  const [refreshing, setRefreshing] = useState(false);
   const [trainers, setTrainers] = useState<PT[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
 
-  const fetchPTs = async () => {
     try {
-      setIsLoading(true);
+      await fetchPTs();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const fetchPTs = async (showLoader = true) => {
+    try {
+      if (showLoader) {
+        setIsLoading(true);
+      }
       const userId = (await AsyncStorage.getItem("MemberId")) || "0";
-      
+
       const res = await fetch(
         `https://gym.useitsmart.com/api/PT/getPTWithUser?userId=${userId}`,
       );
@@ -63,7 +78,9 @@ export default function PTListScreen() {
     } catch (err) {
       console.error("❌ Error fetching PTs:", err);
     } finally {
-      setIsLoading(false);
+      if (showLoader) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -78,11 +95,15 @@ export default function PTListScreen() {
       style={s.card}
       onPress={() => navigation.navigate("PTDetails", { trainer: item })}
     >
-      <Image source={{ uri: item.url }} style={s.image} />
+      <Image
+        source={{ uri: `https://gym.useitsmart.com/${item.url}` }}
+        style={s.image}
+      />
       <LinearGradient
         colors={["rgba(0,0,0,0.6)", "transparent"]}
         style={s.gradient}
       />
+
       <View style={s.cardContent}>
         <Text style={s.name}>{item.ptName}</Text>
       </View>
@@ -93,11 +114,33 @@ export default function PTListScreen() {
     <View style={s.container}>
       {isLoading ? (
         <ActivityIndicator size="large" color="#28B446" />
+      ) : trainers.length === 0 ? (
+        <View style={s.emptyContainer}>
+          <Text
+            style={[
+              s.emptyText,
+              isArabic() && {
+                textAlign: "right",
+                writingDirection: "rtl",
+              },
+            ]}
+          >
+            {i18n.t("noPersonalTrainersYet")}
+          </Text>
+        </View>
       ) : (
         <FlatList
           data={trainers}
-          keyExtractor={(item) => item.ptName}
+          keyExtractor={(item) => String(item.ptId || item.Id || item.ptName)}
           renderItem={renderItem}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#28B446"]} // Android
+              tintColor="#28B446" // iOS
+            />
+          }
         />
       )}
     </View>
@@ -110,7 +153,19 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     container: {
       flex: 1,
       padding: 16,
-      backgroundColor: theme.bg,      // 👈
+      backgroundColor: theme.bg, // 👈
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingVertical: 50,
+    },
+
+    emptyText: {
+      fontSize: 16,
+      color: theme.muted,
+      fontWeight: "500",
     },
     card: {
       marginBottom: 16,

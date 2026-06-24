@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ImageBackground,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -44,7 +45,7 @@ export default function BookClassScreen() {
   const { isDarkMode } = useAppContext(); // 👈
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
   const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
-
+  const [refreshing, setRefreshing] = useState(false);
   const [classes, setClasses] = useState<GymClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,26 +53,44 @@ export default function BookClassScreen() {
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(new Date());
   const isArabic = i18n.locale === "ar";
 
-  useEffect(() => {
-    const fetchClasses = async () => {
+  const fetchClasses = async (showLoader = true) => {
+    try {
+      if (showLoader) {
+        setLoading(true);
+      }
+
       const MemberId = await AsyncStorage.getItem("MemberId");
-      try {
-        const response = await fetch(
-          `https://gym.useitsmart.com/api/GymClass/getAllGymClassByUser?userId=${MemberId}`,
-          { headers: { accept: "text/plain" } },
-        );
-        if (!response.ok) throw new Error("Failed to fetch classes");
-        const data = await response.json();
-        setClasses(data);
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
+
+      const response = await fetch(
+        `https://gym.useitsmart.com/api/GymClass/getAllGymClassByUser?userId=${MemberId}`,
+        { headers: { accept: "text/plain" } },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch classes");
+      }
+
+      const data = await response.json();
+      setClasses(data);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      if (showLoader) {
         setLoading(false);
       }
-    };
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
     fetchClasses();
   }, []);
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchClasses(false);
+  };
   const getWeekDays = () => {
     const days = [];
     const start = new Date(currentWeekStart);
@@ -246,6 +265,14 @@ export default function BookClassScreen() {
         <FlatList
           data={displayedClasses}
           keyExtractor={(item) => item.id.toString()}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[Colors.primary]} // Android
+              tintColor={Colors.primary} // iOS
+            />
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={s.cardContainer}

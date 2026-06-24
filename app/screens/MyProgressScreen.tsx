@@ -14,6 +14,7 @@ import {
   Platform,
   Image,
   Dimensions,
+  RefreshControl,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -48,7 +49,7 @@ export default function MyProgressScreen() {
   const { isDarkMode } = useAppContext(); // 👈 pull isDarkMode
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
   const s = React.useMemo(() => createStyles(theme), [theme]);
-
+  const [refreshing, setRefreshing] = useState(false);
   const [progressData, setProgressData] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -74,9 +75,11 @@ export default function MyProgressScreen() {
     fetchProgressData();
   }, []);
 
-  const fetchProgressData = async () => {
+  const fetchProgressData = async (showLoader = true) => {
     try {
-      setLoading(true);
+      if (showLoader) {
+        setLoading(true);
+      }
       const MemberId = await AsyncStorage.getItem("MemberId");
       const token = await handleGetToken();
 
@@ -127,7 +130,18 @@ export default function MyProgressScreen() {
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (showLoader) {
+        setLoading(false);
+      }
+    }
+  };
+  const onRefresh = async () => {
+    setRefreshing(true);
+
+    try {
+      await fetchProgressData(false);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -296,10 +310,13 @@ export default function MyProgressScreen() {
         onPress: async () => {
           try {
             const token = await handleGetToken();
-            await fetch(`https://gym.useitsmart.com/api/MyProgressHistory/${id}`, {
-              method: "DELETE",
-              headers: { Accept: "*/*", Authorization: `Bearer ${token}` },
-            });
+            await fetch(
+              `https://gym.useitsmart.com/api/MyProgressHistory/${id}`,
+              {
+                method: "DELETE",
+                headers: { Accept: "*/*", Authorization: `Bearer ${token}` },
+              },
+            );
             handleCardPress(selectedProgress);
           } catch (e) {
             console.error(e);
@@ -317,19 +334,32 @@ export default function MyProgressScreen() {
 
   return (
     <LinearGradient colors={[theme.bg, theme.bgEnd]} style={s.container}>
-      <ScrollView contentContainerStyle={s.scrollContent}>
+      <ScrollView
+        contentContainerStyle={s.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]} // Android
+            tintColor={Colors.primary} // iOS
+          />
+        }
+      >
         {/* Header */}
         <Text style={[s.headerTitle, isArabic() && s.textRTL]}>
           {i18n.t("my_progress")}
         </Text>
 
         {/* Add Progress Button */}
-        <TouchableOpacity style={s.addButton} onPress={() => {
-          setEditingProgressId(null);
-          setNewProgressName("");
-          setNewProgressColor("#4e9ef1");
-          setModalVisible(true);
-        }}>
+        <TouchableOpacity
+          style={s.addButton}
+          onPress={() => {
+            setEditingProgressId(null);
+            setNewProgressName("");
+            setNewProgressColor("#4e9ef1");
+            setModalVisible(true);
+          }}
+        >
           <LinearGradient
             colors={["#ff7002", "#ff7002"]}
             style={s.addButtonGradient}
@@ -340,60 +370,84 @@ export default function MyProgressScreen() {
 
         {/* Progress Cards */}
         <View style={s.cardContainer}>
-          {progressData.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={[
-                s.card,
-                isArabic() ? s.cardRTL : s.cardLTR,
-                isArabic()
-                  ? { borderRightColor: item.color }
-                  : { borderLeftColor: item.color },
-              ]}
-              onPress={() => handleCardPress(item)}
-            >
-              {/* Icon */}
+          {progressData.length === 0 ? (
+            <View style={s.emptyContainer}>
               <MaterialCommunityIcons
-                name={item.icon}
-                size={28}
-                color={item.color}
+                name="chart-line"
+                size={70}
+                color={theme.muted}
               />
 
-              {/* Title + Value */}
-              <View style={[s.cardText, isArabic() && s.cardTextRTL]}>
-                <Text style={[s.cardTitle, isArabic() && s.textRTL]}>
-                  {item.title}
-                </Text>
-                <Text
-                  style={[
-                    s.cardValue,
-                    { color: item.color },
-                    isArabic() && s.textRTL,
-                  ]}
-                >
-                  {item.value}
-                </Text>
-              </View>
+              <Text
+                style={[
+                  s.emptyText,
+                  isArabic() && {
+                    textAlign: "right",
+                    writingDirection: "rtl",
+                  },
+                ]}
+              >
+                {i18n.locale === "ar"
+                  ? "لا يوجد تقدم حتى الآن"
+                  : "There is no progress yet"}
+              </Text>
+            </View>
+          ) : (
+            progressData.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[
+                  s.card,
+                  isArabic() ? s.cardRTL : s.cardLTR,
+                  isArabic()
+                    ? { borderRightColor: item.color }
+                    : { borderLeftColor: item.color },
+                ]}
+                onPress={() => handleCardPress(item)}
+              >
+                {/* Icon */}
+                <MaterialCommunityIcons
+                  name={item.icon}
+                  size={28}
+                  color={item.color}
+                />
 
-              {/* Edit / Delete */}
-              {item.isDeletable && (
-                <View style={[s.cardButtons, isArabic() && s.cardButtonsRTL]}>
-                  <TouchableOpacity
-                    style={[s.cardAction, { backgroundColor: "#1dd1a1" }]}
-                    onPress={() => handleEditPress(item)}
+                {/* Title + Value */}
+                <View style={[s.cardText, isArabic() && s.cardTextRTL]}>
+                  <Text style={[s.cardTitle, isArabic() && s.textRTL]}>
+                    {item.title}
+                  </Text>
+                  <Text
+                    style={[
+                      s.cardValue,
+                      { color: item.color },
+                      isArabic() && s.textRTL,
+                    ]}
                   >
-                    <Text style={s.cardActionText}>{i18n.t("edit")}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[s.cardAction, { backgroundColor: "#ff4757" }]}
-                    onPress={() => handleDeletePress(item.id)}
-                  >
-                    <Text style={s.cardActionText}>{i18n.t("delete")}</Text>
-                  </TouchableOpacity>
+                    {item.value}
+                  </Text>
                 </View>
-              )}
-            </TouchableOpacity>
-          ))}
+
+                {/* Edit / Delete */}
+                {item.isDeletable && (
+                  <View style={[s.cardButtons, isArabic() && s.cardButtonsRTL]}>
+                    <TouchableOpacity
+                      style={[s.cardAction, { backgroundColor: "#1dd1a1" }]}
+                      onPress={() => handleEditPress(item)}
+                    >
+                      <Text style={s.cardActionText}>{i18n.t("edit")}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.cardAction, { backgroundColor: "#ff4757" }]}
+                      onPress={() => handleDeletePress(item.id)}
+                    >
+                      <Text style={s.cardActionText}>{i18n.t("delete")}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
         {/* ─── Add / Edit Progress Modal ────────────────────────────────── */}
@@ -402,9 +456,20 @@ export default function MyProgressScreen() {
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={s.modalContainer}
           >
-            <View style={[s.modalContent, { maxHeight: height * 0.6, backgroundColor: theme.modalBg }]}>
+            <View
+              style={[
+                s.modalContent,
+                { maxHeight: height * 0.6, backgroundColor: theme.modalBg },
+              ]}
+            >
               <View style={[s.modalHeader, isArabic() && s.rowRTL]}>
-                <Text style={[s.modalTitle, isArabic() && s.textRTL, { color: theme.ink }]}>
+                <Text
+                  style={[
+                    s.modalTitle,
+                    isArabic() && s.textRTL,
+                    { color: theme.ink },
+                  ]}
+                >
                   {editingProgressId
                     ? i18n.t("edit_progress")
                     : i18n.t("add_progress_modal")}
@@ -417,7 +482,11 @@ export default function MyProgressScreen() {
                     setNewProgressColor("#4e9ef1");
                   }}
                 >
-                  <MaterialCommunityIcons name="close" size={26} color={theme.ink} />
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={26}
+                    color={theme.ink}
+                  />
                 </TouchableOpacity>
               </View>
 
@@ -427,30 +496,50 @@ export default function MyProgressScreen() {
                   placeholderTextColor={theme.placeholder}
                   value={newProgressName}
                   onChangeText={setNewProgressName}
-                  style={[s.input, isArabic() && s.textRTL, { backgroundColor: theme.inputBg, color: theme.ink, borderColor: theme.border }]}
+                  style={[
+                    s.input,
+                    isArabic() && s.textRTL,
+                    {
+                      backgroundColor: theme.inputBg,
+                      color: theme.ink,
+                      borderColor: theme.border,
+                    },
+                  ]}
                   textAlign={isArabic() ? "right" : "left"}
                 />
 
-                <Text style={[{ marginBottom: 6, fontWeight: "600", color: theme.ink }, isArabic() && s.textRTL]}>
+                <Text
+                  style={[
+                    { marginBottom: 6, fontWeight: "600", color: theme.ink },
+                    isArabic() && s.textRTL,
+                  ]}
+                >
                   {i18n.t("pick_color")}
                 </Text>
-                <View style={[{ flexDirection: "row", marginBottom: 12 }, isArabic() && s.rowRTL]}>
-                  {["#4e9ef1", "#ff6b6b", "#1dd1a1", "#feca57", "#5f27cd"].map((color) => (
-                    <TouchableOpacity
-                      key={color}
-                      style={{
-                        backgroundColor: color,
-                        width: 36,
-                        height: 36,
-                        borderRadius: 18,
-                        marginRight: isArabic() ? 0 : 10,
-                        marginLeft: isArabic() ? 10 : 0,
-                        borderWidth: newProgressColor === color ? 2 : 0,
-                        borderColor: "#333",
-                      }}
-                      onPress={() => setNewProgressColor(color)}
-                    />
-                  ))}
+                <View
+                  style={[
+                    { flexDirection: "row", marginBottom: 12 },
+                    isArabic() && s.rowRTL,
+                  ]}
+                >
+                  {["#4e9ef1", "#ff6b6b", "#1dd1a1", "#feca57", "#5f27cd"].map(
+                    (color) => (
+                      <TouchableOpacity
+                        key={color}
+                        style={{
+                          backgroundColor: color,
+                          width: 36,
+                          height: 36,
+                          borderRadius: 18,
+                          marginRight: isArabic() ? 0 : 10,
+                          marginLeft: isArabic() ? 10 : 0,
+                          borderWidth: newProgressColor === color ? 2 : 0,
+                          borderColor: "#333",
+                        }}
+                        onPress={() => setNewProgressColor(color)}
+                      />
+                    ),
+                  )}
                 </View>
 
                 <TouchableOpacity
@@ -472,13 +561,28 @@ export default function MyProgressScreen() {
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={s.modalContainer}
           >
-            <View style={[s.modalContent, { maxHeight: height * 0.85, backgroundColor: theme.modalBg }]}>
+            <View
+              style={[
+                s.modalContent,
+                { maxHeight: height * 0.85, backgroundColor: theme.modalBg },
+              ]}
+            >
               <View style={[s.modalHeader, isArabic() && s.rowRTL]}>
-                <Text style={[s.modalTitle, isArabic() && s.textRTL, { color: theme.ink }]}>
+                <Text
+                  style={[
+                    s.modalTitle,
+                    isArabic() && s.textRTL,
+                    { color: theme.ink },
+                  ]}
+                >
                   {selectedProgress?.title} {i18n.t("history")}
                 </Text>
                 <TouchableOpacity onPress={() => setHistoryModalVisible(false)}>
-                  <MaterialCommunityIcons name="close" size={26} color={theme.ink} />
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={26}
+                    color={theme.ink}
+                  />
                 </TouchableOpacity>
               </View>
 
@@ -488,26 +592,46 @@ export default function MyProgressScreen() {
                   placeholderTextColor={theme.placeholder}
                   value={newHistoryValue}
                   onChangeText={setNewHistoryValue}
-                  style={[s.input, isArabic() && s.textRTL, { backgroundColor: theme.inputBg, color: theme.ink, borderColor: theme.border }]}
+                  style={[
+                    s.input,
+                    isArabic() && s.textRTL,
+                    {
+                      backgroundColor: theme.inputBg,
+                      color: theme.ink,
+                      borderColor: theme.border,
+                    },
+                  ]}
                   textAlign={isArabic() ? "right" : "left"}
                 />
 
                 <TouchableOpacity style={s.imageButton} onPress={pickImage}>
                   <Text style={s.imageButtonText}>
-                    {newHistoryImage ? i18n.t("change_image") : i18n.t("pick_image")}
+                    {newHistoryImage
+                      ? i18n.t("change_image")
+                      : i18n.t("pick_image")}
                   </Text>
                 </TouchableOpacity>
                 {newHistoryImage && (
-                  <Image source={{ uri: newHistoryImage }} style={s.previewImage} />
+                  <Image
+                    source={{ uri: newHistoryImage }}
+                    style={s.previewImage}
+                  />
                 )}
 
                 <TouchableOpacity style={s.imageButton} onPress={pickFile}>
                   <Text style={s.imageButtonText}>
-                    {newHistoryFile ? i18n.t("change_file") : i18n.t("pick_file")}
+                    {newHistoryFile
+                      ? i18n.t("change_file")
+                      : i18n.t("pick_file")}
                   </Text>
                 </TouchableOpacity>
                 {newHistoryFile && (
-                  <Text style={[{ marginBottom: 10, fontSize: 14, color: theme.muted }, isArabic() && s.textRTL]}>
+                  <Text
+                    style={[
+                      { marginBottom: 10, fontSize: 14, color: theme.muted },
+                      isArabic() && s.textRTL,
+                    ]}
+                  >
                     {i18n.t("selected")}: {newHistoryFile.split("/").pop()}
                   </Text>
                 )}
@@ -518,15 +642,32 @@ export default function MyProgressScreen() {
                   disabled={addingHistory}
                 >
                   <Text style={s.saveButtonText}>
-                    {addingHistory ? i18n.t("saving") : editingHistoryId ? i18n.t("update") : i18n.t("add")}
+                    {addingHistory
+                      ? i18n.t("saving")
+                      : editingHistoryId
+                        ? i18n.t("update")
+                        : i18n.t("add")}
                   </Text>
                 </TouchableOpacity>
               </View>
 
               {loadingHistory ? (
-                <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+                <ActivityIndicator
+                  size="large"
+                  color={Colors.primary}
+                  style={{ marginTop: 20 }}
+                />
               ) : historyData.length === 0 ? (
-                <Text style={[{ textAlign: "center", marginVertical: 20, color: theme.muted }, isArabic() && s.textRTL]}>
+                <Text
+                  style={[
+                    {
+                      textAlign: "center",
+                      marginVertical: 20,
+                      color: theme.muted,
+                    },
+                    isArabic() && s.textRTL,
+                  ]}
+                >
                   {i18n.t("no_history")}
                 </Text>
               ) : (
@@ -534,27 +675,62 @@ export default function MyProgressScreen() {
                   data={historyData}
                   keyExtractor={(item) => item.id.toString()}
                   renderItem={({ item }) => (
-                    <View style={[s.historyCard, { backgroundColor: theme.historyCardBg }]}>
+                    <View
+                      style={[
+                        s.historyCard,
+                        { backgroundColor: theme.historyCardBg },
+                      ]}
+                    >
                       {item.url && (
-                        <Image source={{ uri: item.url }} style={s.historyImage} />
+                        <Image
+                          source={{ uri: item.url }}
+                          style={s.historyImage}
+                        />
                       )}
                       {item.fileUrl && (
-                        <Text style={[{ fontSize: 14, marginBottom: 4, color: theme.muted }, isArabic() && s.textRTL]}>
+                        <Text
+                          style={[
+                            {
+                              fontSize: 14,
+                              marginBottom: 4,
+                              color: theme.muted,
+                            },
+                            isArabic() && s.textRTL,
+                          ]}
+                        >
                           {i18n.t("file")}: {item.fileUrl.split("/").pop()}
                         </Text>
                       )}
-                      <Text style={[s.historyValue, isArabic() && s.textRTL, { color: theme.ink }]}>
+                      <Text
+                        style={[
+                          s.historyValue,
+                          isArabic() && s.textRTL,
+                          { color: theme.ink },
+                        ]}
+                      >
                         {item.value}
                       </Text>
                       <View style={[s.historyButtons, isArabic() && s.rowRTL]}>
                         <TouchableOpacity
-                          style={[s.historyEdit, isArabic() ? { marginLeft: 8, marginRight: 0 } : { marginRight: 8 }]}
+                          style={[
+                            s.historyEdit,
+                            isArabic()
+                              ? { marginLeft: 8, marginRight: 0 }
+                              : { marginRight: 8 },
+                          ]}
                           onPress={() => handleEditHistoryPress(item)}
                         >
-                          <Text style={s.historyButtonText}>{i18n.t("edit")}</Text>
+                          <Text style={s.historyButtonText}>
+                            {i18n.t("edit")}
+                          </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={s.historyDelete} onPress={() => handleDeleteHistory(item.id)}>
-                          <Text style={s.historyButtonText}>{i18n.t("delete")}</Text>
+                        <TouchableOpacity
+                          style={s.historyDelete}
+                          onPress={() => handleDeleteHistory(item.id)}
+                        >
+                          <Text style={s.historyButtonText}>
+                            {i18n.t("delete")}
+                          </Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -572,6 +748,19 @@ export default function MyProgressScreen() {
 // ─── Styles factory ───────────────────────────────────────────────────────────
 const createStyles = (theme) =>
   StyleSheet.create({
+    emptyContainer: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 60,
+    },
+
+    emptyText: {
+      marginTop: 12,
+      fontSize: 16,
+      fontWeight: "500",
+      color: theme.muted,
+      textAlign: "center",
+    },
     container: { flex: 1 },
     scrollContent: { padding: 20, alignItems: "center" },
     center: { flex: 1, justifyContent: "center", alignItems: "center" },

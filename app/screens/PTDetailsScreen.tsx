@@ -257,7 +257,7 @@ export default function PTDetailsScreen() {
                       },
                     ]}
                   >
-                     {normalizeApiDay(day.day)}
+                    {normalizeApiDay(day.day)}
                   </Text>
                   <Text
                     style={[

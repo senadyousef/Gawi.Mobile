@@ -20,8 +20,7 @@ export const loginFormRules: ILoginFormRules = {
     validate: (password) => {
       if (!password?.trim()) return i18n.t('password_is_required');
       // TODO check min on the backend
-      else if (password?.trim().length < 6)
-        return i18n.t('password_min_length');
+     
       return true;
     },
   },
