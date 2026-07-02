@@ -24,6 +24,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import i18n from "../../app/localization";
 import { Picker } from "@react-native-picker/picker";
 import { formatDate } from "date-fns";
+import { useNavigation } from "@react-navigation/native";
+import { API_BASE_ENDPOINT, TOKEN } from "../constants";
 
 // ─── RTL helper ───────────────────────────────────────────────────────────────
 const isRTL = (): boolean => {
@@ -65,6 +67,9 @@ export default function MyProfileScreen() {
   const [planModalVisible, setPlanModalVisible] = useState(false);
   const [dietPlan, setDietPlan] = useState(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const navigation = useNavigation();
+    const { handleLogout } = useAppContext();
+  
   const formatDate = (dateStr: string): string => {
     if (!dateStr) return "—";
     const date = new Date(dateStr);
@@ -164,7 +169,61 @@ export default function MyProfileScreen() {
   useEffect(() => {
     setLocale(i18n.locale);
   }, [i18n.locale]);
+  const handleDeleteAccount = async () => {
+    Alert.alert(
+      "Delete Account",
+      "Are you sure you want to permanently delete your account?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const memberId = await AsyncStorage.getItem("MemberId");
+              const token = await AsyncStorage.getItem(TOKEN);
 
+              if (!memberId) {
+                Alert.alert("Error", "Member ID not found.");
+                return;
+              }
+
+              const response = await fetch(
+                `https://gym.useitsmart.com/api/User/deleteUserByEmail?id=${memberId}`,
+                {
+                  method: "PUT",
+                  headers: {
+                    Accept: "*/*",
+                    Authorization: `Bearer ${token}`
+                  },
+                },
+              );
+              const responseText = await response.text();
+
+              console.log("Status:", response.status);
+              console.log("Response:", responseText);
+              if (!response.ok) {
+                throw new Error("Failed to delete account.");
+              }
+
+              // Clear saved data
+              await AsyncStorage.clear();
+
+              Alert.alert("Success", "Your account has been deleted.");
+
+              handleLogout();
+            } catch (error) {
+              console.log(error);
+              Alert.alert("Error", "Unable to delete your account.");
+            }
+          },
+        },
+      ],
+    );
+  };
   const handleGeneratePlan = async () => {
     try {
       if (!memberIdApi) {
@@ -632,6 +691,32 @@ export default function MyProfileScreen() {
               ? "إنشاء الخطة الغذائية"
               : "Generate Plan"}
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleDeleteAccount}
+          style={{
+            backgroundColor: "#E53935",
+            paddingVertical: 14,
+            borderRadius: 12,
+            alignItems: "center",
+            marginHorizontal: 20,
+            marginTop: 20,
+          }}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text
+              style={{
+                color: "#fff",
+                fontSize: 16,
+                fontWeight: "600",
+              }}
+            >
+              Delete Account
+            </Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
 

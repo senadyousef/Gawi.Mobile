@@ -102,28 +102,28 @@ const LoginScreen = () => {
     })();
   }, []);
 
-  const handleAutoFill = () => {
-    Alert.alert("Auto Fill", "Choose account", [
-      {
-        text: "GymMember@admin.com",
-        onPress: () => {
-          setValue("email", "GymMember@admin.com");
-          setValue("password", "SmartUseAdmin");
-        },
-      },
-      {
-        text: "SmartUseAdminGym22@Admin.com",
-        onPress: () => {
-          setValue("email", "SmartUseAdminGym22@Admin.com");
-          setValue("password", "SmartUseAdmin");
-        },
-      },
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-    ]);
-  };
+  // const handleAutoFill = () => {
+  //   Alert.alert("Auto Fill", "Choose account", [
+  //     {
+  //       text: "GymMember@admin.com",
+  //       onPress: () => {
+  //         setValue("email", "GymMember@admin.com");
+  //         setValue("password", "SmartUseAdmin");
+  //       },
+  //     },
+  //     {
+  //       text: "SmartUseAdminGym22@Admin.com",
+  //       onPress: () => {
+  //         setValue("email", "SmartUseAdminGym22@Admin.com");
+  //         setValue("password", "SmartUseAdmin");
+  //       },
+  //     },
+  //     {
+  //       text: "Cancel",
+  //       style: "cancel",
+  //     },
+  //   ]);
+  // };
 
   const setLanguage = async (locale: string) => {
     i18n.locale = locale;
@@ -430,12 +430,12 @@ const LoginScreen = () => {
           </RNView>
         </RNView>
 
-        <TouchableOpacity
+        {/* <TouchableOpacity
           onPress={handleAutoFill}
           style={styles.autoFillButton}
         >
           <Text style={styles.autoFillText}>Auto Fill Credentials</Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         <AuthButton
           isLoading={isLoading}

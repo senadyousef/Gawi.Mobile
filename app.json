@@ -5,11 +5,11 @@
     "scheme": "Gym",
     "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./app/assets/images/Gawi.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./app/assets/images/Gawi.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -22,8 +22,9 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./app/assets/images/Gawi.png",
+        "backgroundColor": "#ffffff",
+        "backgroundImage": "./app/assets/images/Gawi.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
