@@ -193,13 +193,19 @@ const GymInfoScreen = () => {
   const lng = parseFloat(gym.location.longitude);
 
   const hasValidCoords = !isNaN(lat) && !isNaN(lng);
-  
+
   return (
-    <ScrollView style={[s.container, { backgroundColor: theme.bg }]} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={[s.container, { backgroundColor: theme.bg }]}
+      showsVerticalScrollIndicator={false}
+    >
       {/* 🔹 Header - gradient stays consistent for branding */}
-      <LinearGradient colors={[theme.headerGradientStart, theme.headerGradientEnd]} style={s.header}>
+      <LinearGradient
+        colors={[theme.headerGradientStart, theme.headerGradientEnd]}
+        style={s.header}
+      >
         <Image
-          source={{ uri: gym.gymPhotoUrl || "https://via.placeholder.com/150" }}
+          source={{ uri: `https://gym.useitsmart.com/${gym.gymPhotoUrl}` }}
           style={s.logo}
         />
         <Text style={s.gymName}>{gym.nameEn || "Unknown Gym"}</Text>
@@ -275,9 +281,7 @@ const GymInfoScreen = () => {
 
       {/* 🧑‍💼 Owner Info */}
       <View style={[s.ownerCard, { backgroundColor: theme.cardBg }]}>
-        <Text style={[s.sectionTitle, textAlign]}>
-          {i18n.t("gym_owner")}
-        </Text>
+        <Text style={[s.sectionTitle, textAlign]}>{i18n.t("gym_owner")}</Text>
         <View style={[s.ownerRow, rowStyle]}>
           <Image
             source={{
@@ -294,7 +298,9 @@ const GymInfoScreen = () => {
             <Text style={[s.ownerName, textAlign, { color: theme.ownerName }]}>
               {gym.gymOwner || "Unknown"}
             </Text>
-            <Text style={[s.ownerPhone, textAlign, { color: theme.ownerPhone }]}>
+            <Text
+              style={[s.ownerPhone, textAlign, { color: theme.ownerPhone }]}
+            >
               {gym.phoneNumber || "N/A"}
             </Text>
           </View>
@@ -331,8 +337,18 @@ const GymInfoScreen = () => {
             )}
           </MapView>
         ) : (
-          <View style={[s.mapUnavailable, { backgroundColor: theme.mapUnavailableBg }]}>
-            <Text style={[s.mapUnavailableText, { color: theme.mapUnavailableText }]}>
+          <View
+            style={[
+              s.mapUnavailable,
+              { backgroundColor: theme.mapUnavailableBg },
+            ]}
+          >
+            <Text
+              style={[
+                s.mapUnavailableText,
+                { color: theme.mapUnavailableText },
+              ]}
+            >
               {i18n.t("map_not_available")}
             </Text>
           </View>
@@ -366,7 +382,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
     container: { flex: 1 },
     loader: { flex: 1, justifyContent: "center", alignItems: "center" },
-    
+
     header: {
       alignItems: "center",
       justifyContent: "center",
@@ -393,7 +409,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       letterSpacing: 0.5,
       textAlign: "center",
     },
-    
+
     infoCard: {
       marginHorizontal: 20,
       marginVertical: 15,
@@ -409,7 +425,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     textContainer: { flex: 1 },
     label: { fontSize: 15, fontWeight: "700", color: "#0189ff" },
     value: { fontSize: 15, marginTop: 3 },
-    
+
     hoursCard: {
       marginHorizontal: 20,
       borderRadius: 18,
@@ -437,7 +453,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       fontSize: 14,
       fontStyle: "italic",
     },
-    
+
     ownerCard: {
       marginHorizontal: 20,
       borderRadius: 18,
@@ -459,7 +475,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     ownerPhoto: { width: 70, height: 70, borderRadius: 35 },
     ownerName: { fontSize: 16, fontWeight: "700" },
     ownerPhone: { fontSize: 14, marginTop: 4 },
-    
+
     mapTitle: {
       fontSize: 17,
       fontWeight: "700",
@@ -484,7 +500,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       alignItems: "center",
     },
     mapUnavailableText: { fontSize: 15 },
-    
+
     openMapButton: {
       alignItems: "center",
       justifyContent: "center",

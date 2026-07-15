@@ -1,3 +1,4 @@
+import { Camera } from "expo-camera";
 import { SuccessToast } from "react-native-toast-message";
 
 export default {
@@ -138,6 +139,20 @@ export default {
   cart_title: "السلة",
   cart_is_empty: "السلة فارغة",
   checkout: "الدفع",
+  full_name: "الاسم الكامل",
+  enter_full_name: "أدخل اسمك الكامل",
+  email: "البريد الإلكتروني",
+  enter_email: "أدخل بريدك الإلكتروني",
+  phone: "رقم الهاتف",
+  enter_phone: "أدخل رقم هاتفك",
+  location: "العنوان",
+  enter_location: "أدخل عنوانك",
+  send: "إرسال",
+  submitting: "جاري الإرسال...",
+  please_fill_all_fields: "يرجى ملء جميع الحقول",
+  invalid_email_format: "يرجى إدخال بريد إلكتروني صحيح",
+  order_placed_successfully: "تم تقديم طلبك بنجاح!",
+  ok: "حسناً",
   delete_cart_item_modal_title:
     "هل أنت متأكد أنك تريد حذف هذا العنصر من السلة؟",
 
@@ -401,6 +416,10 @@ export default {
     personal_info: "المعلومات الشخصية",
     physical_stats: "البيانات الجسدية",
     subscription_info: "معلومات الاشتراك",
+    camera: "الكاميرا",
+    gallery: "المعرض",
+    cancel: "إلغاء",
+    select_photo: "اختر صورة",
 
     full_name: "الاسم الكامل",
     arabic_name: "الاسم بالعربية",
@@ -413,7 +432,6 @@ export default {
     height: "الطول",
     weight: "الوزن",
     gender: "الجنس",
-
     subscription_status: "حالة الاشتراك",
     expiry_date: "تاريخ الانتهاء",
 

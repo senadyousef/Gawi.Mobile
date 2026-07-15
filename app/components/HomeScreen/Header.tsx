@@ -37,7 +37,7 @@ const Header: React.FC = () => {
 
   const [isAttendanceModalVisible, setIsAttendanceModalVisible] =
     React.useState(false);
-const isGuestMember = !guestMode && userProfile?.role !== "Guest";
+  const isGuestMember = !guestMode && userProfile?.role !== "Guest";
   // Sync guest status from AsyncStorage
   React.useEffect(() => {
     const syncGuestStatus = async () => {
@@ -97,8 +97,8 @@ const isGuestMember = !guestMode && userProfile?.role !== "Guest";
         <IconsContainer
           isHomeScreen
           icons={[
-            !guestMode &&isGuestMember&&
-              {
+            !guestMode &&
+              isGuestMember && {
                 name: "qrcode-scan",
                 onPress: () => setIsAttendanceModalVisible(true),
               },

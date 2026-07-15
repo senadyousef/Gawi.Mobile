@@ -1,6 +1,6 @@
 {
-  "name": "gym",
-  "version": "1.0.2",
+  "name": "Gawi",
+  "version": "1.0.5",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
