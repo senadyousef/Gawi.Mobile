@@ -28,14 +28,14 @@ import {
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
-  bg:              dark ? "#1E1E1E" : Colors.white,
-  ink:             dark ? "#F0F0F0" : Colors.secondary,
-  muted:           dark ? "#AAAAAA" : Colors.gray,
-  iconBg:          dark ? "#2C2C2C" : Colors.tertiary,
-  iconColor:       dark ? "#F0F0F0" : Colors.secondary,
-  buyBtn:          Colors.primary,
-  cartBtnBg:       dark ? "#2C2C2C" : Colors.borderGray,
-  cartBtnText:     dark ? "#F0F0F0" : Colors.black,
+  bg: dark ? "#1E1E1E" : Colors.white,
+  ink: dark ? "#F0F0F0" : Colors.secondary,
+  muted: dark ? "#AAAAAA" : Colors.gray,
+  iconBg: dark ? "#2C2C2C" : Colors.tertiary,
+  iconColor: dark ? "#F0F0F0" : Colors.secondary,
+  buyBtn: Colors.primary,
+  cartBtnBg: dark ? "#2C2C2C" : Colors.borderGray,
+  cartBtnText: dark ? "#F0F0F0" : Colors.black,
 });
 
 const ProductDetailsScreen: React.FC<
@@ -59,7 +59,7 @@ const ProductDetailsScreen: React.FC<
   } = useAppContext();
 
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]);             // 👈 reactive styles
+  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
 
   const [quantity, setQuantity] = React.useState(1);
   const [productDetails, setProductDetails] = React.useState<IshopItem>();
@@ -72,7 +72,7 @@ const ProductDetailsScreen: React.FC<
       try {
         setIsLoading(true);
         const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
-        const UserRole= (await AsyncStorage.getItem("UserRole")) || "Guest";
+        const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
         const url = `${API_BASE_ENDPOINT}/Gyms/getAllGymsStoreItems?userId=${MemberId}&role=${UserRole}`;
         const response = await fetch(url, {
           method: "GET",
@@ -119,7 +119,7 @@ const ProductDetailsScreen: React.FC<
         body: null,
       });
       if (!res.ok) throw new Error(`Failed to add to cart: ${res.status}`);
-      
+
       fetchCartItems(userProfile.id);
       Alert.alert(i18n.t("success"), i18n.t("added_to_cart"));
     } catch (err: any) {
@@ -167,7 +167,14 @@ const ProductDetailsScreen: React.FC<
       >
         <Image
           style={s.image}
-          source={{ uri: imageUrl }}
+          source={{
+            uri:
+              imageUrl && imageUrl.trim() !== ""
+                ? imageUrl.startsWith("http")
+                  ? imageUrl
+                  : `https://gym.useitsmart.com/${imageUrl.replace(/^\//, "")}`
+                : "https://via.placeholder.com/300x300.png?text=No+Image",
+          }}
           resizeMode="cover"
         />
 
@@ -241,7 +248,6 @@ const ProductDetailsScreen: React.FC<
           </RNView>
         </RNView>
       </ScrollView>
-
       <StatusBar style={isDarkMode ? "light" : "dark"} /> {/* 👈 */}
     </RNView>
   );
@@ -257,7 +263,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       margin: 16,
       marginBottom: 32,
       borderRadius: 10,
-      backgroundColor: theme.bg,        // 👈
+      backgroundColor: theme.bg, // 👈
       justifyContent: "space-between",
       ...shadowStyle,
     },
@@ -269,7 +275,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     title: {
       fontSize: 16,
       fontFamily: "SF-Semibold",
-      color: theme.ink,                  // 👈
+      color: theme.ink, // 👈
     },
     priceText: {
       color: Colors.primary,
@@ -277,7 +283,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     },
     description: {
       fontSize: 12,
-      color: theme.muted,               // 👈
+      color: theme.muted, // 👈
       textAlign: "justify",
       fontFamily: "SF-Medium",
     },
@@ -289,7 +295,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     quantityText: {
       fontSize: 14,
       fontFamily: "SF-Medium",
-      color: theme.ink,                  // 👈
+      color: theme.ink, // 👈
     },
     iconWrapper: {
       width: 30,
@@ -297,7 +303,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       borderRadius: 15,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: theme.iconBg,    // 👈
+      backgroundColor: theme.iconBg, // 👈
     },
     infoWrapper: {
       gap: 10,
@@ -310,13 +316,13 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       borderRadius: 10,
       color: Colors.white,
       textAlign: "center",
-      backgroundColor: Colors.primary,  // stays same
+      backgroundColor: Colors.primary, // stays same
     },
     cartButtonText: {
       padding: 16,
       borderRadius: 10,
       textAlign: "center",
-      color: theme.cartBtnText,         // 👈
+      color: theme.cartBtnText, // 👈
       backgroundColor: theme.cartBtnBg, // 👈
     },
   });

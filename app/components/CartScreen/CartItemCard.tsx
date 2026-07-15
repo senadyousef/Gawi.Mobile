@@ -123,7 +123,15 @@ const CartItemCard: React.FC<Props> = ({
   return (
     <View style={[s.container, getDirection()]}>
       <View style={s.imageWrapper}>
-        <Image style={s.image} source={{ uri: cartItem.photoUrl ?? "" }} />
+        <Image
+          style={s.image}
+          source={{
+            uri:
+              cartItem.photoUrl && cartItem.photoUrl.trim() !== ""
+                ? `https://gym.useitsmart.com/${cartItem.photoUrl.replace(/^\//, "")}`
+                : "https://via.placeholder.com/300x300.png?text=No+Image",
+          }}
+        />
       </View>
       <View
         style={[
