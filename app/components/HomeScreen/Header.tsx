@@ -1,5 +1,5 @@
 import * as React from "react";
-import { greet, handleGetLocalizedField } from "../../helpers";
+import { greet, handleGetLocalizedField, handleGetToken } from "../../helpers";
 import Colors from "../../constants/Colors";
 import { useI18n } from "../../hooks/useI18n";
 import { useAppContext } from "../../context";
@@ -21,6 +21,9 @@ import {
   HOMESCREEN_HEADER_headerBodyHeight,
   HOMESCREEN_HEADER_paddingHorizontal,
 } from "../../constants";
+import i18n from "../../localization";
+
+const API_BASE_URL = "http://192.168.1.2/api";
 
 const Header: React.FC = () => {
   const { getDirection } = useI18n();
@@ -34,9 +37,62 @@ const Header: React.FC = () => {
     setIsAuthenticated,
   } = useAppContext();
   const [isGuest, setIsGuest] = React.useState(true);
-
   const [isAttendanceModalVisible, setIsAttendanceModalVisible] =
     React.useState(false);
+
+  // 👇 fetched directly from GetMyProfile, independent of context's userProfile
+  const [profileNames, setProfileNames] = React.useState<{
+    nameAr?: string;
+    nameEn?: string;
+  }>({});
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const fetchProfileNames = async () => {
+      if (guestMode) return;
+
+      try {
+        const token = await handleGetToken();
+
+        const response = await fetch(`${API_BASE_URL}/Profile/GetMyProfile`, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json; charset=utf-8",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          console.error(
+            "❌ GetMyProfile failed:",
+            response.status,
+            await response.text(),
+          );
+          return;
+        }
+
+        const data = await response.json();
+
+        if (isMounted) {
+          setProfileNames({
+            nameAr: data?.nameAr ?? data?.result?.nameAr,
+            nameEn: data?.nameEn ?? data?.result?.nameEn,
+          });
+        }
+      } catch (error) {
+        console.error("❌ Error fetching profile names:", error);
+      }
+    };
+
+    fetchProfileNames();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [guestMode]);
+
   const isGuestMember = !guestMode && userProfile?.role !== "Guest";
   // Sync guest status from AsyncStorage
   React.useEffect(() => {
@@ -89,7 +145,13 @@ const Header: React.FC = () => {
             <Text style={[styles.greetingText, guestMode && { marginTop: 20 }]}>
               {greet()}
             </Text>
-            <Text style={styles.usernameText}>{userProfile?.nameEn}</Text>
+            <Text style={styles.usernameText}>
+              <Text style={styles.usernameText}>
+                {i18n.locale?.startsWith("ar")
+                  ? profileNames.nameAr
+                  : profileNames.nameEn}
+              </Text>{" "}
+            </Text>{" "}
           </RNView>
         </RNView>
 

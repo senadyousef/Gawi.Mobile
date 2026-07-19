@@ -97,6 +97,7 @@ export default {
   privacy_and_safety: "الخصوصية والسلامة",
   notification: "الإشعارات",
   language: "اللغة",
+  DarkMode: "الوضع الداكن",
   customers_service: "خدمة العملاء",
   logout: "تسجيل الخروج",
   payment_history: "سجل الدفع",
@@ -395,6 +396,7 @@ export default {
 
   delete_failed: "فشل الحذف",
   AttendanceHistory: "سجل الحضور",
+  no_attendance_data: "لا يوجد سجل حضور",
   no_notifications_found: "لا توجد إشعارات",
   Orders: "طلبات",
   calendar: {

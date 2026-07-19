@@ -42,7 +42,7 @@ const ProductCard: React.FC<Props> = ({
 
   const imageUrl =
     item.photoUrl && item.photoUrl.trim() !== ""
-      ? item.photoUrl
+      ? `https://gym.useitsmart.com/${item.photoUrl}`
       : "https://via.placeholder.com/300x300.png?text=No+Image";
 
   return (
@@ -74,7 +74,14 @@ const ProductCard: React.FC<Props> = ({
             <Text style={s.title} numberOfLines={2} ellipsizeMode="tail">
               {handleGetLocalizedField("nameEn", "nameAr", item)}
             </Text>
-            <Text style={[s.typeText , language === "ar" ? { textAlign: "right" } : { textAlign: "left" }]}>
+            <Text
+              style={[
+                s.typeText,
+                language === "ar"
+                  ? { textAlign: "right" }
+                  : { textAlign: "left" },
+              ]}
+            >
               {language === "ar"
                 ? item.categoryNameAr || "—"
                 : item.categoryNameEn || "—"}

@@ -173,7 +173,9 @@ const StoresScreen = () => {
       {isLoading && !shopItems.length && (
         <LoadingIndicator isLoading={isLoading} />
       )}
-      <View style={{ height: 50 }}>
+      <View
+        style={{ height: 50, alignSelf: isRTL ? "flex-end" : "flex-start" }}
+      >
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -188,6 +190,7 @@ const StoresScreen = () => {
           keyExtractor={(item, index) => item.id?.toString() || `all-${index}`}
           contentContainerStyle={{
             paddingVertical: 10,
+            flexDirection: isRTL ? "row-reverse" : "row",
           }}
           renderItem={({ item }) => {
             const selected = selectedCategoryId === item.id;
@@ -197,9 +200,11 @@ const StoresScreen = () => {
                 onPress={() => handleCategoryPress(item.id)}
                 style={{
                   paddingHorizontal: 16,
-                  paddingVertical: 8,
+
+                  justifyContent: "center",
                   borderRadius: 20,
-                  marginRight: 10,
+                  marginRight: isRTL ? 0 : 10,
+                  marginLeft: isRTL ? 10 : 0,
                   backgroundColor: selected
                     ? Colors.tertiary
                     : isDarkMode

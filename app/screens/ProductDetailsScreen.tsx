@@ -190,7 +190,7 @@ const ProductDetailsScreen: React.FC<
           <RNView style={s.infoWrapper}>
             <RNView style={[{ flexDirection: "row" }, getDirection()]}>
               <Text style={s.priceText}>
-                ${productDetails.price * quantity}
+                {productDetails.price * quantity}JOD
               </Text>
             </RNView>
 

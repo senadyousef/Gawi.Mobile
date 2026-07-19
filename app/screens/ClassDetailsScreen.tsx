@@ -212,7 +212,7 @@ export default function ClassDetailsScreen({ route }: any) {
     <View style={s.container}>
       {/* Header Image */}
       <ImageBackground
-        source={{ uri: gymClass.photoUrl }}
+        source={{ uri: `https://gym.useitsmart.com/${gymClass.photoUrl}` }}
         style={s.bannerImage}
       >
         <LinearGradient

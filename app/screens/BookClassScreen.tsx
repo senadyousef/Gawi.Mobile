@@ -282,7 +282,7 @@ export default function BookClassScreen() {
               }
             >
               <ImageBackground
-                source={{ uri: item.photoUrl }}
+                source={{ uri: `https://gym.useitsmart.com/${item.photoUrl}` }}
                 style={s.imageBackground}
                 imageStyle={{ borderRadius: 16 }}
               >

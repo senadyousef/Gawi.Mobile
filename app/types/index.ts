@@ -234,6 +234,8 @@ export interface Istore {
   nameAr: string;
   photoUri?: string;
   mobilePhone: string;
+  categoryNameAr:string;
+  categoryNameEn:string;
   refreshToken: string;
   membershipExpDate: Date;
   membershipStatus: string;

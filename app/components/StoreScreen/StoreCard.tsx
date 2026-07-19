@@ -81,9 +81,7 @@ const StoreCard: React.FC<Props> = ({
                   : { textAlign: "left" },
               ]}
             >
-              {language === "ar"
-                ? item.categoryNameAr || "—"
-                : item.categoryNameEn || "—"}
+              {isArabic() ? item.categoryNameAr : item.categoryNameEn}
             </Text>
           </View>
 

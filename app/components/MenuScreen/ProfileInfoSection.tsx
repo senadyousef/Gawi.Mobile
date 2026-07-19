@@ -7,6 +7,7 @@ import { Text, TouchableOpacity } from "../overridedComponents";
 import { fetchCurrentUserProfile, IUserProfile } from "../../api/profile";
 import { useAppContext } from "../../context";
 import { useNavigation } from "@react-navigation/native";
+import i18n from "../../localization";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -69,7 +70,11 @@ const ProfileInfoSection = () => {
           )}
           <View style={{ gap: 5 }}>
             <View style={{ alignItems: "flex-start" }}>
-              <Text style={s.name}>{userProfile?.nameEn || "Guest"}</Text>
+              <Text style={s.name}>
+                {i18n.locale?.startsWith("ar")
+                  ? profile?.nameAr
+                  : profile?.nameEn || "Guest"}
+              </Text>
               <Text style={s.email}>
                 {userProfile?.email || "guest@example.com"}
               </Text>

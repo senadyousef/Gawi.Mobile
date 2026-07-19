@@ -101,6 +101,7 @@ export default {
   privacy_and_safety: "Privacy and safety",
   notification: "Notification",
   language: "Language",
+  DarkMode:"Dark Mode", 
   customers_service: "Customer's service",
 
   payment_history: "Payment history",
@@ -400,7 +401,8 @@ export default {
   close: "Close",
 
   delete_failed: "Failed to delete",
-  AttendanceHistory: "Attendance History",
+  AttendanceHistory: "Attendance",
+  no_attendance_data:"No Attendance History",
   no_notifications_found: "No notifications found",
   Orders: "Orders",
   calendar: {

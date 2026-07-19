@@ -10,6 +10,7 @@ import {
   Alert,
   FlatList,
   Image,
+  RefreshControl,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useAppContext } from "../../context";
@@ -44,11 +45,18 @@ interface INote {
   userId?: number;
 }
 
-
 const CalendarScreen = () => {
-  const { userProfile, isDarkMode } = useAppContext(); // 👈 pull isDarkMode
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
+  const {
+    userProfile,
+    isDarkMode,
+    guestMode,
+    setGuestMode,
+
+    setIsAuthenticated,
+  } = useAppContext(); // 👈 pull guestMode
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
+  const s = React.useMemo(() => createStyles(theme), [theme]);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const [notes, setNotes] = React.useState<INote[]>([]);
   const [selected, setSelected] = React.useState<string>(
@@ -63,6 +71,11 @@ const CalendarScreen = () => {
   const navigation = useNavigation<any>();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekOffset, setWeekOffset] = useState(0);
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([fetchGyms(), fetchNotes()]);
+    setIsRefreshing(false);
+  };
   const getWeekDates = () => {
     const today = new Date();
 
@@ -81,7 +94,7 @@ const CalendarScreen = () => {
     try {
       const token = await handleGetToken();
       const res = await fetch(
-        "https://gym.useitsmart.com/api/Notes/getallNotes",
+        "http://192.168.1.2/api/Notes/getallNotes",
         {
           method: "GET",
           headers: {
@@ -114,7 +127,7 @@ const CalendarScreen = () => {
       const memberId = await AsyncStorage.getItem("MemberId");
 
       const response = await fetch(
-        `https://gym.useitsmart.com/api/Gyms/GetAllGymsCarouselWithClass?userId=${memberId}&selectedDate=${selected}`,
+        `http://192.168.1.2/api/Gyms/GetAllGymsCarouselWithClass?userId=${memberId}&selectedDate=${selected}`,
         {
           method: "GET",
           headers: {
@@ -152,7 +165,7 @@ const CalendarScreen = () => {
     }
     try {
       const token = await handleGetToken();
-      const res = await fetch("https://gym.useitsmart.com/api/Notes", {
+      const res = await fetch("http://192.168.1.2/api/Notes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -166,6 +179,7 @@ const CalendarScreen = () => {
           date: selected,
         }),
       });
+       console.log(res.status)
       if (res.ok) {
         Alert.alert(i18n.t("calendar.success"), i18n.t("calendar.note_added"));
         const newNote: INote = {
@@ -175,6 +189,7 @@ const CalendarScreen = () => {
           date: selected,
           userId: userProfile?.id,
         };
+       
         setNotes((prev) => [...prev, newNote]);
         setNoteText("");
         setNoteColor(NOTE_COLORS[0]);
@@ -184,6 +199,16 @@ const CalendarScreen = () => {
       }
     } catch {
       defaultErrorToast();
+    }
+  };
+
+  // 👇 guest-mode gate for the add-note action
+  const handleAddNotePress = () => {
+    if (guestMode) {
+      setGuestMode(false);
+      setIsAuthenticated(false);
+    } else {
+      setIsNoteModalOpen(true);
     }
   };
 
@@ -211,7 +236,7 @@ const CalendarScreen = () => {
               title: i18n.locale === "ar" ? item.nameAr : item.nameEn,
               photo:
                 item.photoUrl && !item.photoUrl.startsWith("http")
-                  ? `https://gym.useitsmart.com${item.photoUrl}`
+                  ? `http://192.168.1.2${item.photoUrl}`
                   : item.photoUrl,
               description:
                 i18n.locale === "ar" ? item.contentAr : item.contentEn,
@@ -252,7 +277,7 @@ const CalendarScreen = () => {
             <View style={s.newsCard}>
               <Image
                 source={{
-                  uri: `https://gym.useitsmart.com${item.photoUrl}`,
+                  uri: `http://192.168.1.2${item.photoUrl}`,
                 }}
                 style={s.image}
               />
@@ -278,7 +303,7 @@ const CalendarScreen = () => {
             <View style={s.offerCard}>
               <Image
                 source={{
-                  uri: `https://gym.useitsmart.com${item.photoUrl}`,
+                  uri: `http://192.168.1.2${item.photoUrl}`,
                 }}
                 style={s.offerImage}
               />
@@ -366,7 +391,6 @@ const CalendarScreen = () => {
   });
   return (
     <View style={s.screenContainer}>
-    
       <View style={s.weekCalendar}>
         <View style={s.monthHeader}>
           <TouchableOpacity onPress={() => setWeekOffset((prev) => prev - 1)}>
@@ -411,10 +435,7 @@ const CalendarScreen = () => {
         </View>
       </View>
       {/* Add Note Button */}
-      <TouchableOpacity
-        style={s.addNoteButton}
-        onPress={() => setIsNoteModalOpen(true)}
-      >
+      <TouchableOpacity style={s.addNoteButton} onPress={handleAddNotePress}>
         <Text style={{ color: "#fff", fontWeight: "600" }}>
           {i18n.t("calendar.add_note")}
         </Text>
@@ -426,8 +447,18 @@ const CalendarScreen = () => {
         renderItem={renderItem}
         extraData={selected}
         contentContainerStyle={{ paddingBottom: 20 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={isDarkMode ? "#F0F0F0" : "#1A1A1A"}
+            colors={[isDarkMode ? "#F0F0F0" : "#1A1A1A"]}
+          />
+        }
         ListEmptyComponent={() => (
-          <Text style={s.emptyText}>{i18n.t("calendar.no_events")}</Text>
+          <Text style={[s.emptyText, { textAlign: isRTL ? "right" : "left" }]}>
+            {i18n.t("calendar.no_events")}
+          </Text>
         )}
       />
       {/* Note Modal */}
@@ -441,7 +472,7 @@ const CalendarScreen = () => {
             <TextInput
               style={s.noteInput}
               placeholder={i18n.t("calendar.note_placeholder")}
-              placeholderTextColor={theme.muted} // 👈
+              placeholderTextColor={theme.muted}
               value={noteText}
               onChangeText={setNoteText}
               multiline
@@ -476,7 +507,7 @@ const CalendarScreen = () => {
           </View>
         </View>
       </Modal>
-      <StatusBar style={isDarkMode ? "light" : "dark"} /> {/* 👈 */}
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
     </View>
   );
 };
@@ -682,7 +713,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     },
     screenContainer: {
       flex: 1,
-      backgroundColor: theme.bg, // 👈
+      backgroundColor: theme.bg,
     },
     addNoteButton: {
       margin: 12,
@@ -697,10 +728,10 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       padding: 12,
       borderRadius: 8,
     },
-    
+
     emptyText: {
       margin: 10,
-      color: theme.emptyText, // 👈
+      color: theme.emptyText,
     },
     modalContainer: {
       flex: 1,
@@ -708,7 +739,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       backgroundColor: "rgba(0,0,0,0.5)",
     },
     modalBox: {
-      backgroundColor: theme.surface, // 👈
+      backgroundColor: theme.surface,
       padding: 20,
       borderTopLeftRadius: 16,
       borderTopRightRadius: 16,
@@ -721,14 +752,14 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     },
     noteInput: {
       minHeight: 80,
-      borderColor: theme.border, // 👈
+      borderColor: theme.border,
       borderWidth: 1,
       borderRadius: 12,
       padding: 10,
       marginBottom: 12,
       textAlignVertical: "top",
-      backgroundColor: theme.inputBg, // 👈
-      color: theme.ink, // 👈
+      backgroundColor: theme.inputBg,
+      color: theme.ink,
     },
     colorContainer: {
       flexDirection: "row",
@@ -743,7 +774,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       borderColor: "transparent",
     },
     selectedColor: {
-      borderColor: theme.ink, // 👈 visible in both modes
+      borderColor: theme.ink,
     },
     modalButtons: {
       flexDirection: "row",
@@ -755,10 +786,10 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       borderRadius: 8,
       alignItems: "center",
       marginHorizontal: 5,
-      backgroundColor: theme.cancelBg, // 👈
+      backgroundColor: theme.cancelBg,
     },
     cancelText: {
-      color: theme.cancelText, // 👈
+      color: theme.cancelText,
     },
     saveButton: {
       flex: 1,

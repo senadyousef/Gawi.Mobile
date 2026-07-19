@@ -8,8 +8,8 @@ import i18n from "../../localization";
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
   surface: dark ? "#1E1E1E" : "#FFFFFF",
-  ink:     dark ? "#F0F0F0" : Colors.secondary,
-  muted:   dark ? "#888888" : "#777777",
+  ink: dark ? "#F0F0F0" : Colors.secondary,
+  muted: dark ? "#888888" : "#777777",
 });
 
 interface Props {
@@ -26,7 +26,7 @@ const ClassCard: React.FC<Props> = ({
   isDarkMode, // 👈 ADD
 }) => {
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]);             // 👈 reactive styles
+  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
 
   const isBooked = item.isBooked;
   const localizedName = handleGetLocalizedField("nameEn", "nameAr", item);
@@ -37,11 +37,16 @@ const ClassCard: React.FC<Props> = ({
       <View style={s.container}>
         <View>
           <Image
-            source={{ uri: item.photoUrl }}
+            source={{ uri: `https://gym.useitsmart.com/${item.photoUrl}` }}
             style={[s.image, imageStyle]}
             resizeMode="cover"
           />
-          <View style={[s.badge, { backgroundColor: isBooked ? "#FF5252" : "#4CAF50" }]}>
+          <View
+            style={[
+              s.badge,
+              { backgroundColor: isBooked ? "#FF5252" : "#4CAF50" },
+            ]}
+          >
             <Text style={s.badgeText}>
               {isBooked ? i18n.t("booked") : i18n.t("available")}
             </Text>
@@ -50,7 +55,9 @@ const ClassCard: React.FC<Props> = ({
 
         <Text style={s.name}>{localizedName}</Text>
         <Text style={s.details}>{formattedDate}</Text>
-        <Text style={s.details}>{i18n.t("capacity")}: {item.capacity}</Text>
+        <Text style={s.details}>
+          {i18n.t("capacity")}: {item.capacity}
+        </Text>
       </View>
     </TouchableOpacity>
   );

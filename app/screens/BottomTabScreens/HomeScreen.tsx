@@ -56,6 +56,8 @@ const getTheme = (dark: boolean) => ({
 });
 
 // ─── Notes Section ────────────────────────────────────────────────────────────
+import { useState } from "react";
+
 const NotesSection = ({
   notes,
   loadingNotes,
@@ -67,6 +69,8 @@ const NotesSection = ({
   isRTL: boolean;
   theme: ReturnType<typeof getTheme>;
 }) => {
+  const [selectedNote, setSelectedNote] = useState<any>(null);
+
   const tones = [
     { border: "#C8A000", accent: "#C8A000" },
     { border: "#D4522A", accent: "#D4522A" },
@@ -79,7 +83,7 @@ const NotesSection = ({
     <View style={{ marginTop: 24, marginBottom: 8 }}>
       <View
         style={{
-          flexDirection: "row",
+          flexDirection: isRTL ? "row-reverse" : "row",
           alignItems: "center",
           gap: 8,
           marginLeft: 5,
@@ -88,8 +92,7 @@ const NotesSection = ({
         <Text
           style={{
             fontSize: 18,
-            fontWeight: "700",
-            color: theme.ink,
+            color: theme.blue,
             letterSpacing: -0.3,
             textAlign: isRTL ? "right" : "left",
             marginBottom: 15,
@@ -164,7 +167,6 @@ const NotesSection = ({
           >
             {i18n.t("no_notes")}
           </Text>
-         
         </View>
       ) : (
         <FlatList
@@ -177,8 +179,9 @@ const NotesSection = ({
           renderItem={({ item, index }) => {
             const tone = tones[index % tones.length];
             return (
-              <View
-                style={{
+              <Pressable
+                onPress={() => setSelectedNote({ ...item, tone })}
+                style={({ pressed }) => ({
                   width: 200,
                   height: 120,
                   borderRadius: 16,
@@ -198,7 +201,8 @@ const NotesSection = ({
                   shadowOffset: { width: 0, height: 3 },
                   elevation: 4,
                   overflow: "hidden",
-                }}
+                  opacity: pressed ? 0.7 : 1,
+                })}
               >
                 <View
                   style={{
@@ -238,11 +242,106 @@ const NotesSection = ({
                 >
                   {item.note}
                 </Text>
-              </View>
+              </Pressable>
             );
           }}
         />
       )}
+
+      <Modal
+        visible={!!selectedNote}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedNote(null)}
+      >
+        <Pressable
+          onPress={() => setSelectedNote(null)}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 24,
+          }}
+        >
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 340,
+              borderRadius: 18,
+              padding: 20,
+              backgroundColor: theme.surface,
+              borderWidth: 1,
+              borderColor: theme.border,
+              borderLeftColor: selectedNote?.tone?.border,
+              borderLeftWidth: 4,
+            }}
+          >
+            <View
+              style={{
+                alignSelf: isRTL ? "flex-end" : "flex-start",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: 999,
+                backgroundColor: selectedNote?.tone?.accent + "20",
+                marginBottom: 12,
+              }}
+            >
+              <Ionicons
+                name="pin"
+                size={11}
+                color={selectedNote?.tone?.accent}
+              />
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: "700",
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                  fontFamily: "SF-Medium",
+                  color: selectedNote?.tone?.accent,
+                }}
+              >
+                {selectedNote?.pin || "Note"}
+              </Text>
+            </View>
+
+            <Text
+              style={{
+                fontSize: 15,
+                lineHeight: 22,
+                fontFamily: "SF-Medium",
+                color: theme.ink,
+                textAlign: isRTL ? "right" : "left",
+              }}
+            >
+              {selectedNote?.note}
+            </Text>
+
+            <Pressable
+              onPress={() => setSelectedNote(null)}
+              style={{
+                alignSelf: isRTL ? "flex-start" : "flex-end",
+                marginTop: 18,
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                borderRadius: 10,
+                backgroundColor: theme.ink + "10",
+              }}
+            >
+              <Text
+                style={{ fontSize: 13, fontWeight: "600", color: theme.ink }}
+              >
+                {i18n.t("close") || "Close"}
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -599,7 +698,7 @@ const HomeScreen = () => {
           }}
         >
           <CouponsCarousel refreshTrigger={refreshTrigger} />
-          <AudienceSection />
+          {/* <AudienceSection /> */}
           {!guestMode && isGuestMember && (
             <GymTrafficVisual refreshTrigger={refreshTrigger} />
           )}
@@ -615,7 +714,7 @@ const HomeScreen = () => {
           )}
           <GymStoreSection refreshTrigger={refreshTrigger} />
           <GallerySection refreshTrigger={refreshTrigger} />
-         <LatestNewsSection refreshTrigger={refreshTrigger} />
+          <LatestNewsSection refreshTrigger={refreshTrigger} />
         </View>
       </ScrollView>
 

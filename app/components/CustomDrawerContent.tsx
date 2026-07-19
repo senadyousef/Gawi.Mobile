@@ -18,6 +18,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useI18n } from "../hooks/useI18n";
+import { handleGetToken } from "../helpers";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -29,6 +30,8 @@ const getTheme = (dark: boolean) => ({
   rowPress: dark ? "#2C2C2C" : "#F5F5F5",
   footerText: dark ? "#666666" : Colors.gray,
 });
+
+const API_BASE_URL = "http://192.168.1.2/api";
 
 // ─── Drawer Row ───────────────────────────────────────────────────────────────
 function DrawerRow({
@@ -44,7 +47,7 @@ function DrawerRow({
   onPress: () => void;
   rtl: boolean;
   labelColor?: string;
-  bgColor?: string; // 👈 pass background so row reacts to dark mode
+  bgColor?: string;
 }) {
   return (
     <TouchableOpacity
@@ -74,20 +77,73 @@ function DrawerRow({
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function CustomDrawerContent(props) {
   const { handleLogout, userProfile, guestMode, setGuestMode, isDarkMode } =
-    useAppContext(); // 👈 pull isDarkMode
+    useAppContext();
 
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
 
   const navigation = useNavigation();
   const { isArabic } = useI18n();
   const rtl = isArabic();
 
+  // 👇 fetched directly from GetMyProfile, independent of context's userProfile
+  const [profileNames, setProfileNames] = React.useState<{
+    nameAr?: string;
+    nameEn?: string;
+  }>({});
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const fetchProfileNames = async () => {
+      if (guestMode) return;
+
+      try {
+        const token =await handleGetToken();
+
+        const response = await fetch(`${API_BASE_URL}/Profile/GetMyProfile`, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json; charset=utf-8",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          console.error(
+            "❌ GetMyProfile failed:",
+            response.status,
+            await response.text(),
+          );
+          return;
+        }
+
+        const data = await response.json();
+
+        if (isMounted) {
+          setProfileNames({
+            nameAr: data?.nameAr ?? data?.result?.nameAr,
+            nameEn: data?.nameEn ?? data?.result?.nameEn,
+          });
+        }
+      } catch (error) {
+        console.error("❌ Error fetching profile names:", error);
+      }
+    };
+
+    fetchProfileNames();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [guestMode]);
+
   const userName =
-    (rtl ? userProfile?.nameAr : userProfile?.nameEn) || i18n.t("guest_user");
+    (rtl ? profileNames.nameAr : profileNames.nameEn) || i18n.t("guest_user");
   const userInitial =
     (rtl
-      ? userProfile?.nameAr?.[0]
-      : userProfile?.nameEn?.[0]
+      ? profileNames.nameAr?.[0]
+      : profileNames.nameEn?.[0]
     )?.toUpperCase() || "G";
   const isGuestMember = !guestMode && userProfile?.role !== "Guest";
 
@@ -160,9 +216,7 @@ export default function CustomDrawerContent(props) {
   };
 
   return (
-    // 👇 Outer container bg reacts to dark mode
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      {/* Header — keep gradient, it works on both modes */}
       <LinearGradient
         colors={["#103453ff", "#254764ff"]}
         style={styles.headerContainer}
@@ -186,13 +240,12 @@ export default function CustomDrawerContent(props) {
               {!guestMode ? userName : i18n.t("guest_user")}
             </Text>
             <Text style={[styles.userEmail, rtl && styles.rtlText]}>
-              {!guestMode ? userProfile?.email || "—" : "guest@example.com"}
+              { userProfile?.email}
             </Text>
           </View>
         </SafeAreaView>
       </LinearGradient>
 
-      {/* 👇 Scroll section bg reacts to dark mode */}
       <DrawerContentScrollView
         {...props}
         contentContainerStyle={[
@@ -203,8 +256,8 @@ export default function CustomDrawerContent(props) {
         <DrawerRow
           rtl={rtl}
           label={i18n.t("home_tab_title")}
-          labelColor={theme.ink} // 👈 dynamic
-          bgColor={theme.bg} // 👈 dynamic
+          labelColor={theme.ink}
+          bgColor={theme.bg}
           icon={
             <MaterialCommunityIcons
               name="home-outline"
@@ -371,7 +424,6 @@ export default function CustomDrawerContent(props) {
           />
         )}
 
-        {/* 🔴 Logout / Login — keeps its own semantic color */}
         <DrawerRow
           rtl={rtl}
           label={guestMode ? i18n.t("login_button") : i18n.t("logout")}
@@ -387,7 +439,6 @@ export default function CustomDrawerContent(props) {
           onPress={handleLogoutOrLogin}
         />
 
-        {/* Footer */}
         <View style={[styles.footer, { borderTopColor: theme.border }]}>
           <TouchableOpacity
             onPress={() => Linking.openURL("https://useitsmart.com/")}

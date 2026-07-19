@@ -89,7 +89,7 @@ const SettingsSection = () => {
     },
     {
       AntDesignIconName: "moon",
-      title: "Dark Mode",
+      title: i18n.t("DarkMode"),
       onPress: () => toggleDarkMode?.(),
       isDarkModeToggle: true,
     },
