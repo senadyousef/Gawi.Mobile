@@ -137,7 +137,7 @@ const CartScreen: React.FC = () => {
 
       console.log("Submitting order:", orderData);
 
-      const response = await fetch("http://192.168.1.19/api/Orders/checkout", {
+      const response = await fetch("https://gym.useitsmart.com/api/Orders/checkout", {
         method: "POST",
         headers: {
           accept: "text/plain",
