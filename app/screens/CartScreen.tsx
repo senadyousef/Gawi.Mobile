@@ -137,15 +137,18 @@ const CartScreen: React.FC = () => {
 
       console.log("Submitting order:", orderData);
 
-      const response = await fetch("https://gym.useitsmart.com/api/Orders/checkout", {
-        method: "POST",
-        headers: {
-          accept: "text/plain",
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const response = await fetch(
+        "https://gym.useitsmart.com/api/Orders/checkout",
+        {
+          method: "POST",
+          headers: {
+            accept: "text/plain",
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(orderData),
         },
-        body: JSON.stringify(orderData),
-      });
+      );
 
       console.log("Response status:", response.status);
 
@@ -253,9 +256,19 @@ const CartScreen: React.FC = () => {
             <Text style={s.modalTitle}>{i18n.t("checkout")}</Text>
 
             <RNView style={s.formContainer}>
-              <Text style={s.inputLabel}>{i18n.t("full_name")}</Text>
+              <Text
+                style={[
+                  s.inputLabel,
+                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                ]}
+              >
+                {i18n.t("full_name")}
+              </Text>
               <TextInput
-                style={s.input}
+                style={[
+                  s.input,
+                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                ]}
                 value={fullName}
                 onChangeText={setFullName}
                 placeholder={i18n.t("enter_full_name")}
@@ -263,9 +276,19 @@ const CartScreen: React.FC = () => {
                 editable={!isSubmitting}
               />
 
-              <Text style={s.inputLabel}>{i18n.t("email")}</Text>
+              <Text
+                style={[
+                  s.inputLabel,
+                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                ]}
+              >
+                {i18n.t("email")}
+              </Text>
               <TextInput
-                style={s.input}
+                style={[
+                  s.input,
+                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                ]}
                 value={email}
                 onChangeText={setEmail}
                 placeholder={i18n.t("enter_email")}
@@ -275,9 +298,19 @@ const CartScreen: React.FC = () => {
                 editable={!isSubmitting}
               />
 
-              <Text style={s.inputLabel}>{i18n.t("phone")}</Text>
+              <Text
+                style={[
+                  s.inputLabel,
+                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                ]}
+              >
+                {i18n.t("phone")}
+              </Text>
               <TextInput
-                style={s.input}
+                style={[
+                  s.input,
+                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                ]}
                 value={phone}
                 onChangeText={setPhone}
                 placeholder={i18n.t("enter_phone")}
@@ -286,9 +319,20 @@ const CartScreen: React.FC = () => {
                 editable={!isSubmitting}
               />
 
-              <Text style={s.inputLabel}>{i18n.t("location")}</Text>
+              <Text
+                style={[
+                  s.inputLabel,
+                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                ]}
+              >
+                {i18n.t("location")}
+              </Text>
               <TextInput
-                style={[s.input, s.locationInput]}
+                style={[
+                  s.input,
+                  s.locationInput,
+                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                ]}
                 value={location}
                 onChangeText={setLocation}
                 placeholder={i18n.t("enter_location")}

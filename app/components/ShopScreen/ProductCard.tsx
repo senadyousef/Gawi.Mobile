@@ -82,7 +82,7 @@ const ProductCard: React.FC<Props> = ({
                   : { textAlign: "left" },
               ]}
             >
-              {language === "ar"
+              {isArabic()
                 ? item.categoryNameAr || "—"
                 : item.categoryNameEn || "—"}
             </Text>
