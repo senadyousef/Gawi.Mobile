@@ -34,7 +34,8 @@ import Colors from "../../constants/Colors";
 import GymTrafficVisual from "../../components/HomeScreen/GymTrafficVisual";
 import AudienceSection from "../../components/HomeScreen/AudienceSection";
 import { useAppContext } from "../../context";
-
+import { useState } from "react";
+import { useNavigation } from "@react-navigation/native";
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
   bg: dark ? "#121212" : "#F5F0E8",
@@ -56,7 +57,6 @@ const getTheme = (dark: boolean) => ({
 });
 
 // ─── Notes Section ────────────────────────────────────────────────────────────
-import { useState } from "react";
 
 const NotesSection = ({
   notes,
@@ -70,6 +70,7 @@ const NotesSection = ({
   theme: ReturnType<typeof getTheme>;
 }) => {
   const [selectedNote, setSelectedNote] = useState<any>(null);
+  const navigation = useNavigation<any>();
 
   const tones = [
     { border: "#C8A000", accent: "#C8A000" },
@@ -85,38 +86,68 @@ const NotesSection = ({
         style={{
           flexDirection: isRTL ? "row-reverse" : "row",
           alignItems: "center",
+          justifyContent: "space-between",
           gap: 8,
           marginLeft: 5,
+          marginRight: 5,
         }}
       >
-        <Text
+        <View
           style={{
-            fontSize: 18,
-            color: theme.blue,
-            letterSpacing: -0.3,
-            textAlign: isRTL ? "right" : "left",
-            marginBottom: 15,
+            flexDirection: isRTL ? "row-reverse" : "row",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          {i18n.t("notes")}
-        </Text>
-        {notes.length > 0 && (
-          <View
+          <Text
             style={{
-              width: 22,
-              height: 22,
-              borderRadius: 11,
-              backgroundColor: theme.ink + "20",
-              alignItems: "center",
-              justifyContent: "center",
+              fontSize: 18,
+              color: theme.blue,
+              letterSpacing: -0.3,
+              textAlign: isRTL ? "right" : "left",
               marginBottom: 15,
             }}
           >
-            <Text style={{ fontSize: 11, fontWeight: "700", color: theme.ink }}>
-              {notes.length}
-            </Text>
-          </View>
-        )}
+            {i18n.t("notes")}
+          </Text>
+          {notes.length > 0 && (
+            <View
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 11,
+                backgroundColor: theme.ink + "20",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 15,
+              }}
+            >
+              <Text
+                style={{ fontSize: 11, fontWeight: "700", color: theme.ink }}
+              >
+                {notes.length}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <Pressable
+          onPress={() => navigation.navigate("Calendar")}
+          style={({ pressed }) => ({
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: theme.surface,
+            borderWidth: 1,
+            borderColor: theme.border,
+            marginBottom: 15,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Ionicons name="add" size={16} color={theme.ink} />
+        </Pressable>
       </View>
 
       {loadingNotes ? (
@@ -702,7 +733,7 @@ const HomeScreen = () => {
           {!guestMode && isGuestMember && (
             <GymTrafficVisual refreshTrigger={refreshTrigger} />
           )}
-          <MyStatusSection />
+          <MyStatusSection refreshTrigger={refreshTrigger} />
           <NotesSection
             notes={notes}
             loadingNotes={loadingNotes}

@@ -31,7 +31,7 @@ const getTheme = (dark: boolean) => ({
   footerText: dark ? "#666666" : Colors.gray,
 });
 
-const API_BASE_URL = "http://192.168.1.2/api";
+const API_BASE_URL = "https://gym.useitsmart.com/api";
 
 // ─── Drawer Row ───────────────────────────────────────────────────────────────
 function DrawerRow({

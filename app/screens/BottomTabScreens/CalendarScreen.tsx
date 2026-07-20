@@ -11,6 +11,8 @@ import {
   FlatList,
   Image,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useAppContext } from "../../context";
@@ -93,16 +95,13 @@ const CalendarScreen = () => {
   const fetchNotes = async () => {
     try {
       const token = await handleGetToken();
-      const res = await fetch(
-        "http://192.168.1.2/api/Notes/getallNotes",
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "text/plain",
-          },
+      const res = await fetch("https://gym.useitsmart.com/api/Notes/getallNotes", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "text/plain",
         },
-      );
+      });
       if (!res.ok) throw new Error(`Failed to fetch notes: ${res.status}`);
       const data = await res.json();
       const allNotes = Array.isArray(data.result) ? data.result : [];
@@ -127,7 +126,7 @@ const CalendarScreen = () => {
       const memberId = await AsyncStorage.getItem("MemberId");
 
       const response = await fetch(
-        `http://192.168.1.2/api/Gyms/GetAllGymsCarouselWithClass?userId=${memberId}&selectedDate=${selected}`,
+        `https://gym.useitsmart.com/api/Gyms/GetAllGymsCarouselWithClass?userId=${memberId}&selectedDate=${selected}`,
         {
           method: "GET",
           headers: {
@@ -165,7 +164,7 @@ const CalendarScreen = () => {
     }
     try {
       const token = await handleGetToken();
-      const res = await fetch("http://192.168.1.2/api/Notes", {
+      const res = await fetch("https://gym.useitsmart.com/api/Notes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -179,7 +178,7 @@ const CalendarScreen = () => {
           date: selected,
         }),
       });
-       console.log(res.status)
+      console.log(res.status);
       if (res.ok) {
         Alert.alert(i18n.t("calendar.success"), i18n.t("calendar.note_added"));
         const newNote: INote = {
@@ -189,7 +188,7 @@ const CalendarScreen = () => {
           date: selected,
           userId: userProfile?.id,
         };
-       
+
         setNotes((prev) => [...prev, newNote]);
         setNoteText("");
         setNoteColor(NOTE_COLORS[0]);
@@ -236,7 +235,7 @@ const CalendarScreen = () => {
               title: i18n.locale === "ar" ? item.nameAr : item.nameEn,
               photo:
                 item.photoUrl && !item.photoUrl.startsWith("http")
-                  ? `http://192.168.1.2${item.photoUrl}`
+                  ? `https://gym.useitsmart.com${item.photoUrl}`
                   : item.photoUrl,
               description:
                 i18n.locale === "ar" ? item.contentAr : item.contentEn,
@@ -277,7 +276,7 @@ const CalendarScreen = () => {
             <View style={s.newsCard}>
               <Image
                 source={{
-                  uri: `http://192.168.1.2${item.photoUrl}`,
+                  uri: `https://gym.useitsmart.com${item.photoUrl}`,
                 }}
                 style={s.image}
               />
@@ -303,7 +302,7 @@ const CalendarScreen = () => {
             <View style={s.offerCard}>
               <Image
                 source={{
-                  uri: `http://192.168.1.2${item.photoUrl}`,
+                  uri: `https://gym.useitsmart.com${item.photoUrl}`,
                 }}
                 style={s.offerImage}
               />
@@ -463,7 +462,11 @@ const CalendarScreen = () => {
       />
       {/* Note Modal */}
       <Modal visible={isNoteModalOpen} animationType="slide" transparent>
-        <View style={s.modalContainer}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
+          style={s.modalContainer}
+        >
           <View style={s.modalBox}>
             <Text style={s.modalTitle}>
               {i18n.t("calendar.add_note_for", { date: selected })}
@@ -505,7 +508,7 @@ const CalendarScreen = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
     </View>

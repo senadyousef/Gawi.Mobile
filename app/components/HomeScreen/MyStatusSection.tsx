@@ -9,29 +9,88 @@ import * as Progress from "react-native-progress";
 import { I18nManager, Image, StyleSheet, View } from "react-native";
 import { useAppContext } from "../../context";
 import { Ionicons } from "@expo/vector-icons";
+import { handleGetToken } from "../../helpers";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 
-// ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
-  bg:      dark ? "#121212" : "#F5F0E8",
+  bg: dark ? "#121212" : "#F5F0E8",
   surface: dark ? "#1E1E1E" : "#FDFAF5",
-  border:  dark ? "#2C2C2C" : "#E8E0D0",
-  ink:     dark ? "#F0F0F0" : "#1A1A1A",
-  muted:   dark ? "#888888" : "#8A8070",
-  accent:  "#E8742A",
-  green:   "#4CAF50",
+  border: dark ? "#2C2C2C" : "#E8E0D0",
+  ink: dark ? "#F0F0F0" : "#1A1A1A",
+  muted: dark ? "#888888" : "#8A8070",
+  accent: "#E8742A",
+  green: "#4CAF50",
 });
+interface Props {
+  refreshTrigger?: number;
+}
 
-const MyStatusSection: React.FC = () => {
-  const { guestMode, userProfile, isDarkMode } = useAppContext(); // 👈 pull isDarkMode
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);  // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]);              // 👈 reactive styles
-
+const MyStatusSection: React.FC<Props> = ({ refreshTrigger = 0 }) => {
+  const { guestMode, userProfile, isDarkMode } = useAppContext();
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
+  const s = React.useMemo(() => createStyles(theme), [theme]);
+  const [membership, setMembership] = React.useState<any>(null);
   const { getDirection } = useI18n();
   const [progress, setProgress] = React.useState<number>(0);
   const isArabic = useI18n();
   const isRTL = i18n.locale === "ar";
 
   React.useEffect(() => setProgress(0.6), []);
+
+  const handleFetchMembership = React.useCallback(async (memberId: number) => {
+    const token = await handleGetToken();
+
+    const response = await fetch(
+      `https://gym.useitsmart.com/api/MemberShips/MemberShipsforuser/${memberId}`,
+      {
+        method: "GET",
+        cache: "no-store",
+        headers: {
+          Accept: "*/*",
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch membership");
+    }
+
+    const json = await response.json();
+    console.log("MyStatusSection: fresh membership response ->", json);
+    return json;
+  }, []);
+
+  const loadMembership = React.useCallback(async () => {
+    try {
+      const memberId = await AsyncStorage.getItem("MemberId");
+      console.log(
+        "MyStatusSection: loadMembership fired, memberId =",
+        memberId,
+      );
+
+      if (!memberId) return;
+
+      const data = await handleFetchMembership(Number(memberId));
+      setMembership({ ...data }); // new reference, forces re-render
+    } catch (error) {
+      console.log("Membership Error:", error);
+    }
+  }, [handleFetchMembership]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadMembership();
+    }, [loadMembership]),
+  );
+
+  React.useEffect(() => {
+    console.log("MyStatusSection: refreshTrigger changed ->", refreshTrigger);
+    if (refreshTrigger > 0) {
+      loadMembership();
+    }
+  }, [refreshTrigger, loadMembership]);
 
   if (guestMode) {
     return (
@@ -51,37 +110,7 @@ const MyStatusSection: React.FC = () => {
       <SectionTitle title={i18n.t("my_status_title")} />
 
       <View style={s.grid}>
-        {/* Progress ring card */}
-        <View style={[s.card, s.progressCard]}>
-          <View style={[s.cardHeader, getDirection()]}>
-            <View style={[s.iconWrap, { backgroundColor: theme.accent + "30" }]}>
-              <Image
-                source={require("../../assets/images/progress-section-icon.png")}
-                style={{ width: 18, height: 18 }}
-              />
-            </View>
-            <Text style={s.cardLabel}>{i18n.t("progress")}</Text>
-          </View>
-          <View style={s.ringWrap}>
-            <Progress.Circle
-              size={92}
-              showsText
-              progress={progress}
-              color={theme.accent}
-              unfilledColor={theme.border}
-              borderWidth={0}
-              thickness={8}
-              strokeCap="round"
-            />
-          </View>
-          <Text style={s.ringSubLabel}>
-            {Math.round(progress * 5)} / 5 days
-          </Text>
-        </View>
-
-        {/* Right column */}
         <View style={s.rightCol}>
-          {/* Weight card */}
           <View style={[s.card, s.weightCard]}>
             <View style={[s.cardHeader, getDirection()]}>
               <View style={[s.iconWrap, { backgroundColor: "#E53935" + "20" }]}>
@@ -93,28 +122,8 @@ const MyStatusSection: React.FC = () => {
               <Text style={s.cardLabel}>{i18n.t("weight")}</Text>
             </View>
             <View style={s.valRow}>
-              <Text style={s.bigVal}>{userProfile?.weight || 0}</Text>
+              <Text style={s.bigVal}>{membership?.weight_kg ?? 0}</Text>
               <Text style={s.valUnit}>kg</Text>
-            </View>
-          </View>
-
-          {/* Weight progress card */}
-          <View style={[s.card, s.weightProgressCard]}>
-            <View style={[s.cardHeader, getDirection()]}>
-              <View style={[s.iconWrap, { backgroundColor: "#F59E0B" + "25" }]}>
-                <Image
-                  source={require("../../assets/images/calories-section-icon.png")}
-                  style={{ width: 18, height: 18 }}
-                />
-              </View>
-              <Text style={s.cardLabel}>{i18n.t("weight_progress")}</Text>
-            </View>
-            <View style={s.valRow}>
-              <Text style={s.bigVal}>2.5</Text>
-              <Text style={s.valUnit}>kg</Text>
-              <View style={s.deltaChip}>
-                <Text style={s.deltaText}>−1.2</Text>
-              </View>
             </View>
           </View>
         </View>
@@ -125,7 +134,6 @@ const MyStatusSection: React.FC = () => {
 
 export default MyStatusSection;
 
-// ─── Styles factory ───────────────────────────────────────────────────────────
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
     container: {
@@ -221,7 +229,6 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       color: theme.green,
       fontFamily: "SF-Medium",
     },
-    // Guest
     guestContainer: {
       borderRadius: 24,
       padding: 20,

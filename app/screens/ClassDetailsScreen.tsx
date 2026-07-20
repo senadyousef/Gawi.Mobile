@@ -207,7 +207,21 @@ export default function ClassDetailsScreen({ route }: any) {
   }
 
   const isAr = i18n.locale === "ar";
+  const formatDateDMY = (date: string | Date, isAr: boolean) => {
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
 
+    if (isAr) {
+      return `${day}-${month}-${year}`.replace(
+        /\d/g,
+        (digit) => "٠١٢٣٤٥٦٧٨٩"[Number(digit)],
+      );
+    }
+
+    return `${day}-${month}-${year}`;
+  };
   return (
     <View style={s.container}>
       {/* Header Image */}
@@ -234,8 +248,8 @@ export default function ClassDetailsScreen({ route }: any) {
                 },
               ]}
             >
-              {new Date(gymClass.date).toLocaleDateString(isAr ? "ar" : "en")} •{" "}
-              {gymClass.from}:00–{gymClass.to}:00
+              {formatDateDMY(gymClass.date, isAr)}• {gymClass.from}:00–
+              {gymClass.to}:00
             </Text>
           </View>
         </View>

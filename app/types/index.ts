@@ -217,6 +217,7 @@ export interface IuserProfile {
   nameEn: string;
   nameAr: string;
   photoUri?: string;
+  weight: number;
   membershipStatus: string;
   membershipExpDate: Date;
   id: number;
@@ -234,8 +235,8 @@ export interface Istore {
   nameAr: string;
   photoUri?: string;
   mobilePhone: string;
-  categoryNameAr:string;
-  categoryNameEn:string;
+  categoryNameAr: string;
+  categoryNameEn: string;
   refreshToken: string;
   membershipExpDate: Date;
   membershipStatus: string;

@@ -26,42 +26,51 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
   const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
 
-  const [currentUsers, setCurrentUsers] = useState(0);
+  const [traffic, setTraffic] = useState({
+    currentMembers: 0,
+    maxCapacity: 0,
+    occupancyPercentage: 0,
+    trafficLevel: "Low",
+  });
+
   const [loading, setLoading] = useState(false);
   const isArabic = i18n.locale?.startsWith("ar");
   const bars = 28;
-
   const fetchCurrentUsers = async () => {
     if (guestMode) return;
+
     setLoading(true);
+
     try {
       const token = await AsyncStorage.getItem("authToken");
       const MemberId = await AsyncStorage.getItem("MemberId");
+
       if (!MemberId) throw new Error("MemberId missing");
 
       const res = await fetch(
-        `https://gym.useitsmart.com/api/MemberShips/currentMembersForMember?memberId=${MemberId}`,
+        `https://gym.useitsmart.com/api/MemberShips/currentMembersForMemberTraffic?memberId=${MemberId}`,
         {
           headers: {
-            Accept: "application/json",
+            Accept: "text/plain",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         },
       );
 
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
 
-      const realUsers =
-        typeof result === "number"
-          ? result
-          : Array.isArray(result)
-            ? result.length
-            : result?.count || 0;
-
-      setCurrentUsers(realUsers);
+      const data = await res.json();
+       console.log("data" , data)
+      setTraffic({
+        currentMembers: data.currentMembers ?? 0,
+        maxCapacity: data.maxCapacity ?? 0,
+        occupancyPercentage: data.occupancyPercentage ?? 0,
+        trafficLevel: data.trafficLevel ?? "Low",
+      });
     } catch (err) {
-      console.error("Error fetching current users:", err);
+      console.error("Error fetching traffic:", err);
     } finally {
       setLoading(false);
     }
@@ -92,20 +101,39 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
       </View>
     );
   }
-
+  const barHeight = 32;
   // ─── Traffic thresholds ───────────────────────────────────────────────────
-  const maxCapacity = 100;
-  const occupancy = Math.min(currentUsers / maxCapacity, 1);
+  const currentUsers = traffic.currentMembers;
+
+  const maxCapacity =
+    traffic.maxCapacity > 0 ? traffic.maxCapacity : currentUsers;
+
+  const occupancy = Math.min(traffic.occupancyPercentage / 100, 1);
+
   const filledBars = Math.round(occupancy * bars);
 
   let trafficStatus = i18n.t("traffic_low");
   let statusColor = "#4CAF50";
-  if (currentUsers >= 50) {
-    trafficStatus = i18n.t("traffic_high");
-    statusColor = "#E53935";
-  } else if (currentUsers >= 10) {
-    trafficStatus = i18n.t("traffic_medium");
-    statusColor = "#F59E0B";
+
+  let chartColor = "#4CAF50";
+
+  switch (traffic.trafficLevel?.toLowerCase()) {
+    case "busy":
+      trafficStatus = i18n.t("traffic_high");
+      statusColor = "#E53935";
+      chartColor = "#E53935";
+      break;
+
+    case "medium":
+      trafficStatus = i18n.t("traffic_medium");
+      statusColor = "#F59E0B";
+      chartColor = "#F59E0B";
+      break;
+
+    default:
+      trafficStatus = i18n.t("traffic_low");
+      statusColor = "#4CAF50";
+      chartColor = "#4CAF50";
   }
 
   return (
@@ -155,20 +183,14 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
       <View style={s.barsRow}>
         {Array.from({ length: bars }).map((_, i) => {
           const filled = i < filledBars;
-          const h = Math.max(
-            8,
-            14 +
-              Math.sin(i * 0.7) * 8 +
-              (i % 5 === 0 ? 12 : 0) +
-              (filled ? 10 : 0),
-          );
+
           return (
             <View
               key={i}
               style={{
                 flex: 1,
-                height: h,
-                backgroundColor: filled ? theme.ink : theme.hairline,
+                height: barHeight,
+               backgroundColor: filled ? chartColor : theme.hairline,
                 borderRadius: 2,
               }}
             />
@@ -176,18 +198,11 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
         })}
       </View>
 
-      {/* Time labels */}
-      <View style={s.timeRow}>
-        {["6a", "10a", "2p", "6p", "10p"].map((t) => (
-          <Text key={t} style={s.timeLabel}>
-            {t}
-          </Text>
-        ))}
-      </View>
-
       {/* Sub text */}
       <Text style={[s.subText, { textAlign: isArabic ? "right" : "left" }]}>
-        {`${currentUsers} ${currentUsers === 1 ? i18n.t("user") : i18n.t("users")} ${i18n.t("inside")}`}
+        {`${currentUsers} ${
+          currentUsers === 1 ? i18n.t("user") : i18n.t("users")
+        } ${i18n.t("inside")} • ${traffic.occupancyPercentage}%`}{" "}
       </Text>
     </View>
   );

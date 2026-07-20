@@ -8,26 +8,39 @@ import {
   Alert,
   Image,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { handleGetToken } from "../helpers";
 
 const OrdersScreen = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const getOrderStatus = (item: any) => {
+    if (item.isCancelled) return "Cancelled";
+    if (item.isCompleted) return "Completed";
+    if (item.isPaid) return "Paid";
+    return "Pending";
+  };
+
   const fetchOrders = async () => {
     setLoading(true);
     try {
       const token = await handleGetToken();
+      const userId = await AsyncStorage.getItem("MemberId");
+
+      if (!userId) {
+        throw new Error("No user id found");
+      }
 
       const res = await fetch(
-        "https://gym.useitsmart.com/api/Cart/getCartHistory",
+        `https://gym.useitsmart.com/api/Orders/my-orders?userId=${userId}`,
         {
           method: "GET",
           headers: {
-            Accept: "*/*",
+            Accept: "text/plain",
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       if (!res.ok) {
@@ -37,7 +50,7 @@ const OrdersScreen = () => {
       const data = await res.json();
       console.log("Fetched orders:", data);
       setOrders(data);
-    } catch (err) {
+    } catch (err: any) {
       Alert.alert("Error", err.message);
     } finally {
       setLoading(false);
@@ -48,20 +61,16 @@ const OrdersScreen = () => {
     fetchOrders();
   }, []);
 
-  const renderItem = ({ item }) => (
+  const renderItem = ({ item }: { item: any }) => (
     <View style={styles.orderCard}>
       <Text style={styles.orderTitle}>
         Order #{item.id} - {item.totalAmount} JOD
       </Text>
-      <Text style={styles.itemName}>Status: {item.status}</Text>
-      <Text style={styles.itemName}>Date: {item.date}</Text>
-
-      {item.firstItemUrl && (
-        <Image
-          source={{ uri: item.firstItemUrl }}
-          style={styles.itemImage}
-        />
-      )}
+      <Image source={{ uri: `https://gym.useitsmart.com/${item.photoUrl}` }} />
+      <Text style={styles.itemName}>Status: {item.Status}</Text>
+      <Text style={styles.itemName}>Name: {item.fullName}</Text>
+      <Text style={styles.itemName}>Phone: {item.phone}</Text>
+      <Text style={styles.itemName}>Location: {item.location}</Text>
     </View>
   );
 
@@ -80,7 +89,7 @@ const OrdersScreen = () => {
       ) : (
         <FlatList
           data={orders}
-          keyExtractor={(order) => order.id.toString()}
+          keyExtractor={(order: any) => order.id.toString()}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 20 }}
         />
@@ -121,12 +130,6 @@ const styles = StyleSheet.create({
   itemName: {
     marginTop: 2,
     fontSize: 14,
-  },
-  itemImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 6,
-    marginTop: 10,
   },
   emptyText: {
     textAlign: "center",

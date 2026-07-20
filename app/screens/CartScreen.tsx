@@ -16,6 +16,9 @@ import {
   TextInput,
   Alert,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import { ListEmptyComponent } from "../components/ListEmptyComponent";
 import { Text, TouchableOpacity } from "../components/overridedComponents";
@@ -137,18 +140,15 @@ const CartScreen: React.FC = () => {
 
       console.log("Submitting order:", orderData);
 
-      const response = await fetch(
-        "https://gym.useitsmart.com/api/Orders/checkout",
-        {
-          method: "POST",
-          headers: {
-            accept: "text/plain",
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(orderData),
+      const response = await fetch("https://gym.useitsmart.com/api/Orders/checkout", {
+        method: "POST",
+        headers: {
+          accept: "text/plain",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify(orderData),
+      });
 
       console.log("Response status:", response.status);
 
@@ -251,97 +251,106 @@ const CartScreen: React.FC = () => {
         visible={isModalVisible}
         onRequestClose={handleCloseModal}
       >
-        <RNView style={s.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
+          style={s.modalOverlay}
+        >
           <RNView style={s.modalContent}>
             <Text style={s.modalTitle}>{i18n.t("checkout")}</Text>
 
-            <RNView style={s.formContainer}>
-              <Text
-                style={[
-                  s.inputLabel,
-                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
-                ]}
-              >
-                {i18n.t("full_name")}
-              </Text>
-              <TextInput
-                style={[
-                  s.input,
-                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
-                ]}
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder={i18n.t("enter_full_name")}
-                placeholderTextColor={theme.textColor + "80"}
-                editable={!isSubmitting}
-              />
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <RNView style={s.formContainer}>
+                <Text
+                  style={[
+                    s.inputLabel,
+                    { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                  ]}
+                >
+                  {i18n.t("full_name")}
+                </Text>
+                <TextInput
+                  style={[
+                    s.input,
+                    { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                  ]}
+                  value={fullName}
+                  onChangeText={setFullName}
+                  placeholder={i18n.t("enter_full_name")}
+                  placeholderTextColor={theme.textColor + "80"}
+                  editable={!isSubmitting}
+                />
 
-              <Text
-                style={[
-                  s.inputLabel,
-                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
-                ]}
-              >
-                {i18n.t("email")}
-              </Text>
-              <TextInput
-                style={[
-                  s.input,
-                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
-                ]}
-                value={email}
-                onChangeText={setEmail}
-                placeholder={i18n.t("enter_email")}
-                placeholderTextColor={theme.textColor + "80"}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                editable={!isSubmitting}
-              />
+                <Text
+                  style={[
+                    s.inputLabel,
+                    { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                  ]}
+                >
+                  {i18n.t("email")}
+                </Text>
+                <TextInput
+                  style={[
+                    s.input,
+                    { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                  ]}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder={i18n.t("enter_email")}
+                  placeholderTextColor={theme.textColor + "80"}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  editable={!isSubmitting}
+                />
 
-              <Text
-                style={[
-                  s.inputLabel,
-                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
-                ]}
-              >
-                {i18n.t("phone")}
-              </Text>
-              <TextInput
-                style={[
-                  s.input,
-                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
-                ]}
-                value={phone}
-                onChangeText={setPhone}
-                placeholder={i18n.t("enter_phone")}
-                placeholderTextColor={theme.textColor + "80"}
-                keyboardType="phone-pad"
-                editable={!isSubmitting}
-              />
+                <Text
+                  style={[
+                    s.inputLabel,
+                    { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                  ]}
+                >
+                  {i18n.t("phone")}
+                </Text>
+                <TextInput
+                  style={[
+                    s.input,
+                    { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                  ]}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder={i18n.t("enter_phone")}
+                  placeholderTextColor={theme.textColor + "80"}
+                  keyboardType="phone-pad"
+                  editable={!isSubmitting}
+                />
 
-              <Text
-                style={[
-                  s.inputLabel,
-                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
-                ]}
-              >
-                {i18n.t("location")}
-              </Text>
-              <TextInput
-                style={[
-                  s.input,
-                  s.locationInput,
-                  { textAlign: i18n.locale === "ar" ? "right" : "left" },
-                ]}
-                value={location}
-                onChangeText={setLocation}
-                placeholder={i18n.t("enter_location")}
-                placeholderTextColor={theme.textColor + "80"}
-                multiline
-                numberOfLines={3}
-                editable={!isSubmitting}
-              />
-            </RNView>
+                <Text
+                  style={[
+                    s.inputLabel,
+                    { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                  ]}
+                >
+                  {i18n.t("location")}
+                </Text>
+                <TextInput
+                  style={[
+                    s.input,
+                    s.locationInput,
+                    { textAlign: i18n.locale === "ar" ? "right" : "left" },
+                  ]}
+                  value={location}
+                  onChangeText={setLocation}
+                  placeholder={i18n.t("enter_location")}
+                  placeholderTextColor={theme.textColor + "80"}
+                  multiline
+                  numberOfLines={3}
+                  editable={!isSubmitting}
+                />
+              </RNView>
+            </ScrollView>
 
             <RNView style={s.modalButtons}>
               <TouchableOpacity
@@ -363,7 +372,7 @@ const CartScreen: React.FC = () => {
               </TouchableOpacity>
             </RNView>
           </RNView>
-        </RNView>
+        </KeyboardAvoidingView>
       </Modal>
 
       <StatusBar style={isDarkMode ? "light" : "dark"} />
