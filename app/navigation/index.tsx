@@ -93,6 +93,7 @@ import {
 } from "react-native-safe-area-context";
 import MenuPtScreen from "../screens/MenuPtScreen";
 import { useI18n } from "../hooks/useI18n";
+import VerifyCodeScreen from "../screens/AuthScreens/VerificationCodeScreen";
 
 // ✅ Navigation Creators
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -908,6 +909,7 @@ function RootNavigator({ isFirstTime }: { isFirstTime: boolean }) {
             component={LoginScreen}
             options={{ headerShown: false }}
           />
+
           <Stack.Screen
             name="ForgetPassword"
             component={ForgetPasswordScreen}
@@ -919,7 +921,7 @@ function RootNavigator({ isFirstTime }: { isFirstTime: boolean }) {
             }}
           />
           <Stack.Screen
-            name="CodeVerification"
+            name="VerifyCode"
             component={VerificationCodeScreen}
             options={{
               title: i18n.t("code_verification_title"),

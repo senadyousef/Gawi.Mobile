@@ -28,9 +28,20 @@ const ClassCard: React.FC<Props> = ({
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
   const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
 
-  const isBooked = item.isBooked;
   const localizedName = handleGetLocalizedField("nameEn", "nameAr", item);
-  const formattedDate = new Date(item.date).toLocaleDateString();
+
+  const classDate = new Date(item.date);
+  const formattedDate = classDate.toLocaleDateString();
+
+  // Compare only the date, not the time
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const classDay = new Date(classDate);
+  classDay.setHours(0, 0, 0, 0);
+
+  const isEnded = classDay < today;
+  const isBooked = item.isBooked;
 
   return (
     <TouchableOpacity onPress={() => handleOpenEvent(item)}>
@@ -44,11 +55,21 @@ const ClassCard: React.FC<Props> = ({
           <View
             style={[
               s.badge,
-              { backgroundColor: isBooked ? "#FF5252" : "#4CAF50" },
+              {
+                backgroundColor: isEnded
+                  ? "#9E9E9E" // Gray
+                  : isBooked
+                    ? "#FF5252" // Red
+                    : "#4CAF50", // Green
+              },
             ]}
           >
             <Text style={s.badgeText}>
-              {isBooked ? i18n.t("booked") : i18n.t("available")}
+              {isEnded
+                ? i18n.t("ended")
+                : isBooked
+                  ? i18n.t("booked")
+                  : i18n.t("available")}
             </Text>
           </View>
         </View>

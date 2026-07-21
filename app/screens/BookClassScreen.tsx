@@ -156,6 +156,8 @@ export default function BookClassScreen() {
       </View>
     );
   }
+  const now = new Date();
+  const todayStr = now.toISOString().split("T")[0]; // 👈 today's date, YYYY-MM-DD
 
   return (
     <View style={s.container}>
@@ -273,87 +275,106 @@ export default function BookClassScreen() {
               tintColor={Colors.primary} // iOS
             />
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={s.cardContainer}
-              activeOpacity={0.9}
-              onPress={() =>
-                navigation.navigate("ClassDetails", { classId: item.id })
-              }
-            >
-              <ImageBackground
-                source={{ uri: `https://gym.useitsmart.com/${item.photoUrl}` }}
-                style={s.imageBackground}
-                imageStyle={{ borderRadius: 16 }}
+          renderItem={({ item }) => {
+            const itemDateStr = item.date.split("T")[0]; // 👈
+            const isEnded = itemDateStr < todayStr; // 👈 class date before today
+
+            const statusColor = isEnded // 👈
+              ? "#9CA3AF"
+              : item.isBooked
+                ? "#3B82F6"
+                : "#FF7002";
+
+            const statusLabelText = isEnded // 👈
+              ? isArabic
+                ? "منتهية"
+                : "Ended"
+              : item.isBooked
+                ? i18n.t("already_booked")
+                : i18n.t("available");
+
+            return (
+              <TouchableOpacity
+                style={s.cardContainer}
+                activeOpacity={0.9}
+                onPress={() =>
+                  navigation.navigate("ClassDetails", { classId: item.id })
+                }
               >
-                <LinearGradient
-                  colors={["transparent", "rgba(0,0,0,1)"]}
-                  style={s.gradientOverlay}
-                />
-                <View
-                  style={[
-                    s.statusLabel,
-                    { backgroundColor: item.isBooked ? "#3B82F6" : "#FF7002" },
-                  ]}
+                <ImageBackground
+                  source={{
+                    uri: `https://gym.useitsmart.com/${item.photoUrl}`,
+                  }}
+                  style={s.imageBackground}
+                  imageStyle={{ borderRadius: 16 }}
                 >
-                  <Text
+                  <LinearGradient
+                    colors={["transparent", "rgba(0,0,0,1)"]}
+                    style={s.gradientOverlay}
+                  />
+                  <View
                     style={[
-                      s.statusText,
-                      {
-                        textAlign: isArabic ? "right" : "left",
-                        writingDirection: isArabic ? "rtl" : "ltr",
-                      },
+                      s.statusLabel,
+                      { backgroundColor: statusColor }, // 👈
                     ]}
                   >
-                    {item.isBooked
-                      ? i18n.t("already_booked")
-                      : i18n.t("available")}
-                  </Text>
-                </View>
-                <View style={s.cardContent}>
-                  <Text style={s.classType}>
-                    {isArabic ? item.nameAr : item.nameEn}
-                  </Text>
-                  <View style={s.infoRow}>
-                    <MaterialCommunityIcons
-                      name="calendar"
-                      size={16}
-                      color="#FF7002"
-                    />
                     <Text
                       style={[
-                        s.infoText,
+                        s.statusText,
                         {
                           textAlign: isArabic ? "right" : "left",
                           writingDirection: isArabic ? "rtl" : "ltr",
                         },
                       ]}
                     >
-                      {item.form}:00 - {item.to}:00
+                      {statusLabelText}
                     </Text>
                   </View>
-                  <View style={s.infoRow}>
-                    <MaterialCommunityIcons
-                      name="account-group"
-                      size={16}
-                      color="#FF7002"
-                    />
-                    <Text
-                      style={[
-                        s.infoText,
-                        {
-                          textAlign: isArabic ? "right" : "left",
-                          writingDirection: isArabic ? "rtl" : "ltr",
-                        },
-                      ]}
-                    >
-                      {i18n.t("capacity")}: {item.capacity}
+                  <View style={s.cardContent}>
+                    <Text style={s.classType}>
+                      {isArabic ? item.nameAr : item.nameEn}
                     </Text>
+                    <View style={s.infoRow}>
+                      <MaterialCommunityIcons
+                        name="calendar"
+                        size={16}
+                        color="#FF7002"
+                      />
+                      <Text
+                        style={[
+                          s.infoText,
+                          {
+                            textAlign: isArabic ? "right" : "left",
+                            writingDirection: isArabic ? "rtl" : "ltr",
+                          },
+                        ]}
+                      >
+                        {item.form}:00 - {item.to}:00
+                      </Text>
+                    </View>
+                    <View style={s.infoRow}>
+                      <MaterialCommunityIcons
+                        name="account-group"
+                        size={16}
+                        color="#FF7002"
+                      />
+                      <Text
+                        style={[
+                          s.infoText,
+                          {
+                            textAlign: isArabic ? "right" : "left",
+                            writingDirection: isArabic ? "rtl" : "ltr",
+                          },
+                        ]}
+                      >
+                        {i18n.t("capacity")}: {item.capacity}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              </ImageBackground>
-            </TouchableOpacity>
-          )}
+                </ImageBackground>
+              </TouchableOpacity>
+            );
+          }}
           contentContainerStyle={{ paddingBottom: 30 }}
         />
       ) : (

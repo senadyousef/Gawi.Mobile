@@ -103,7 +103,20 @@ export default {
   payment_history: "سجل الدفع",
   my_bookings: "حجوزاتي",
   orders: "الطلبيات",
+  ended: "منتهي",
 
+  // Verify code step
+  verify_code: "تأكيد الرمز",
+  verify_code_text: "أدخل الرمز المرسل إلى بريدك الإلكتروني",
+  code_input_placeholder: "رمز التحقق",
+  verify_code_button: "تأكيد الرمز",
+  code_required: "الرمز مطلوب",
+  code_invalid: "يرجى إدخال رمز صحيح",
+
+  passwords_do_not_match: "كلمتا المرور غير متطابقتين",
+
+  // Shared
+  something_went_wrong: "حدث خطأ ما، يرجى المحاولة مرة أخرى",
   // Calendar Screen
   book_now: "احجز الآن",
   event_booked_successfully: "تم حجز الفعالية بنجاح",

@@ -7,7 +7,7 @@ import { IresetPasswordForm } from '../../types';
 import ErrorText from '../../components/ErrorText';
 import AuthInput from '../../components/Auth/AuthInput';
 import ErrorMessage from '../../components/ErrorMessage';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import AuthButton from '../../components/Auth/AuthButton';
 import { StyleSheet, View as RNView } from 'react-native';
 import { resetPasswordFormRules } from '../../formRules';
@@ -21,6 +21,8 @@ const ResetPasswordScreen = () => {
     formState: { errors },
   } = useForm<IresetPasswordForm>();
   const { navigate } = useNavigation();
+  const route = useRoute<any>();
+  const { email, code } = route.params;
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
   const [errorMessage, setErrorMessage] = React.useState<string>('');
 
@@ -29,9 +31,31 @@ const ResetPasswordScreen = () => {
       setIsLoading(true);
       setErrorMessage('');
 
-      console.log({ data });
+      if (data.password !== data.confirmation_password) {
+        setErrorMessage(i18n.t('passwords_do_not_match'));
+        return;
+      }
 
-      // TODO send response
+      const res = await fetch(
+        'https://gym.useitsmart.com/resetpassmobile/reset-password',
+        {
+          method: 'POST',
+          headers: { Accept: '*/*', 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            code,
+            password: data.password,
+            confirmPassword: data.confirmation_password,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.message || i18n.t('something_went_wrong'));
+      }
+
+      navigate('Login');
     } catch (err: any) {
       setErrorMessage(err.message);
     } finally {

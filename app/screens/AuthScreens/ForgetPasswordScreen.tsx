@@ -29,9 +29,18 @@ const ForgetPasswordScreen = () => {
       setIsLoading(true);
       setErrorMessage('');
 
-      console.log({ data });
+      const res = await fetch('https://gym.useitsmart.com/resetpassmobile/request', {
+        method: 'POST',
+        headers: { Accept: '*/*', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: data.email }),
+      });
 
-      // TODO send response
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.message || i18n.t('something_went_wrong'));
+      }
+
+      navigate('VerifyCode', { email: data.email });
     } catch (err: any) {
       setErrorMessage(err.message);
     } finally {

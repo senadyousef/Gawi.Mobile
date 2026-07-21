@@ -3,73 +3,109 @@ import i18n from '../../localization';
 import { width } from '../../constants';
 import { StatusBar } from 'expo-status-bar';
 import Colors from '../../constants/Colors';
-import { useNavigation } from '@react-navigation/native';
+import { IverifyCodeForm } from '../../types';
+import ErrorText from '../../components/ErrorText';
+import AuthInput from '../../components/Auth/AuthInput';
+import ErrorMessage from '../../components/ErrorMessage';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import AuthButton from '../../components/Auth/AuthButton';
+import { StyleSheet, View as RNView } from 'react-native';
+import { verifyCodeFormRules } from '../../formRules';
 import { Text, View } from '../../components/overridedComponents';
-import { StyleSheet, View as RNView, TextInput } from 'react-native';
-import {
-  Cursor,
-  CodeField,
-  useBlurOnFulfill,
-  useClearByFocusCell,
-} from 'react-native-confirmation-code-field';
+import { Controller, SubmitHandler, useForm } from 'react-hook-form';
 
-const CELL_COUNT = 5;
-
-const VerificationCodeScreen = () => {
+const VerifyCodeScreen = () => {
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<IverifyCodeForm>();
   const { navigate } = useNavigation();
-  const [value, setValue] = React.useState('');
-  const ref = useBlurOnFulfill({ value, cellCount: CELL_COUNT });
+  const route = useRoute<any>();
+  const { email } = route.params ?? {};
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
-  const [props, getCellOnLayoutHandler] = useClearByFocusCell({
-    value,
-    setValue,
-  });
+  const [errorMessage, setErrorMessage] = React.useState<string>('');
 
-  const isDisabled = value.length < 5;
+  React.useEffect(() => {
+    if (!email) {
+      navigate('ForgotPassword' as never);
+    }
+  }, [email]);
+
+  const onSubmit: SubmitHandler<IverifyCodeForm> = async (data) => {
+    try {
+      setIsLoading(true);
+      setErrorMessage('');
+
+      const res = await fetch(
+        'https://gym.useitsmart.com/resetpassmobile/verify-code',
+        {
+          method: 'POST',
+          headers: { Accept: '*/*', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, code: data.code }),
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.message || i18n.t('something_went_wrong'));
+      }
+
+      navigate('ResetPassword', { email, code: data.code });
+    } catch (err: any) {
+      setErrorMessage(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <RNView style={{ gap: 35 }}>
         <RNView style={styles.textContainer}>
-          <Text style={styles.thinText}>{i18n.t('code_verification')}</Text>
-          <Text style={styles.text}>{i18n.t('code_verification_text')}</Text>
+          <Text style={styles.thinText}>{i18n.t('verify_code')}</Text>
+          <Text style={styles.text}>{i18n.t('verify_code_text')}</Text>
         </RNView>
-        <CodeField
-          ref={ref}
-          {...props}
-          value={value}
-          cellCount={CELL_COUNT}
-          testID='my-code-input'
-          onChangeText={setValue}
-          keyboardType='number-pad'
-          InputComponent={TextInput}
-          textContentType='oneTimeCode'
-          rootStyle={[styles.codeFieldRoot]}
-          renderCell={({ index, symbol, isFocused }) => (
-            <Text
-              key={index}
-              style={[styles.cell, isFocused && styles.focusCell]}
-              onLayout={getCellOnLayoutHandler(index)}
-            >
-              {symbol || (isFocused ? <Cursor /> : null)}
-            </Text>
-          )}
+
+        <RNView style={{ gap: 10 }}>
+          <ErrorMessage width={width - 50} message={errorMessage} />
+          <RNView>
+            <Controller
+              name='code'
+              control={control}
+              rules={verifyCodeFormRules['code']}
+              render={({ field: { onChange, onBlur, value } }) => (
+                <AuthInput
+                  value={value}
+                  onBlur={onBlur}
+                  onChangeText={onChange}
+                  iconName='numeric'
+                  keyboardType='number-pad'
+                  containerStyle={styles.codeInput}
+                  placeholder={i18n.t('code_input_placeholder')}
+                />
+              )}
+            />
+            {errors.code?.message && (
+              <ErrorText>{errors.code.message}</ErrorText>
+            )}
+          </RNView>
+        </RNView>
+      </RNView>
+      <RNView style={{ gap: 15 }}>
+        <AuthButton
+          onPress={handleSubmit(onSubmit)}
+          isLoading={isLoading}
+          label={i18n.t('verify_code_button')}
+          style={[styles.verifyButton, styles.commonWidth]}
         />
       </RNView>
-      <AuthButton
-        onPress={() => {}}
-        isLoading={isLoading}
-        isDisabled={isDisabled}
-        label={i18n.t('continue_button')}
-        style={[styles.continueButton, styles.commonWidth]}
-      />
       <StatusBar style='dark' />
     </View>
   );
 };
 
-export default VerificationCodeScreen;
+export default VerifyCodeScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -79,12 +115,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: Colors.backgroundGray,
   },
-  commonWidth: {
-    width: width - 50,
-  },
-  continueButton: {
-    backgroundColor: Colors.primary,
-  },
+  commonWidth: { width: width - 50 },
+  verifyButton: { backgroundColor: Colors.primary },
   textContainer: {
     gap: 17,
     alignItems: 'center',
@@ -99,22 +131,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: 'SF-Bold',
   },
-  codeFieldRoot: {
-    gap: 20,
-  },
-  cell: {
-    width: 50,
-    height: 50,
-    fontSize: 24,
+  codeInput: {
     borderWidth: 1,
-    lineHeight: 38,
-    borderRadius: 10,
-    textAlign: 'center',
-    textAlignVertical: 'center',
     borderColor: Colors.lightGray,
-    backgroundColor: Colors.white,
-  },
-  focusCell: {
-    borderColor: '#000',
   },
 });

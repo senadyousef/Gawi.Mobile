@@ -101,13 +101,27 @@ export default {
   privacy_and_safety: "Privacy and safety",
   notification: "Notification",
   language: "Language",
-  DarkMode:"Dark Mode", 
+  DarkMode: "Dark Mode",
   customers_service: "Customer's service",
-
+  ended: "ended",
   payment_history: "Payment history",
   my_bookings: "My bookings",
   orders: "Orders",
 
+  // Verify code step
+  verify_code: "Verify Code",
+  verify_code_text: "Enter the code sent to your email",
+  code_input_placeholder: "Verification Code",
+  verify_code_button: "Verify Code",
+  code_required: "Code is required",
+  code_invalid: "Please enter a valid code",
+
+  // Reset password step
+
+  passwords_do_not_match: "Passwords do not match",
+
+  // Shared
+  something_went_wrong: "Something went wrong, please try again",
   // Calendar Screen
   book_now: "Book now",
   event_booked_successfully: "Event booked successfully",
@@ -402,7 +416,7 @@ export default {
 
   delete_failed: "Failed to delete",
   AttendanceHistory: "Attendance",
-  no_attendance_data:"No Attendance History",
+  no_attendance_data: "No Attendance History",
   no_notifications_found: "No notifications found",
   Orders: "Orders",
   calendar: {
