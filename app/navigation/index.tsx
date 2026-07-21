@@ -1068,12 +1068,22 @@ function RootNavigator({ isFirstTime }: { isFirstTime: boolean }) {
           <Stack.Screen
             name="NewsDetails"
             component={NewsDetailsScreen}
-            options={{ title: "Details" }}
+            options={{
+              title: i18n.t("details"),
+              header: (params) => (
+                <CustomHeader params={params} shouldShowBackArrow />
+              ),
+            }}
           />
           <Stack.Screen
             name="OfferDetails"
             component={OfferDetailsScreen}
-            options={{ title: "Details" }}
+            options={{
+              title: i18n.t("details"),
+              header: (params) => (
+                <CustomHeader params={params} shouldShowBackArrow />
+              ),
+            }}
           />
           <Stack.Screen
             name="eventDetails"

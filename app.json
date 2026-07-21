@@ -3,7 +3,7 @@
     "name": "Gawi",
     "slug": "Gym",
     "scheme": "Gym",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./app/assets/images/Gawi.png",
     "userInterfaceStyle": "light",

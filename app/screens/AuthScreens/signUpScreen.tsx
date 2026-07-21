@@ -30,6 +30,9 @@ interface ISignUpForm {
   confirmPassword: string;
 }
 
+const DEFAULT_NAME_EN = "player";
+const DEFAULT_NAME_AR = "لاعب";
+
 const SignUpScreen = () => {
   const navigation = useNavigation();
   const { isArabic } = useI18n();
@@ -54,11 +57,14 @@ const SignUpScreen = () => {
       setIsLoading(true);
       setErrorMessage("");
 
+      const nameAr = data.nameAr?.trim() ? data.nameAr.trim() : DEFAULT_NAME_AR;
+      const nameEn = data.nameEn?.trim() ? data.nameEn.trim() : DEFAULT_NAME_EN;
+
       const payload = {
         id: 0,
         email: data.email,
-        nameAr: data.nameAr,
-        nameEn: data.nameEn,
+        nameAr,
+        nameEn,
         phoneNumber: data.phoneNumber,
         password: data.password,
         role: "Guest",
@@ -140,19 +146,19 @@ const SignUpScreen = () => {
         >
           <ErrorMessage width={width - 50} message={errorMessage} />
 
-          {/* 🗣️ Name Arabic */}
+          {/* 🗣️ Name Arabic (optional — defaults to "لاعب") */}
           <RNView style={{ width: "100%" }}>
             <Controller
               name="nameAr"
               control={control}
-              rules={{ required: i18n.t("errors.name_ar_required") }}
+              rules={{}}
               render={({ field: { onChange, onBlur, value } }) => (
                 <AuthInput
                   value={value}
                   onBlur={onBlur}
                   onChangeText={onChange}
                   iconName="account-outline"
-placeholder={i18n.t("name_ar")}
+                  placeholder={i18n.t("name_ar")}
                   textAlign={isArabic() ? "right" : "left"}
                 />
               )}
@@ -162,19 +168,19 @@ placeholder={i18n.t("name_ar")}
             )}
           </RNView>
 
-          {/* 🗣️ Name English */}
+          {/* 🗣️ Name English (optional — defaults to "player") */}
           <RNView>
             <Controller
               name="nameEn"
               control={control}
-              rules={{ required: i18n.t("errors.name_en_required") }}
+              rules={{}}
               render={({ field: { onChange, onBlur, value } }) => (
                 <AuthInput
                   value={value}
                   onBlur={onBlur}
                   onChangeText={onChange}
                   iconName="account-outline"
-placeholder={i18n.t("name_en")}
+                  placeholder={i18n.t("name_en")}
                   textAlign={isArabic() ? "right" : "left"}
                 />
               )}

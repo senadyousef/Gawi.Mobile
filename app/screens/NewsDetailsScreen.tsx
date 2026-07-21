@@ -4,6 +4,7 @@ import { useRoute } from "@react-navigation/native";
 import Colors from "../constants/Colors";
 import { Ionicons } from "@expo/vector-icons";
 import { useAppContext } from "../context";
+import i18n from "../localization";
 
 // ---------------- THEME ----------------
 const getTheme = (dark: boolean) => ({
@@ -20,7 +21,7 @@ const getTheme = (dark: boolean) => ({
 export default function NewsDetailsScreen() {
   const route = useRoute();
   const { item } = route.params;
-
+  const isRTL = i18n.locale === "ar";
   const { isDarkMode } = useAppContext();
 
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
@@ -31,18 +32,22 @@ export default function NewsDetailsScreen() {
       <Image source={{ uri: item.photo }} style={s.image} />
 
       <View style={s.content}>
-        <View style={s.dateRow}>
+        {/* <View style={[s.dateRow , {alignSelf:isRTL?"flex-end":"flex-start"}]}>
           <Ionicons
             name="calendar-outline"
             size={18}
             color={theme.primary}
           />
-          <Text style={s.dateText}>{item.date || ""}</Text>
-        </View>
+          <Text style={[s.dateText]}>{item.date }</Text>
+        </View> */}
 
-        <Text style={s.title}>{item.title}</Text>
+        <Text style={[s.title, { textAlign: isRTL ? "right" : "left" }]}>
+          {item.title}
+        </Text>
 
-        <Text style={s.description}>{item.description}</Text>
+        <Text style={[s.description, { textAlign: isRTL ? "right" : "left" }]}>
+          {item.description}
+        </Text>
       </View>
     </ScrollView>
   );

@@ -352,7 +352,25 @@ const NotesSection = ({
             >
               {selectedNote?.note}
             </Text>
-
+            <Text
+              style={{
+                fontSize: 15,
+                lineHeight: 22,
+                fontFamily: "SF-Medium",
+                color: theme.ink,
+                textAlign: isRTL ? "right" : "left",
+              }}
+            >
+              {selectedNote?.date &&
+                new Date(selectedNote.date).toLocaleDateString(
+                  isRTL ? "ar-EG" : "en-US",
+                  {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  },
+                )}
+            </Text>
             <Pressable
               onPress={() => setSelectedNote(null)}
               style={{

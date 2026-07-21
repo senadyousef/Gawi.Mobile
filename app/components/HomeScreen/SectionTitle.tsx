@@ -13,10 +13,12 @@ interface Props {
 
 const SectionTitle: React.FC<Props> = ({ title, onPress }) => {
   const { isArabic, getDirection } = useI18n();
-
+  const isRTL = i18n.locale === "ar";
   return (
-    <View style={[styles.wrapper, getDirection()]}>
-      <Text style={styles.title}>{title}</Text>
+    <View style={[styles.wrapper]}>
+      <Text style={[styles.title, { textAlign: isRTL ? "right" : "left" }]}>
+        {title}
+      </Text>
       {onPress && (
         <TouchableOpacity
           style={[styles.button, getDirection()]}
