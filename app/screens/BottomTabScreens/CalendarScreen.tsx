@@ -95,13 +95,16 @@ const CalendarScreen = () => {
   const fetchNotes = async () => {
     try {
       const token = await handleGetToken();
-      const res = await fetch("https://gym.useitsmart.com/api/Notes/getallNotes", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "text/plain",
+      const res = await fetch(
+        "https://gym.useitsmart.com/api/Notes/getallNotes",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "text/plain",
+          },
         },
-      });
+      );
       if (!res.ok) throw new Error(`Failed to fetch notes: ${res.status}`);
       const data = await res.json();
       const allNotes = Array.isArray(data.result) ? data.result : [];
@@ -282,10 +285,12 @@ const CalendarScreen = () => {
               />
 
               <View style={s.cardContent}>
-                <Text style={s.newsTitle}>{item.nameEn || item.nameAr}</Text>
+                <Text style={s.newsTitle}>
+                  {i18n.locale === "ar" ? item.nameAr : item.nameEn}
+                </Text>
 
                 <Text style={s.newsContent}>
-                  {item.contentEn || item.contentAr}
+                  {i18n.locale === "ar" ? item.contentAr : item.contentEn}
                 </Text>
 
                 <Text style={s.date}>
@@ -309,11 +314,11 @@ const CalendarScreen = () => {
 
               <View style={{ flex: 1 }}>
                 <Text style={s.offerTitle}>
-                  🎉 {item.nameEn || item.nameAr}
+                  🎉 {i18n.locale === "ar" ? item.nameAr : item.nameEn}
                 </Text>
 
                 <Text style={s.offerText}>
-                  {item.contentEn || item.contentAr}
+                  {i18n.locale === "ar" ? item.contentAr : item.contentEn}
                 </Text>
               </View>
             </View>
@@ -327,7 +332,9 @@ const CalendarScreen = () => {
               <Image source={{ uri: item.photoUrl }} style={s.classImage} />
 
               <View style={s.classInfo}>
-                <Text style={s.classTitle}>{item.nameEn || item.nameAr}</Text>
+                <Text style={s.classTitle}>
+                  {i18n.locale === "ar" ? item.nameAr : item.nameEn}
+                </Text>
 
                 <Text style={s.classTime}>
                   🕒 {item.from} - {item.to}
@@ -368,9 +375,7 @@ const CalendarScreen = () => {
           >
             <Text style={s.noteTitle}>📝 Note</Text>
 
-            <Text style={s.noteText}>
-              {item.note || item.contentEn || item.contentAr}
-            </Text>
+            <Text style={s.noteText}>{item.note}</Text>
           </View>
         );
 

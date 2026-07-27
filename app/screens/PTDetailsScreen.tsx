@@ -195,7 +195,10 @@ export default function PTDetailsScreen() {
     <ScrollView style={s.container}>
       {/* Header Image */}
       <View style={s.headerContainer}>
-        <Image source={{ uri: trainer.url }} style={s.headerImage} />
+        <Image
+          source={{ uri: `https://gym.useitsmart.com${trainer.url}` }}
+          style={s.headerImage}
+        />
         <LinearGradient
           colors={["rgba(0,0,0,0.5)", "transparent"]}
           style={s.headerOverlay}
@@ -362,6 +365,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       height: 220,
       borderBottomLeftRadius: 20,
       borderBottomRightRadius: 20,
+      resizeMode:"contain"
     },
     headerOverlay: {
       ...StyleSheet.absoluteFillObject,

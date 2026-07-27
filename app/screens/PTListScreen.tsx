@@ -174,7 +174,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       backgroundColor: theme.surface, // 👈 dark gray in dark mode, black in light
       elevation: 4,
     },
-    image: { width: "100%", height: 180 },
+    image: { width: "100%", height: 180, resizeMode: "contain" },
     gradient: { ...StyleSheet.absoluteFillObject },
     cardContent: { position: "absolute", bottom: 12, left: 16 },
     name: { color: "#FFFFFF", fontSize: 20, fontWeight: "bold" },
