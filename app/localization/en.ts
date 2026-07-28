@@ -453,7 +453,16 @@ export default {
     height: "Height",
     weight: "Weight",
     gender: "Gender",
-
+    delete_account: "Delete Account",
+    delete_account_confirmation:
+      "Are you sure you want to permanently delete your account?",
+    delete: "Delete",
+    error: "Error",
+    success: "Success",
+    member_not_found: "Member ID not found.",
+    delete_failed: "Failed to delete account.",
+    account_deleted: "Your account has been deleted.",
+    unable_delete_account: "Unable to delete your account.",
     subscription_status: "Subscription Status",
     expiry_date: "Expiry Date",
 

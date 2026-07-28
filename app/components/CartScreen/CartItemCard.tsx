@@ -139,11 +139,26 @@ const CartItemCard: React.FC<Props> = ({
           { backgroundColor: isDarkMode ? "#1E1E1E" : "#fff" },
         ]}
       >
-        <Text style={s.title}>
+        <Text
+          style={[
+            s.title,
+            { textAlign: i18n.locale === "ar" ? "left" : "left" },
+          ]}
+        >
           {i18n.locale === "ar"
             ? (cartItem.nameAr ?? cartItem.nameEn ?? "")
             : (cartItem.nameEn ?? cartItem.nameAr ?? "")}
         </Text>
+        {!!cartItem.note?.trim() && (
+          <View style={s.noteContainer}>
+            <MaterialCommunityIcons
+              name="note-text-outline"
+              size={14}
+              color={Colors.primary}
+            />
+            <Text style={s.noteText}>{cartItem.note}</Text>
+          </View>
+        )}
         <View
           style={[
             s.priceWrapper,
@@ -201,6 +216,23 @@ export default CartItemCard;
 // ─── Styles factory ───────────────────────────────────────────────────────────
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
+    noteContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 6,
+      marginTop: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 8,
+      backgroundColor: Colors.primary + "15",
+    },
+
+    noteText: {
+      fontSize: 12,
+      fontFamily: "SF-Medium",
+      color: Colors.primary,
+    },
     container: {
       gap: 15,
       padding: 13,

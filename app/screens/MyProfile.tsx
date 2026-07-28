@@ -23,9 +23,9 @@ import { handleGetToken } from "../helpers";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import i18n from "../../app/localization";
 import { Picker } from "@react-native-picker/picker";
-import { formatDate } from "date-fns";
 import { useNavigation } from "@react-navigation/native";
 import { API_BASE_ENDPOINT, TOKEN } from "../constants";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 // ─── RTL helper ───────────────────────────────────────────────────────────────
 const isRTL = (): boolean => {
@@ -34,28 +34,43 @@ const isRTL = (): boolean => {
 };
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
+// Brand accent: burnt orange (#E8742A) on near-black.
+const ACCENT = "#E8742A";
+const ACCENT_DEEP = "#8A3F13"; // gradient partner for the membership card
+const DANGER = "#FF5F5F";
+const SUCCESS = "#59D67C";
+
 const getTheme = (dark: boolean) => ({
-  bg: dark ? "#121212" : Colors.white,
-  bgEnd: dark ? "#1A1A1A" : "#FFFFFF",
-  surface: dark ? "#1E1E1E" : "#FFFFFF",
-  ink: dark ? "#F0F0F0" : "#222222",
-  muted: dark ? "#AAAAAA" : "#555555",
-  border: dark ? "#2C2C2C" : "#DDDDDD",
-  inputBg: dark ? "#2C2C2C" : "#FFFFFF",
-  placeholder: dark ? "#666666" : "#999999",
-  modalBg: dark ? "#1E1E1E" : "#FFFFFF",
-  dietText: dark ? "#CCCCCC" : "#333333",
-  dietMuted: dark ? "#888888" : "#999999",
+  bg: dark ? "#0B0B0A" : "#F6F5F2",
+  bgEnd: dark ? "#141210" : "#FFFFFF",
+  surface: dark ? "#17150F" : "#FFFFFF",
+  surfaceRaised: dark ? "#1F1C15" : "#FBFBF9",
+  ink: dark ? "#F5F1EA" : "#1A1A1A",
+  muted: dark ? "#8A8681" : "#6B6B66",
+  border: dark ? "#2C2820" : "#E7E7E0",
+  inputBg: dark ? "#221F17" : "#F2F2EC",
+  placeholder: dark ? "#5C574C" : "#A3A39C",
+  modalBg: dark ? "#151310" : "#FFFFFF",
+  dietText: dark ? "#D6D2C8" : "#333333",
+  dietMuted: dark ? "#7A756A" : "#999999",
+  accent: ACCENT,
+  accentDeep: ACCENT_DEEP,
+  accentInk: "#1A0F06",
+  danger: DANGER,
+  success: SUCCESS,
 });
 
+type TabKey = "personal" | "physical" | "subscription";
+
 export default function MyProfileScreen() {
-  const { setUserProfile, isDarkMode } = useAppContext(); // 👈 pull isDarkMode
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈
-  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈
+  const { setUserProfile, isDarkMode } = useAppContext();
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
+  const s = React.useMemo(() => createStyles(theme), [theme]);
 
   const [locale, setLocale] = useState<string>(i18n.locale);
   const rtl = isRTL();
 
+  const [activeTab, setActiveTab] = useState<TabKey>("personal");
   const [isEditing, setIsEditing] = useState({
     personal: false,
     physical: false,
@@ -68,8 +83,12 @@ export default function MyProfileScreen() {
   const [dietPlan, setDietPlan] = useState(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const navigation = useNavigation();
-    const { handleLogout } = useAppContext();
-  
+  const { handleLogout } = useAppContext();
+
+  // Photo is staged locally until explicitly saved — separate from the rest of personalData.
+  const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [photoSaving, setPhotoSaving] = useState(false);
+
   const formatDate = (dateStr: string): string => {
     if (!dateStr) return "—";
     const date = new Date(dateStr);
@@ -79,6 +98,7 @@ export default function MyProfileScreen() {
       year: "numeric",
     });
   };
+
   const [personalData, setPersonalData] = useState({
     nameEn: "",
     nameAr: "",
@@ -108,15 +128,6 @@ export default function MyProfileScreen() {
     expiryDate: string;
     startDate?: string;
   }>({ subscriptionStatus: "", expiryDate: "" });
-
-  const [sections, setSections] = useState({
-    personal: true,
-    physical: true,
-    subscription: true,
-  });
-
-  const toggleSection = (key: string) =>
-    setSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const fetchUserProfile = async () => {
     const MemberId = await AsyncStorage.getItem("MemberId");
@@ -169,17 +180,18 @@ export default function MyProfileScreen() {
   useEffect(() => {
     setLocale(i18n.locale);
   }, [i18n.locale]);
+
   const handleDeleteAccount = async () => {
     Alert.alert(
-      "Delete Account",
-      "Are you sure you want to permanently delete your account?",
+      i18n.t("profile.delete_account"),
+      i18n.t("profile.delete_account_confirmation"),
       [
         {
-          text: "Cancel",
+          text: i18n.t("profile.cancel"),
           style: "cancel",
         },
         {
-          text: "Delete",
+          text: i18n.t("profile.delete"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -187,7 +199,10 @@ export default function MyProfileScreen() {
               const token = await AsyncStorage.getItem(TOKEN);
 
               if (!memberId) {
-                Alert.alert("Error", "Member ID not found.");
+                Alert.alert(
+                  i18n.t("profile.error"),
+                  i18n.t("profile.member_not_found"),
+                );
                 return;
               }
 
@@ -197,50 +212,92 @@ export default function MyProfileScreen() {
                   method: "PUT",
                   headers: {
                     Accept: "*/*",
-                    Authorization: `Bearer ${token}`
+                    Authorization: `Bearer ${token}`,
                   },
                 },
               );
+
               const responseText = await response.text();
 
               console.log("Status:", response.status);
               console.log("Response:", responseText);
+
               if (!response.ok) {
-                throw new Error("Failed to delete account.");
+                throw new Error(i18n.t("profile.delete_failed"));
               }
 
-              // Clear saved data
               await AsyncStorage.clear();
 
-              Alert.alert("Success", "Your account has been deleted.");
+              Alert.alert(
+                i18n.t("profile.success"),
+                i18n.t("profile.account_deleted"),
+              );
 
               handleLogout();
             } catch (error) {
               console.log(error);
-              Alert.alert("Error", "Unable to delete your account.");
+              Alert.alert(
+                i18n.t("profile.error"),
+                i18n.t("profile.unable_delete_account"),
+              );
             }
           },
         },
       ],
     );
   };
+
   const handleGeneratePlan = async () => {
+    const requiredFields = [
+      { key: "age", label: "Age" },
+      { key: "height", label: "Height" },
+      { key: "weight", label: "Weight" },
+      { key: "gender", label: "Gender" },
+      { key: "target", label: "Target" },
+      { key: "activity_level", label: "Activity Level" },
+      { key: "training_days_per_week", label: "Training Days Per Week" },
+      { key: "meals_per_day", label: "Meals Per Day" },
+    ];
+
+    const hasEmptyField = requiredFields.some(
+      ({ key }) =>
+        !physicalData[key as keyof typeof physicalData]?.toString().trim(),
+    );
+
+    if (hasEmptyField) {
+      Alert.alert(
+        i18n.locale.startsWith("ar") ? "بيانات ناقصة" : "Missing Information",
+        i18n.locale.startsWith("ar")
+          ? "يرجى تعبئة جميع بيانات المعلومات الصحية قبل إنشاء الخطة. حقل الملاحظات اختياري."
+          : "Please fill in all health information fields before generating a plan. Notes are optional.",
+      );
+      return;
+    }
+
     try {
       if (!memberIdApi) {
         Alert.alert("Error", "Membership ID not found");
         return;
       }
+
       const lang = i18n.locale?.startsWith("ar") ? "ar" : "en";
       setLoadingPlan(true);
+
       const response = await fetch(
         `https://gym.useitsmart.com/api/MemberShips/generate-dietary-chart/${memberIdApi}?lang=${lang}`,
-        { method: "POST", headers: { accept: "*/*" } },
+        {
+          method: "POST",
+          headers: { accept: "*/*" },
+        },
       );
+
       const data = await response.json();
+
       if (!response.ok) {
         Alert.alert("Error", "Failed to generate plan");
         return;
       }
+
       setDietPlan(data);
       setPlanModalVisible(true);
     } catch (error) {
@@ -258,6 +315,7 @@ export default function MyProfileScreen() {
     }
   };
 
+  // Just stages the picked image locally now — nothing is uploaded yet.
   const handleSelectPhoto = async () => {
     Alert.alert(i18n.t("profile.select_photo") || "Select Photo", "", [
       {
@@ -278,10 +336,7 @@ export default function MyProfileScreen() {
             quality: 0.8,
           });
           if (!result.canceled && result.assets?.length > 0) {
-            setPersonalData((prev) => ({
-              ...prev,
-              photoUrl: result.assets[0].uri,
-            }));
+            setPendingPhotoUri(result.assets[0].uri);
           }
         },
       },
@@ -304,10 +359,7 @@ export default function MyProfileScreen() {
             quality: 0.8,
           });
           if (!result.canceled && result.assets?.length > 0) {
-            setPersonalData((prev) => ({
-              ...prev,
-              photoUrl: result.assets[0].uri,
-            }));
+            setPendingPhotoUri(result.assets[0].uri);
           }
         },
       },
@@ -316,6 +368,62 @@ export default function MyProfileScreen() {
         style: "cancel",
       },
     ]);
+  };
+
+  // Photo has its own save call, independent of the personal-info form.
+  const handleSavePhoto = async () => {
+    if (!pendingPhotoUri) return;
+    try {
+      setPhotoSaving(true);
+      const token = await handleGetToken();
+      const MemberId = await AsyncStorage.getItem("MemberId");
+      if (!token || !MemberId) {
+        Alert.alert(i18n.t("profile.error"), i18n.t("profile.auth_error"));
+        return;
+      }
+
+      const form = new FormData();
+      form.append("id", MemberId);
+      const fileName = pendingPhotoUri.split("/").pop();
+      const fileExt = fileName?.split(".").pop()?.toLowerCase() ?? "jpg";
+      form.append("file", {
+        uri: pendingPhotoUri,
+        name: fileName ?? `photo.${fileExt}`,
+        type: `image/${fileExt === "jpg" ? "jpeg" : fileExt}`,
+      } as any);
+
+      const response = await fetch(
+        `https://gym.useitsmart.com/api/User/updateuser`,
+        {
+          method: "PUT",
+          headers: { accept: "*/*", Authorization: `Bearer ${token}` },
+          body: form,
+        },
+      );
+
+      const text = await response.text();
+      console.log("photo response:", response.status, text);
+
+      if (!response.ok) {
+        Alert.alert("❌ Update failed", text || "Unknown error");
+        return;
+      }
+
+      Alert.alert(
+        i18n.t("profile.success"),
+        i18n.t("profile.personal_updated"),
+      );
+      setPendingPhotoUri(null);
+      fetchUserProfile();
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to save photo");
+    } finally {
+      setPhotoSaving(false);
+    }
+  };
+
+  const handleCancelPhoto = () => {
+    setPendingPhotoUri(null);
   };
 
   const handleSaveSection = async (sectionKey: string) => {
@@ -327,30 +435,13 @@ export default function MyProfileScreen() {
         return;
       }
       if (sectionKey === "personal") {
+        // Text fields only — the photo now saves through its own call.
         const form = new FormData();
         form.append("id", MemberId);
         form.append("nameEn", personalData.nameEn || "");
         form.append("nameAr", personalData.nameAr || "");
         form.append("phoneNumber", personalData.phoneNumber || "");
-
-        // ✅ log BEFORE any processing
-        console.log("RAW photoUrl:", JSON.stringify(personalData.photoUrl));
-
-        if (personalData.photoUrl) {
-          const fileUri = personalData.photoUrl;
-          const fileName = fileUri.split("/").pop();
-          const fileExt = fileName?.split(".").pop()?.toLowerCase() ?? "jpg";
-
-          form.append("file", {
-            uri: fileUri,
-            name: fileName ?? `photo.${fileExt}`,
-            type: `image/${fileExt === "jpg" ? "jpeg" : fileExt}`,
-          } as any);
-        } else {
-          console.log("⚠️ No photo selected, skipping file append");
-        }
-
-        console.log("form parts:", form._parts);
+        form.append("Email", personalData.email || "");
 
         const response = await fetch(
           `https://gym.useitsmart.com/api/User/updateuser`,
@@ -419,60 +510,71 @@ export default function MyProfileScreen() {
     }
   };
 
-  // ─── Render field ─────────────────────────────────────────────────────────
+  // Small icon-per-field lookup — purely cosmetic, doesn't touch data flow.
+  const fieldIcon = (key: string): keyof typeof Ionicons.glyphMap => {
+    switch (key) {
+      case "nameEn":
+      case "nameAr":
+        return "person-outline";
+      case "email":
+        return "mail-outline";
+      case "phoneNumber":
+        return "call-outline";
+      case "age":
+        return "calendar-outline";
+      case "height":
+        return "resize-outline";
+      case "weight":
+        return "barbell-outline";
+      case "gender":
+        return "male-female-outline";
+      case "target":
+        return "flag-outline";
+      case "activity_level":
+        return "flash-outline";
+      case "training_days_per_week":
+        return "calendar-number-outline";
+      case "meals_per_day":
+        return "restaurant-outline";
+      case "notes":
+        return "document-text-outline";
+      default:
+        return "ellipse-outline";
+    }
+  };
+
+  // ─── Render field (iOS-settings-style list row, not a card-per-field) ─────
   const renderField = (
     label: string,
     key: string,
-    section: string,
-    type?: "date",
+    section: "personal" | "physical",
+    isLast: boolean,
   ) => {
-    const isDateField = type === "date";
-    const isReadOnly = section === "subscription";
     const value =
       section === "personal"
         ? (personalData as any)[key]
-        : section === "physical"
-          ? (physicalData as any)[key]
-          : (subscriptionData as any)[key];
+        : (physicalData as any)[key];
 
     const onChangeText = (text: string) => {
       if (section === "personal")
         setPersonalData((prev) => ({ ...prev, [key]: text }));
-      else if (section === "physical")
-        setPhysicalData((prev) => ({ ...prev, [key]: text }));
+      else setPhysicalData((prev) => ({ ...prev, [key]: text }));
     };
 
     return (
-      <View key={key} style={[s.row, rtl && s.rowRTL]}>
-        <Text style={[s.label, rtl && s.labelRTL]}>{label}</Text>
+      <View
+        key={key}
+        style={[s.listRow, !isLast && s.listRowDivider, rtl && s.listRowRTL]}
+      >
+        <View style={[s.listRowLeft, rtl && s.listRowLeftRTL]}>
+          <View style={s.listIconBadge}>
+            <Ionicons name={fieldIcon(key)} size={14} color={theme.accent} />
+          </View>
+          <Text style={[s.listLabel, rtl && s.listLabelRTL]}>{label}</Text>
+        </View>
 
-        {isEditing[section] && !isReadOnly ? (
-          isDateField ? (
-            <>
-              <TouchableOpacity
-                onPress={() => setShowDatePicker(true)}
-                style={[s.dateInput, rtl && s.dateInputRTL]}
-              >
-                <Text style={[s.dateText, rtl && s.dateTextRTL]}>
-                  {value || i18n.t("profile.select_date")}
-                </Text>
-                <Ionicons
-                  name="calendar-outline"
-                  size={18}
-                  color={Colors.primary}
-                />
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={value ? new Date(value) : new Date()}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  maximumDate={new Date()}
-                  onChange={handleDateChange}
-                />
-              )}
-            </>
-          ) : key === "activity_level" ? (
+        {isEditing[section] ? (
+          key === "activity_level" ? (
             <View style={[s.pickerContainer, rtl && s.pickerContainerRTL]}>
               <Picker
                 selectedValue={value}
@@ -519,22 +621,27 @@ export default function MyProfileScreen() {
               {[
                 { en: "Male", label: i18n.t("profile.male") },
                 { en: "Female", label: i18n.t("profile.female") },
-              ].map((item) => (
-                <TouchableOpacity
-                  key={item.en}
-                  style={[s.radioItem, rtl && s.radioItemRTL]}
-                  onPress={() =>
-                    setPhysicalData((prev) => ({ ...prev, gender: item.en }))
-                  }
-                >
-                  <View style={[s.radioCircle, rtl && s.radioCircleRTL]}>
-                    {value === item.en && <View style={s.radioSelected} />}
-                  </View>
-                  <Text style={[s.radioLabel, rtl && s.radioLabelRTL]}>
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              ].map((item) => {
+                const selected = value === item.en;
+                return (
+                  <TouchableOpacity
+                    key={item.en}
+                    style={[s.genderChip, selected && s.genderChipActive]}
+                    onPress={() =>
+                      setPhysicalData((prev) => ({ ...prev, gender: item.en }))
+                    }
+                  >
+                    <Text
+                      style={[
+                        s.genderChipLabel,
+                        selected && s.genderChipLabelActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ) : (
             <TextInput
@@ -542,55 +649,58 @@ export default function MyProfileScreen() {
               value={value}
               onChangeText={onChangeText}
               placeholder={i18n.t("profile.enter", { field: label })}
-              placeholderTextColor={theme.placeholder} // 👈
-              color={theme.ink} // 👈
+              placeholderTextColor={theme.placeholder}
+              color={theme.ink}
               textAlign={rtl ? "right" : "left"}
             />
           )
         ) : (
-          <Text style={[s.value, rtl && s.valueRTL]}>{value || "—"}</Text>
+          <Text style={[s.listValue, rtl && s.listValueRTL]}>
+            {value || "—"}
+          </Text>
         )}
       </View>
     );
   };
 
-  const profileSections = [
+  const personalFields = [
+    { label: i18n.t("profile.full_name"), key: "nameEn" },
+    { label: i18n.t("profile.arabic_name"), key: "nameAr" },
+    { label: i18n.t("profile.email"), key: "email" },
+    { label: i18n.t("profile.phone"), key: "phoneNumber" },
+  ];
+
+  const physicalFields = [
+    { label: i18n.t("profile.age"), key: "age" },
+    { label: i18n.t("profile.height"), key: "height" },
+    { label: i18n.t("profile.weight"), key: "weight" },
+    { label: i18n.t("profile.gender"), key: "gender" },
+    { label: i18n.t("profile.target"), key: "target" },
+    { label: i18n.t("profile.activity_level"), key: "activity_level" },
+    { label: i18n.t("profile.training_days"), key: "training_days_per_week" },
+    { label: i18n.t("profile.meals_per_day"), key: "meals_per_day" },
+    { label: i18n.t("profile.notes"), key: "notes" },
+  ];
+
+  const tabs: {
+    key: TabKey;
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+  }[] = [
     {
       key: "personal",
-      title: i18n.t("profile.personal_info"),
-      fields: [
-        { label: i18n.t("profile.full_name"), key: "nameEn" },
-        { label: i18n.t("profile.arabic_name"), key: "nameAr" },
-        { label: i18n.t("profile.email"), key: "email" },
-        { label: i18n.t("profile.phone"), key: "phoneNumber" },
-      ],
+      label: i18n.t("profile.personal_info"),
+      icon: "person-outline",
     },
     {
       key: "physical",
-      title: i18n.t("profile.health_info"),
-      fields: [
-        { label: i18n.t("profile.age"), key: "age" },
-        { label: i18n.t("profile.height"), key: "height" },
-        { label: i18n.t("profile.weight"), key: "weight" },
-        { label: i18n.t("profile.gender"), key: "gender" },
-        { label: i18n.t("profile.target"), key: "target" },
-        { label: i18n.t("profile.activity_level"), key: "activity_level" },
-        {
-          label: i18n.t("profile.training_days"),
-          key: "training_days_per_week",
-        },
-        { label: i18n.t("profile.meals_per_day"), key: "meals_per_day" },
-        { label: i18n.t("profile.notes"), key: "notes" },
-      ],
+      label: i18n.t("profile.health_info"),
+      icon: "barbell-outline",
     },
     {
       key: "subscription",
-      title: i18n.t("profile.subscription"),
-      fields: [
-        { label: i18n.t("profile.status"), key: "subscriptionStatus" },
-        { label: i18n.t("profile.start_date"), key: "startDate" },
-        { label: i18n.t("profile.expiry_date"), key: "expiryDate" },
-      ],
+      label: i18n.t("profile.subscription"),
+      icon: "card-outline",
     },
   ];
 
@@ -604,133 +714,365 @@ export default function MyProfileScreen() {
           backgroundColor: theme.bg,
         }}
       >
-        <Text style={{ textAlign: "center", color: theme.muted }}>
+        <ActivityIndicator color={theme.accent} size="large" />
+        <Text
+          style={{ textAlign: "center", color: theme.muted, marginTop: 12 }}
+        >
           {i18n.t("profile.loading")}
         </Text>
       </View>
     );
 
+  const isActive = subscriptionData.subscriptionStatus === "Active";
+
   return (
     <LinearGradient colors={[theme.bg, theme.bgEnd]} style={s.container}>
-      <ScrollView contentContainerStyle={s.scrollContainer}>
-        {/* Profile Header */}
-        <View style={s.headerSection}>
-          <TouchableOpacity onPress={handleSelectPhoto}>
-            <Image source={{ uri: personalData.photoUrl }} style={s.avatar} />
-            <View style={s.editIconContainer}>
-              <Ionicons name="camera" size={20} color="#fff" />
+      <SafeAreaView>
+        <ScrollView
+          contentContainerStyle={s.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Compact header — avatar + name only, details live in tabs below */}
+          <View style={s.headerSection}>
+            <View style={s.avatarRing}>
+              <TouchableOpacity
+                onPress={handleSelectPhoto}
+                disabled={photoSaving}
+              >
+                <Image
+                  source={{ uri: pendingPhotoUri || personalData.photoUrl }}
+                  style={s.avatar}
+                />
+                {!pendingPhotoUri && (
+                  <View style={s.editIconContainer}>
+                    <Ionicons name="camera" size={14} color={theme.accentInk} />
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-          <Text style={[s.name, rtl && s.nameRTL]}>
-            {rtl && personalData.nameAr
-              ? personalData.nameAr
-              : personalData.nameEn}
-          </Text>
-        </View>
 
-        {/* Sections */}
-        {profileSections.map((section) => (
-          <View key={section.key} style={s.card}>
-            <TouchableOpacity
-              style={[s.sectionHeader, rtl && s.sectionHeaderRTL]}
-              onPress={() => toggleSection(section.key)}
-            >
-              <Text style={[s.sectionTitle, rtl && s.sectionTitleRTL]}>
-                {section.title}
-              </Text>
-              <Ionicons
-                name={
-                  sections[section.key]
-                    ? "chevron-up-outline"
-                    : "chevron-down-outline"
-                }
-                size={20}
-                color={Colors.primary}
-              />
-            </TouchableOpacity>
+            <Text style={[s.name, rtl && s.nameRTL]}>
+              {rtl && personalData.nameAr
+                ? personalData.nameAr
+                : personalData.nameEn}
+            </Text>
 
-            {sections[section.key] &&
-              section.fields.map((field) =>
+            {/* Photo save/cancel — only appears once a new photo is staged */}
+            {pendingPhotoUri && (
+              <View style={[s.photoActions, rtl && s.photoActionsRTL]}>
+                <TouchableOpacity
+                  style={s.photoCancelButton}
+                  onPress={handleCancelPhoto}
+                  disabled={photoSaving}
+                >
+                  <Ionicons name="close" size={14} color={theme.muted} />
+                  <Text style={s.photoCancelText}>
+                    {i18n.t("profile.cancel")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={s.photoSaveButton}
+                  onPress={handleSavePhoto}
+                  disabled={photoSaving}
+                >
+                  {photoSaving ? (
+                    <ActivityIndicator size="small" color={theme.accentInk} />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="checkmark"
+                        size={14}
+                        color={theme.accentInk}
+                      />
+                      <Text style={s.photoSaveText}>
+                        {i18n.locale.startsWith("ar")
+                          ? "حفظ الصورة"
+                          : "Save Photo"}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Segmented tab switcher */}
+          <View style={[s.tabBar, rtl && s.tabBarRTL]}>
+            {tabs.map((tab) => {
+              const active = activeTab === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[s.tabItem, active && s.tabItemActive]}
+                  onPress={() => setActiveTab(tab.key)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons
+                    name={tab.icon}
+                    size={15}
+                    color={active ? theme.accentInk : theme.muted}
+                  />
+                  <Text style={[s.tabLabel, active && s.tabLabelActive]}>
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Personal tab */}
+          {activeTab === "personal" && (
+            <View style={s.panel}>
+              {personalFields.map((f, i) =>
                 renderField(
-                  field.label,
-                  field.key,
-                  section.key,
-                  (field as any).type,
+                  f.label,
+                  f.key,
+                  "personal",
+                  i === personalFields.length - 1,
                 ),
               )}
-
-            {section.key !== "subscription" && sections[section.key] && (
-              <>
-                <TouchableOpacity
-                  style={s.sectionButton}
-                  onPress={() => handleSaveSection(section.key)}
-                >
-                  <Text style={s.buttonText}>{i18n.t("profile.save")}</Text>
-                </TouchableOpacity>
-                {!isEditing[section.key] && (
+              <View style={[s.panelActions, rtl && s.panelActionsRTL]}>
+                {!isEditing.personal ? (
                   <TouchableOpacity
-                    style={s.sectionButton}
+                    style={s.outlineButton}
                     onPress={() =>
-                      setIsEditing((prev) => ({ ...prev, [section.key]: true }))
+                      setIsEditing((prev) => ({ ...prev, personal: true }))
                     }
                   >
-                    <Text style={s.buttonText}>
-                      {i18n.t("profile.edit", { section: section.title })}
+                    <Ionicons
+                      name="create-outline"
+                      size={16}
+                      color={theme.accent}
+                    />
+                    <Text style={s.outlineButtonText}>
+                      {i18n.t("profile.edit", {
+                        section: i18n.t("profile.personal_info"),
+                      })}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={s.solidButton}
+                    onPress={() => handleSaveSection("personal")}
+                  >
+                    <Ionicons
+                      name="checkmark-outline"
+                      size={16}
+                      color={theme.accentInk}
+                    />
+                    <Text style={s.solidButtonText}>
+                      {i18n.t("profile.save")}
                     </Text>
                   </TouchableOpacity>
                 )}
+              </View>
+            </View>
+          )}
+
+          {/* Health tab */}
+          {activeTab === "physical" && (
+            <View style={s.panel}>
+              <View style={[s.statGrid, rtl && s.statGridRTL]}>
+                {[
+                  {
+                    label: i18n.t("profile.age"),
+                    value: physicalData.age,
+                    icon: "calendar-outline",
+                  },
+                  {
+                    label: i18n.t("profile.height"),
+                    value: physicalData.height,
+                    unit: "cm",
+                    icon: "resize-outline",
+                  },
+                  {
+                    label: i18n.t("profile.weight"),
+                    value: physicalData.weight,
+                    unit: "kg",
+                    icon: "barbell-outline",
+                  },
+                ].map((stat) => (
+                  <View key={stat.label} style={s.statCard}>
+                    <Ionicons
+                      name={stat.icon as keyof typeof Ionicons.glyphMap}
+                      size={16}
+                      color={theme.accent}
+                    />
+                    <Text style={s.statValue}>
+                      {stat.value ? `${stat.value}${stat.unit || ""}` : "—"}
+                    </Text>
+                    <Text style={s.statLabel}>{stat.label}</Text>
+                  </View>
+                ))}
+              </View>
+              {physicalFields.map((f, i) =>
+                renderField(
+                  f.label,
+                  f.key,
+                  "physical",
+                  i === physicalFields.length - 1,
+                ),
+              )}
+              <View style={[s.panelActions, rtl && s.panelActionsRTL]}>
+                {!isEditing.physical ? (
+                  <TouchableOpacity
+                    style={s.outlineButton}
+                    onPress={() =>
+                      setIsEditing((prev) => ({ ...prev, physical: true }))
+                    }
+                  >
+                    <Ionicons
+                      name="create-outline"
+                      size={16}
+                      color={theme.accent}
+                    />
+                    <Text style={s.outlineButtonText}>
+                      {i18n.t("profile.edit", {
+                        section: i18n.t("profile.health_info"),
+                      })}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={s.solidButton}
+                    onPress={() => handleSaveSection("physical")}
+                  >
+                    <Ionicons
+                      name="checkmark-outline"
+                      size={16}
+                      color={theme.accentInk}
+                    />
+                    <Text style={s.solidButtonText}>
+                      {i18n.t("profile.save")}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Membership tab — an actual gym card, not a list */}
+          {activeTab === "subscription" && (
+            <View style={s.panel}>
+              <LinearGradient
+                colors={[theme.accentDeep, theme.accent]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.memberCard}
+              >
+                <View style={[s.memberCardTop, rtl && s.memberCardTopRTL]}>
+                  <View style={s.chipIcon}>
+                    <View style={s.chipLine} />
+                    <View style={s.chipLine} />
+                  </View>
+                  {/* <View
+                    style={[
+                      s.memberStatusPill,
+                      {
+                        backgroundColor: isActive
+                          ? "rgba(89,214,124,0.22)"
+                          : "rgba(255,95,95,0.22)",
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        s.statusDot,
+                        {
+                          backgroundColor: isActive
+                            ? theme.success
+                            : theme.danger,
+                        },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        s.memberStatusText,
+                        { color: isActive ? "#DFFCE6" : "#FFE1E1" },
+                      ]}
+                    >
+                      {subscriptionData.subscriptionStatus || "—"}
+                    </Text>
+                  </View> */}
+                </View>
+
+                <Text style={[s.memberCardName, rtl && s.memberCardNameRTL]}>
+                  {rtl && personalData.nameAr
+                    ? personalData.nameAr
+                    : personalData.nameEn}
+                </Text>
+
+                <View
+                  style={[s.memberCardBottom, rtl && s.memberCardBottomRTL]}
+                >
+                  <View>
+                    <Text style={s.memberCardCaption}>
+                      {i18n.t("profile.start_date")}
+                    </Text>
+                    <Text style={s.memberCardValue}>
+                      {subscriptionData.startDate || "—"}
+                    </Text>
+                  </View>
+                  <View
+                    style={
+                      rtl
+                        ? { alignItems: "flex-start" }
+                        : { alignItems: "flex-end" }
+                    }
+                  >
+                    <Text style={s.memberCardCaption}>
+                      {i18n.t("profile.expiry_date")}
+                    </Text>
+                    <Text style={s.memberCardValue}>
+                      {subscriptionData.expiryDate || "—"}
+                    </Text>
+                  </View>
+                </View>
+              </LinearGradient>
+            </View>
+          )}
+
+          {/* Generate Plan Button */}
+          <TouchableOpacity
+            style={s.generateButton}
+            onPress={handleGeneratePlan}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name="nutrition-outline"
+              size={18}
+              color={theme.accentInk}
+            />
+            <Text style={s.generateButtonText}>
+              {i18n.locale.startsWith("ar")
+                ? "إنشاء الخطة الغذائية"
+                : "Generate Plan"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Delete account — quiet, danger-outlined */}
+          <TouchableOpacity
+            onPress={handleDeleteAccount}
+            style={s.deleteButton}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={theme.danger} />
+            ) : (
+              <>
+                <Ionicons name="trash-outline" size={16} color={theme.danger} />
+                <Text style={s.deleteButtonText}>Delete Account</Text>
               </>
             )}
-          </View>
-        ))}
-
-        {/* Generate Plan Button */}
-        <TouchableOpacity style={s.generateButton} onPress={handleGeneratePlan}>
-          <Text style={s.generateButtonText}>
-            {i18n.locale.startsWith("ar")
-              ? "إنشاء الخطة الغذائية"
-              : "Generate Plan"}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handleDeleteAccount}
-          style={{
-            backgroundColor: "#E53935",
-            paddingVertical: 14,
-            borderRadius: 12,
-            alignItems: "center",
-            marginHorizontal: 20,
-            marginTop: 20,
-          }}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text
-              style={{
-                color: "#fff",
-                fontSize: 16,
-                fontWeight: "600",
-              }}
-            >
-              Delete Account
-            </Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
 
       {/* Diet Plan Modal */}
       <Modal visible={planModalVisible} animationType="slide" transparent>
         <View style={s.modalOverlay}>
           <View style={s.modalBox}>
-            <TouchableOpacity
-              onPress={() => setPlanModalVisible(false)}
-              style={{ alignSelf: "flex-end" }}
-            >
-              <Text style={{ fontSize: 18, color: theme.ink }}>✕</Text>
-            </TouchableOpacity>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={[s.modalHeader, rtl && s.modalHeaderRTL]}>
               <Text
                 style={[
                   s.modalTitle,
@@ -741,10 +1083,22 @@ export default function MyProfileScreen() {
               >
                 {i18n.locale.startsWith("ar") ? "الخطة الغذائية" : "Diet Plan"}
               </Text>
+              <TouchableOpacity
+                onPress={() => setPlanModalVisible(false)}
+                style={s.modalCloseButton}
+              >
+                <Ionicons name="close" size={18} color={theme.ink} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
               {loadingPlan ? (
-                <ActivityIndicator size="large" color={Colors.primary} />
+                <ActivityIndicator
+                  size="large"
+                  color={theme.accent}
+                  style={{ marginTop: 20 }}
+                />
               ) : dietPlan ? (
-                renderDietPlan(dietPlan, theme) // 👈 pass theme
+                renderDietPlan(dietPlan, theme)
               ) : (
                 <Text style={{ textAlign: "center", color: theme.muted }}>
                   No data
@@ -769,9 +1123,9 @@ const renderDietPlan = (plan: any, theme: ReturnType<typeof getTheme>) => {
       <Text
         style={{
           fontSize: 20,
-          fontWeight: "bold",
-          color: Colors.primary,
-          marginBottom: 10,
+          fontWeight: "800",
+          color: theme.accent,
+          marginBottom: 6,
           textAlign: isAr ? "right" : "left",
         }}
       >
@@ -781,20 +1135,31 @@ const renderDietPlan = (plan: any, theme: ReturnType<typeof getTheme>) => {
         style={{
           fontSize: 14,
           color: theme.muted,
-          marginBottom: 15,
+          marginBottom: 18,
+          lineHeight: 20,
           textAlign: isAr ? "right" : "left",
         }}
       >
         {chart.summary}
       </Text>
       {chart.points.map((section: any, index: number) => (
-        <View key={index} style={{ marginBottom: 15 }}>
+        <View
+          key={index}
+          style={{
+            marginBottom: 14,
+            backgroundColor: theme.surfaceRaised,
+            borderRadius: 14,
+            padding: 14,
+            borderWidth: 1,
+            borderColor: theme.border,
+          }}
+        >
           <Text
             style={{
-              fontSize: 16,
-              fontWeight: "bold",
-              color: Colors.primary,
-              marginBottom: 6,
+              fontSize: 15,
+              fontWeight: "700",
+              color: theme.accent,
+              marginBottom: 8,
               textAlign: isAr ? "right" : "left",
             }}
           >
@@ -802,17 +1167,36 @@ const renderDietPlan = (plan: any, theme: ReturnType<typeof getTheme>) => {
           </Text>
           {section.items.length > 0 ? (
             section.items.map((item: string, i: number) => (
-              <Text
+              <View
                 key={i}
                 style={{
-                  fontSize: 14,
-                  color: theme.dietText,
-                  marginBottom: 4,
-                  textAlign: isAr ? "right" : "left",
+                  flexDirection: isAr ? "row-reverse" : "row",
+                  alignItems: "flex-start",
+                  marginBottom: 6,
                 }}
               >
-                • {item}
-              </Text>
+                <View
+                  style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: 3,
+                    backgroundColor: theme.accent,
+                    marginTop: 7,
+                    marginHorizontal: 8,
+                  }}
+                />
+                <Text
+                  style={{
+                    fontSize: 14,
+                    color: theme.dietText,
+                    flex: 1,
+                    lineHeight: 20,
+                    textAlign: isAr ? "right" : "left",
+                  }}
+                >
+                  {item}
+                </Text>
+              </View>
             ))
           ) : (
             <Text
@@ -836,144 +1220,323 @@ const renderDietPlan = (plan: any, theme: ReturnType<typeof getTheme>) => {
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
     container: { flex: 1 },
-    scrollContainer: { padding: 20 },
-    headerSection: { alignItems: "center", marginBottom: 20 },
-    avatar: {
-      width: 120,
-      height: 120,
+    scrollContainer: { padding: 20, paddingBottom: 40 },
+
+    headerSection: { alignItems: "center", marginBottom: 18 },
+    avatarRing: {
+      padding: 4,
       borderRadius: 60,
-      borderWidth: 3,
-      borderColor: Colors.primary,
+      borderWidth: 2,
+      borderColor: theme.accent,
+    },
+    avatar: {
+      width: 96,
+      height: 96,
+      borderRadius: 48,
+      backgroundColor: theme.surface,
     },
     editIconContainer: {
       position: "absolute",
-      bottom: 0,
-      right: 0,
-      backgroundColor: Colors.primary,
-      borderRadius: 20,
+      bottom: 2,
+      right: 2,
+      backgroundColor: theme.accent,
+      borderRadius: 14,
       padding: 6,
       borderWidth: 2,
-      borderColor: "#fff",
+      borderColor: theme.bg,
     },
-    name: {
-      fontSize: 22,
-      fontWeight: "700",
-      color: Colors.primary,
+    name: { fontSize: 20, fontWeight: "800", color: theme.ink, marginTop: 12 },
+    nameRTL: { textAlign: "center", writingDirection: "rtl" },
+
+    photoActions: {
+      flexDirection: "row",
+      gap: 8,
       marginTop: 10,
     },
-    nameRTL: { textAlign: "center", writingDirection: "rtl" },
-    card: {
-      backgroundColor: theme.surface, // 👈
-      borderRadius: 16,
-      padding: 12,
-      marginBottom: 15,
-      shadowColor: "#000",
-      shadowOpacity: 0.1,
-      shadowRadius: 5,
-      elevation: 3,
-    },
-    sectionHeader: {
+    photoActionsRTL: { flexDirection: "row-reverse" },
+    photoCancelButton: {
       flexDirection: "row",
-      justifyContent: "space-between",
       alignItems: "center",
-      paddingVertical: 8,
+      gap: 4,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
     },
-    sectionHeaderRTL: { flexDirection: "row-reverse" },
-    sectionTitle: { fontSize: 16, fontWeight: "700", color: Colors.primary },
-    sectionTitleRTL: { textAlign: "right" },
-    row: { flexDirection: "column", marginBottom: 12 },
-    rowRTL: {},
-    label: { fontSize: 14, color: theme.muted, marginBottom: 4 }, // 👈
-    labelRTL: { textAlign: "right" },
-    value: { fontSize: 15, fontWeight: "600", color: theme.ink }, // 👈
-    valueRTL: { textAlign: "right", writingDirection: "rtl" },
+    photoCancelText: { fontSize: 12, fontWeight: "600", color: theme.muted },
+    photoSaveButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+      borderRadius: 16,
+      backgroundColor: theme.accent,
+    },
+    photoSaveText: { fontSize: 12, fontWeight: "700", color: theme.accentInk },
+
+    tabBar: {
+      flexDirection: "row",
+      backgroundColor: theme.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 4,
+      marginBottom: 16,
+      gap: 4,
+    },
+    tabBarRTL: { flexDirection: "row-reverse" },
+    tabItem: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+      paddingVertical: 9,
+      borderRadius: 12,
+    },
+    tabItemActive: { backgroundColor: theme.accent },
+    tabLabel: { fontSize: 11.5, fontWeight: "700", color: theme.muted },
+    tabLabelActive: { color: theme.accentInk },
+
+    panel: {
+      backgroundColor: theme.surface,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 16,
+      marginBottom: 14,
+    },
+
+    listRow: { flexDirection: "column", paddingVertical: 12 },
+    listRowRTL: {},
+    listRowDivider: { borderBottomWidth: 1, borderBottomColor: theme.border },
+    listRowLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 6,
+    },
+    listRowLeftRTL: { flexDirection: "row-reverse" },
+    listIconBadge: {
+      width: 24,
+      height: 24,
+      borderRadius: 8,
+      backgroundColor: "rgba(232,116,42,0.12)",
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 8,
+    },
+    listLabel: { fontSize: 12.5, color: theme.muted, fontWeight: "600" },
+    listLabelRTL: { textAlign: "right" },
+    listValue: { fontSize: 15, fontWeight: "600", color: theme.ink },
+    listValueRTL: { textAlign: "right", writingDirection: "rtl" },
+
     input: {
       borderWidth: 1,
-      borderColor: theme.border, // 👈
-      borderRadius: 10,
-      padding: 8,
+      borderColor: theme.border,
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
       fontSize: 14,
-      backgroundColor: theme.inputBg, // 👈
-      color: theme.ink, // 👈
+      backgroundColor: theme.inputBg,
+      color: theme.ink,
     },
     inputRTL: { textAlign: "right", writingDirection: "rtl" },
-    dateInput: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      borderWidth: 1,
-      borderColor: theme.border, // 👈
-      borderRadius: 10,
-      padding: 10,
-      backgroundColor: theme.inputBg, // 👈
-    },
-    dateInputRTL: { flexDirection: "row-reverse" },
-    dateText: { fontSize: 14, color: theme.ink }, // 👈
-    dateTextRTL: { textAlign: "right" },
+
     pickerContainer: {
       borderWidth: 1,
-      borderColor: theme.border, // 👈
-      borderRadius: 10,
+      borderColor: theme.border,
+      borderRadius: 12,
       overflow: "hidden",
-      backgroundColor: theme.inputBg, // 👈
+      backgroundColor: theme.inputBg,
     },
     pickerContainerRTL: {},
-    radioContainer: { flexDirection: "row", gap: 15 },
+
+    radioContainer: { flexDirection: "row", gap: 10 },
     radioContainerRTL: { flexDirection: "row-reverse" },
-    radioItem: { flexDirection: "row", alignItems: "center" },
-    radioItemRTL: { flexDirection: "row-reverse" },
-    radioCircle: {
-      height: 20,
-      width: 20,
-      borderRadius: 10,
-      borderWidth: 2,
-      borderColor: Colors.primary,
+    genderChip: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.inputBg,
+      alignItems: "center",
+    },
+    genderChipActive: {
+      backgroundColor: theme.accent,
+      borderColor: theme.accent,
+    },
+    genderChipLabel: { fontSize: 14, fontWeight: "600", color: theme.ink },
+    genderChipLabelActive: { color: theme.accentInk },
+
+    statGrid: { flexDirection: "row", gap: 10, marginBottom: 14 },
+    statGridRTL: { flexDirection: "row-reverse" },
+    statCard: {
+      flex: 1,
+      backgroundColor: theme.surfaceRaised,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingVertical: 12,
+      alignItems: "center",
+      gap: 4,
+    },
+    statValue: { fontSize: 15, fontWeight: "800", color: theme.ink },
+    statLabel: { fontSize: 10.5, color: theme.muted },
+
+    panelActions: { flexDirection: "row", marginTop: 12 },
+    panelActionsRTL: { flexDirection: "row-reverse" },
+    outlineButton: {
+      flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      marginRight: 6,
-    },
-    radioCircleRTL: { marginRight: 0, marginLeft: 6 },
-    radioSelected: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      backgroundColor: Colors.primary,
-    },
-    radioLabel: { fontSize: 14, color: theme.ink }, // 👈
-    radioLabelRTL: { textAlign: "right" },
-    sectionButton: {
-      backgroundColor: Colors.primary,
+      gap: 6,
+      borderWidth: 1.5,
+      borderColor: theme.accent,
       paddingVertical: 10,
       borderRadius: 20,
-      alignItems: "center",
-      marginTop: 10,
+      flex: 1,
     },
-    buttonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+    outlineButtonText: { color: theme.accent, fontSize: 14, fontWeight: "700" },
+    solidButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      backgroundColor: theme.accent,
+      paddingVertical: 10,
+      borderRadius: 20,
+      flex: 1,
+    },
+    solidButtonText: {
+      color: theme.accentInk,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+
+    // Membership card — the signature element
+    memberCard: {
+      borderRadius: 20,
+      padding: 18,
+      minHeight: 160,
+      justifyContent: "space-between",
+    },
+    memberCardTop: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+    },
+    memberCardTopRTL: { flexDirection: "row-reverse" },
+    chipIcon: {
+      width: 34,
+      height: 24,
+      borderRadius: 5,
+      backgroundColor: "rgba(0,0,0,0.25)",
+      justifyContent: "center",
+      paddingHorizontal: 6,
+      gap: 3,
+    },
+    chipLine: {
+      height: 2,
+      borderRadius: 1,
+      backgroundColor: "rgba(255,255,255,0.5)",
+    },
+    memberStatusPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 20,
+    },
+    statusDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
+    memberStatusText: { fontSize: 11, fontWeight: "700" },
+    memberCardName: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: "#FFF8F0",
+      marginVertical: 14,
+      letterSpacing: 0.3,
+    },
+    memberCardNameRTL: { textAlign: "right", writingDirection: "rtl" },
+    memberCardBottom: { flexDirection: "row", justifyContent: "space-between" },
+    memberCardBottomRTL: { flexDirection: "row-reverse" },
+    memberCardCaption: {
+      fontSize: 10,
+      color: "rgba(255,255,255,0.7)",
+      fontWeight: "600",
+      marginBottom: 3,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    memberCardValue: { fontSize: 14, color: "#FFF8F0", fontWeight: "700" },
+
     generateButton: {
-      backgroundColor: Colors.primary,
-      paddingVertical: 14,
-      borderRadius: 25,
+      flexDirection: "row",
       alignItems: "center",
-      marginTop: 20,
-      marginBottom: 30,
+      justifyContent: "center",
+      gap: 8,
+      backgroundColor: theme.accent,
+      paddingVertical: 15,
+      borderRadius: 26,
+      marginTop: 8,
+      marginBottom: 14,
+      shadowColor: theme.accent,
+      shadowOpacity: 0.35,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4,
     },
-    generateButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+    generateButtonText: {
+      color: theme.accentInk,
+      fontSize: 16,
+      fontWeight: "800",
+    },
+
+    deleteButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingVertical: 13,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: "rgba(255,95,95,0.35)",
+    },
+    deleteButtonText: {
+      color: theme.danger,
+      fontSize: 14.5,
+      fontWeight: "700",
+    },
+
     modalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.5)",
-      justifyContent: "center",
+      backgroundColor: "rgba(0,0,0,0.6)",
+      justifyContent: "flex-end",
     },
     modalBox: {
-      backgroundColor: theme.modalBg, // 👈
-      margin: 20,
-      borderRadius: 20,
+      backgroundColor: theme.modalBg,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
       padding: 20,
-      maxHeight: "80%",
+      maxHeight: "85%",
     },
-    modalTitle: {
-      fontSize: 18,
-      fontWeight: "bold",
-      marginBottom: 15,
-      color: theme.ink, // 👈
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
     },
+    modalHeaderRTL: { flexDirection: "row-reverse" },
+    modalCloseButton: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: theme.surfaceRaised,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalTitle: { fontSize: 19, fontWeight: "800", color: theme.ink },
   });

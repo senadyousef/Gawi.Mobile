@@ -291,6 +291,7 @@ export interface IcartItem {
   billId: number;
   quantity: number;
   item: IshopItem;
+  
 }
 
 export interface Inotification {

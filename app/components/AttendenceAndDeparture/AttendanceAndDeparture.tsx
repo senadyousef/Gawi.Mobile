@@ -136,7 +136,6 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
     } else {
       fetchQRInfo(data);
     }
-    setTimeout(() => setScanned(false), 2000);
   };
 
   const resetScanner = () => {
@@ -189,11 +188,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
           )}
 
           {/* 👇 Pass dark mode color to HTML renderer */}
-          <HtmlRenderer
-            html={qrBody}
-            theme={theme}
-            
-          />
+          <HtmlRenderer html={qrBody} theme={theme} />
 
           <TouchableOpacity
             style={[s.primaryButton, { marginTop: 24 }]}

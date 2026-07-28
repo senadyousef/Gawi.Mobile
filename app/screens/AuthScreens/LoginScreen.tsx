@@ -46,6 +46,7 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { IUserProfile } from "../../api/profile";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const LOCALE = "locale";
 
@@ -313,7 +314,7 @@ const LoginScreen = () => {
 
   return (
     <KeyboardAvoidingView style={{ height }}>
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <Image
           style={styles.background}
           source={require("../../assets/images/auth-screens-image.png")}
@@ -517,7 +518,7 @@ const LoginScreen = () => {
         </Modal>
 
         <StatusBar style="light" />
-      </View>
+      </SafeAreaView>
     </KeyboardAvoidingView>
   );
 };

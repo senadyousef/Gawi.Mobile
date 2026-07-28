@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   Text,
   Alert,
+  Modal,
+  View,
+  TextInput,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -65,7 +68,8 @@ const ProductDetailsScreen: React.FC<
   const [productDetails, setProductDetails] = React.useState<IshopItem>();
   const [isLoading, setIsLoading] = React.useState(false);
   const [isAddToCartLoading, setIsAddToCartLoading] = React.useState(false);
-
+  const [showCartModal, setShowCartModal] = React.useState(false);
+  const [cartNote, setCartNote] = React.useState("");
   React.useEffect(() => {
     if (!productId) return;
     (async () => {
@@ -96,6 +100,7 @@ const ProductDetailsScreen: React.FC<
 
   const handleAddToCart = async () => {
     if (!productDetails?.id) return;
+
     if (guestMode) {
       setShouldShowSignUp(true);
       setGuestMode(false);
@@ -106,19 +111,40 @@ const ProductDetailsScreen: React.FC<
       }, 200);
       return;
     }
+
     if (!userProfile) return;
+
     try {
       setIsAddToCartLoading(true);
+
       const token = await handleGetToken();
       if (!token) throw new Error("No authentication token found");
+
       const qty = quantity || 1;
-      const url = `https://gym.useitsmart.com/api/Cart/addToCart?itemsId=${productDetails.id}&quantity=${qty}`;
+
+      // Get note from your state or TextInput
+      const note = cartNote?.trim() ?? "";
+
+      const url =
+        `http://192.168.1.16/api/Cart/addToCart` +
+        `?itemsId=${productDetails.id}` +
+        `&quantity=${qty}` +
+        `&note=${encodeURIComponent(note)}`;
+
       const res = await fetch(url, {
         method: "POST",
-        headers: { Accept: "text/plain", Authorization: `Bearer ${token}` },
-        body: null,
+        headers: {
+          Accept: "text/plain",
+          Authorization: `Bearer ${token}`,
+        },
+        body: "",
       });
-      if (!res.ok) throw new Error(`Failed to add to cart: ${res.status}`);
+
+      if (!res.ok) {
+        throw new Error(`Failed to add to cart: ${res.status}`);
+      }
+      setShowCartModal(false);
+      setCartNote("");
 
       fetchCartItems(userProfile.id);
       Alert.alert(i18n.t("success"), i18n.t("added_to_cart"));
@@ -225,7 +251,7 @@ const ProductDetailsScreen: React.FC<
           {!isGymStore && (
             <RNView style={{ gap: 8, paddingTop: 16, paddingBottom: 25 }}>
               <TouchableOpacity
-                onPress={handleAddToCart}
+                onPress={() => setShowCartModal(true)}
                 disabled={isAddToCartLoading}
               >
                 <Text style={s.cartButtonText}>{i18n.t("add_to_cart")}</Text>
@@ -249,6 +275,63 @@ const ProductDetailsScreen: React.FC<
         </RNView>
       </ScrollView>
       <StatusBar style={isDarkMode ? "light" : "dark"} /> {/* 👈 */}
+      <Modal
+        visible={showCartModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCartModal(false)}
+      >
+        <View style={s.overlay}>
+          <View style={s.modalContainer}>
+            <Text style={s.title}>Add to Cart</Text>
+
+            <Image source={{ uri: `https://gym.useitsmart.com/${imageUrl}` }} style={s.productImage} />
+
+            <Text style={s.productName}>
+              {handleGetLocalizedField("nameEn", "nameAr", productDetails)}
+            </Text>
+
+            <Text style={s.price}>{productDetails.price} JOD</Text>
+
+            <View style={s.quantityRow}>
+              <TouchableOpacity onPress={handleDecreaseQuantity}>
+                <MaterialCommunityIcons name="minus" size={22} />
+              </TouchableOpacity>
+
+              <Text>{quantity}</Text>
+
+              <TouchableOpacity onPress={handleIncreaseQuantity}>
+                <MaterialCommunityIcons name="plus" size={22} />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              placeholder="Add a note..."
+              value={cartNote}
+              onChangeText={setCartNote}
+              multiline
+              style={s.noteInput}
+            />
+
+            <Text style={s.total}>
+              Total: {(productDetails.price * quantity).toFixed(2)} JOD
+            </Text>
+
+            <View style={s.buttons}>
+              <TouchableOpacity
+                onPress={() => setShowCartModal(false)}
+                style={s.cancelBtn}
+              >
+                <Text>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={s.addBtn} onPress={handleAddToCart}>
+                <Text style={{ color: "#fff" }}>Add to Cart</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </RNView>
   );
 };
@@ -258,6 +341,137 @@ export default ProductDetailsScreen;
 // ─── Styles factory ───────────────────────────────────────────────────────────
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
+    overlay: {
+      flex: 1,
+      justifyContent: "flex-end",
+      backgroundColor: "rgba(0,0,0,0.45)",
+    },
+
+    modalContainer: {
+      backgroundColor: theme.bg,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingHorizontal: 20,
+      paddingTop: 24,
+      paddingBottom: 35,
+    },
+
+    title: {
+      fontSize: 22,
+      fontFamily: "SF-Bold",
+      color: theme.ink,
+      textAlign: "center",
+      marginBottom: 20,
+    },
+
+    productImage: {
+      width: 130,
+      height: 130,
+      borderRadius: 18,
+      alignSelf: "center",
+      backgroundColor: "#F5F5F5",
+      marginBottom: 18,
+    },
+
+    productName: {
+      fontSize: 18,
+      fontFamily: "SF-Semibold",
+      color: theme.ink,
+      textAlign: "center",
+      marginBottom: 6,
+    },
+
+    price: {
+      fontSize: 22,
+      fontFamily: "SF-Bold",
+      color: Colors.primary,
+      textAlign: "center",
+      marginBottom: 25,
+    },
+
+    quantityRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 22,
+      gap: 18,
+    },
+
+    quantityButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor: theme.iconBg,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+
+    quantityText: {
+      fontSize: 20,
+      fontFamily: "SF-Bold",
+      color: theme.ink,
+      minWidth: 35,
+      textAlign: "center",
+    },
+
+    noteInput: {
+      minHeight: 90,
+      borderWidth: 1,
+      borderColor: Colors.borderGray,
+      borderRadius: 16,
+      backgroundColor: theme.bg,
+      color: theme.ink,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      textAlignVertical: "top",
+      fontFamily: "SF-Regular",
+      fontSize: 15,
+      marginBottom: 22,
+    },
+
+    total: {
+      fontSize: 20,
+      fontFamily: "SF-Bold",
+      color: Colors.primary,
+      textAlign: "center",
+      marginBottom: 28,
+    },
+
+    buttons: {
+      flexDirection: "row",
+      gap: 12,
+    },
+
+    cancelBtn: {
+      flex: 1,
+      height: 52,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: Colors.primary,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+
+    cancelText: {
+      fontSize: 16,
+      fontFamily: "SF-Semibold",
+      color: Colors.primary,
+    },
+
+    addBtn: {
+      flex: 1,
+      height: 52,
+      borderRadius: 14,
+      backgroundColor: Colors.primary,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+
+    addText: {
+      fontSize: 16,
+      fontFamily: "SF-Semibold",
+      color: Colors.white,
+    },
     container: {
       flex: 1,
       margin: 16,

@@ -60,7 +60,7 @@ const CartScreen: React.FC = () => {
       }
       const token = await handleGetToken();
       const res = await fetch(
-        `https://gym.useitsmart.com/api/Cart/getCartWithItems?cartId=${cartId}`,
+        `http://192.168.1.16/api/Cart/getCartWithItems?cartId=${cartId}`,
         {
           method: "GET",
           headers: {

@@ -455,11 +455,17 @@ export default {
 
     edit: "تعديل {{section}}",
     save: "حفظ التغييرات",
-
-    success: "تم",
+    delete_account: "حذف الحساب",
+    delete_account_confirmation: "هل أنت متأكد من أنك تريد حذف حسابك نهائيًا؟",
+    delete: "حذف",
+    error: "خطأ",
+    success: "تم بنجاح",
+    member_not_found: "لم يتم العثور على معرف العضو.",
+    delete_failed: "فشل في حذف الحساب.",
+    account_deleted: "تم حذف حسابك بنجاح.",
+    unable_delete_account: "تعذر حذف حسابك.",
     personal_updated: "تم تحديث المعلومات الشخصية بنجاح",
 
-    error: "خطأ",
     load_error: "تعذر تحميل بيانات الملف الشخصي",
     permission_required: "إذن مطلوب",
     gallery_permission: "نحتاج إلى إذن للوصول إلى معرض الصور.",
