@@ -72,12 +72,10 @@ const ProfileInfoSection = () => {
             <View style={{ alignItems: "flex-start" }}>
               <Text style={s.name}>
                 {i18n.locale?.startsWith("ar")
-                  ? profile?.nameAr
+                  ? profile?.nameAr || "زائر"
                   : profile?.nameEn || "Guest"}
               </Text>
-              <Text style={s.email}>
-                {userProfile?.email || "guest@example.com"}
-              </Text>
+              <Text style={s.email}>{userProfile?.email}</Text>
             </View>
           </View>
         </View>

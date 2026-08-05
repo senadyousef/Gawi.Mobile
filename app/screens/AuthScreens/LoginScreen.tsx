@@ -102,7 +102,8 @@ const LoginScreen = () => {
       }
     })();
   }, []);
-
+  
+  
   // const handleAutoFill = () => {
   //   Alert.alert("Auto Fill", "Choose account", [
   //     {
@@ -197,6 +198,8 @@ const LoginScreen = () => {
       // 6️⃣ Save to context
       setUserProfile(userProfile);
       setIsAuthenticated(true);
+      await AsyncStorage.setItem("USER_PROFILE", JSON.stringify(userProfile));
+      await AsyncStorage.setItem("IS_AUTHENTICATED", "true");
 
       // 7️⃣ Remember me
       if (isRememberMe) {
@@ -338,7 +341,7 @@ const LoginScreen = () => {
 
         <Image
           style={styles.logo}
-          source={require("../../assets/images/Gawi.png")}
+          source={require("../../assets/images/MuscleUpLogoColored.png")}
         />
         {/* <View style={{backgroundColor:"#ff0000ff" , padding:30 , width:"100%"}}>
             <Text style={{color:"#fff"}}> {isDevice?"true":"false" }</Text>

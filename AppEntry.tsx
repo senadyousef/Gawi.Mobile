@@ -133,6 +133,7 @@ export default function AppEntry() {
   }
 
   return (
+    
     <Navigation
       ref={navigationRef}
       onReady={() => setNavReady(true)}

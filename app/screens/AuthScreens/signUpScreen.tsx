@@ -138,7 +138,7 @@ const SignUpScreen = () => {
 
         <Image
           style={styles.logo}
-          source={require("../../assets/images/Gawi.png")}
+          source={require("../../assets/images/MuscleUpLogoColored.png")}
         />
 
         <RNView

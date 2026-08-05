@@ -15,6 +15,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
+import { navigate as navigateGlobal } from "../context/RootNavigation";
 
 import i18n from "../localization";
 import Colors from "../constants/Colors";
@@ -105,10 +106,9 @@ const ProductDetailsScreen: React.FC<
       setShouldShowSignUp(true);
       setGuestMode(false);
       setIsAuthenticated(false);
-      setTimeout(() => {
-        const rootNav = navigation.getParent()?.getParent();
-        rootNav?.navigate("SignUp");
-      }, 200);
+      requestAnimationFrame(() => {
+        navigateGlobal("SignUp");
+      });
       return;
     }
 
@@ -126,7 +126,7 @@ const ProductDetailsScreen: React.FC<
       const note = cartNote?.trim() ?? "";
 
       const url =
-        `http://192.168.1.16/api/Cart/addToCart` +
+        `https://gym.useitsmart.com/api/Cart/addToCart` +
         `?itemsId=${productDetails.id}` +
         `&quantity=${qty}` +
         `&note=${encodeURIComponent(note)}`;
@@ -285,7 +285,10 @@ const ProductDetailsScreen: React.FC<
           <View style={s.modalContainer}>
             <Text style={s.title}>Add to Cart</Text>
 
-            <Image source={{ uri: `https://gym.useitsmart.com/${imageUrl}` }} style={s.productImage} />
+            <Image
+              source={{ uri: `https://gym.useitsmart.com/${imageUrl}` }}
+              style={s.productImage}
+            />
 
             <Text style={s.productName}>
               {handleGetLocalizedField("nameEn", "nameAr", productDetails)}

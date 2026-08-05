@@ -2,14 +2,14 @@
   "expo": {
     "name": "Gawi",
     "slug": "Gym",
-    "scheme": "Gym",
-    "version": "1.0.6",
+    "scheme": "gym",
+    "version": "1.0.7",
     "orientation": "portrait",
-    "icon": "./app/assets/images/Gawi.png",
+    "icon": "./app/assets/images/MuscleUpLogoColored.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./app/assets/images/Gawi.png",
+      "image": "./app/assets/images/MuscleUpLogoColored.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -22,9 +22,9 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./app/assets/images/Gawi.png",
+        "foregroundImage": "./app/assets/images/MuscleUpLogoColored.png",
         "backgroundColor": "#ffffff",
-        "backgroundImage": "./app/assets/images/Gawi.png"
+        "backgroundImage": "./app/assets/images/MuscleUpLogoColored.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

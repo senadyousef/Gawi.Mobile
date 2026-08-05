@@ -37,7 +37,7 @@ const GetStartedScreen = () => {
       />
       <Image
         style={styles.logo}
-        source={require('../../assets/images/Gawi.png')}
+        source={require('../../assets/images/MuscleUpLogoColored.png')}
       />
       <RNView style={styles.textWrapper}>
         <Text style={styles.thinText}>{i18n.t('welcome_to')}</Text>

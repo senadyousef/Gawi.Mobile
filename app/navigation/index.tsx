@@ -94,6 +94,7 @@ import {
 import MenuPtScreen from "../screens/MenuPtScreen";
 import { useI18n } from "../hooks/useI18n";
 import VerifyCodeScreen from "../screens/AuthScreens/VerificationCodeScreen";
+import SplashScreen from "../screens/SplashScreen";
 
 // ✅ Navigation Creators
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -877,14 +878,30 @@ function DrawerNavigator() {
 // ✅ Root Stack
 function RootNavigator({ isFirstTime }: { isFirstTime: boolean }) {
   const { navigate } = useNavigation();
-  const { totalCartItems, isAuthenticated, guestMode, userType } =
-    useAppContext();
-
+  const {
+    totalCartItems,
+    isAuthenticated,
+    guestMode,
+    userType,
+    isInitializing,
+  } = useAppContext();
+  if (isInitializing) {
+    return (
+      <SplashScreen
+        setIsAnimationFinished={function (
+          value: React.SetStateAction<boolean>,
+        ): void {
+          throw new Error("Function not implemented.");
+        }}
+      />
+    );
+  }
   // Determine initial route based on authentication and user type
   const getInitialRouteName = () => {
     if (!isAuthenticated && !guestMode) {
-      return "GetStarted";
+      return "Login";
     }
+
     return userType === "PT" ? "PTRoot" : "Root";
   };
 

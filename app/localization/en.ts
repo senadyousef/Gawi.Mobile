@@ -76,7 +76,7 @@ export default {
   gallery_title: "Gallery",
   off: "Off",
   audience_title: "Audience",
-  gym_store_title: "Gym store",
+  gym_store_title: "store",
 
   // Shop Screen
   search_in_shop: "Search in shop",

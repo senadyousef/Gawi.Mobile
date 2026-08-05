@@ -27,16 +27,19 @@ interface Iprops {
   expoPushToken?: string | null;
 }
 
-// Update the context interface to include userType
 interface IExtendedContext extends Icontext {
   expoPushToken?: string | null;
   cartId?: number | null;
   setCartId?: (id: number | null) => void;
-  userType?: "PT" | "GymMember" | null; // 👈 Add userType
+  userType?: "PT" | "GymMember" | null;
   isDarkMode?: boolean;
-  
-  setUserType?: (type: "pt" | "member" | null) => void; // 👈 Add setUserType
+  setUserType?: (type: "pt" | "member" | null) => void;
+
+  // 👇 NEW
+  authIntent?: "signup" | "login" | null;
+  setAuthIntent?: (intent: "signup" | "login" | null) => void;
 }
+
 const Context = React.createContext<IExtendedContext>({
   bookedEvents: {},
   totalCartItems: 0,
@@ -68,10 +71,14 @@ const Context = React.createContext<IExtendedContext>({
   expoPushToken: null,
   cartId: null,
   setCartId: () => {},
-  userType: null, // 👈 Add default
-  setUserType: () => {}, // 👈 Add default
-  isDarkMode: false, // 👈 ADD
+  userType: null,
+  setUserType: () => {},
+  isDarkMode: false,
   toggleDarkMode: () => {},
+
+  // 👇 NEW
+  authIntent: null,
+  setAuthIntent: () => {},
 });
 
 export const ContextProvider: React.FC<Iprops> = ({
@@ -84,9 +91,9 @@ export const ContextProvider: React.FC<Iprops> = ({
   const [totalCartItems, setTotalCartItems] = React.useState<number>(0);
   const [cartId, setCartId] = React.useState<number | null>(null);
   const [isDarkMode, setIsDarkMode] = React.useState<boolean>(false);
-
-  // 👇 Add userType state
+  const [isInitializing, setIsInitializing] = React.useState(true);
   const [userType, setUserType] = React.useState<"pt" | "member" | null>(null);
+  const [authIntent, setAuthIntent] = React.useState<"signup" | "login" | null>(null);
 
   const [isAuthenticated, setIsAuthenticated] = React.useState<boolean>(false);
   const [guestMode, setGuestMode] = React.useState<boolean>(false);
@@ -133,21 +140,14 @@ export const ContextProvider: React.FC<Iprops> = ({
     await AsyncStorage.setItem("darkMode", String(next));
   };
 
-  // Sync push token from App.tsx
   React.useEffect(() => {
     if (expoPushToken) setPushToken(expoPushToken);
   }, [expoPushToken]);
 
-  // -----------------------------
-  // CART FETCH (GLOBAL)
-  // -----------------------------
-  
   const fetchCartItems = async (
-    
     userId: number,
     page?: number,
   ): Promise<IapiResponse<IcartItem[]> | undefined> => {
-
     const res = await handleFetchCartItems({
       userId,
       handleLogout,
@@ -158,20 +158,15 @@ export const ContextProvider: React.FC<Iprops> = ({
 
     setTotalCartItems(res.totalItems || 0);
 
-    // Save cart ID from backend if exists
     if (res.cartId) {
       setCartId(res.cartId);
-
     }
 
     return res;
   };
 
-  // -----------------------------
-  // LOGOUT - Reset userType too
-  // -----------------------------
   const handleLogout = async (shouldToast: boolean = true): Promise<void> => {
-    await AsyncStorage.removeItem(TOKEN);
+    await AsyncStorage.multiRemove([TOKEN, "USER_PROFILE", "IS_AUTHENTICATED"]);
 
     setIsAuthenticated(false);
     setGuestMode(false);
@@ -179,19 +174,41 @@ export const ContextProvider: React.FC<Iprops> = ({
     setUserProfile(undefined);
     setCartId(null);
     setTotalCartItems(0);
-    setUserType(null); // 👈 Reset userType on logout
-
-    // shouldToast &&
-    //   handleShowToast({
-    //     type: "error",
-    //     text1: "error",
-    //     text2: "session_expired",
-    //   });
+    setUserType(null);
   };
 
-  // -----------------------------
-  // HOME SCREEN FETCHERS
-  // -----------------------------
+  React.useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const user = await AsyncStorage.getItem("USER_PROFILE");
+
+        console.log("RESTORE USER =", user);
+
+        if (user) {
+          const profile = JSON.parse(user);
+
+          setUserProfile(profile);
+          setIsAuthenticated(true);
+          setGuestMode(false);
+
+          if (profile.role === "PT") {
+            setUserType("pt");
+          } else {
+            setUserType("member");
+          }
+
+          handleFetchHomeScreenData(profile.id);
+        }
+      } catch (e) {
+        console.log(e);
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    restoreSession();
+  }, []);
+
   const homeScreenDataFetchers = {
     event: async (userId?: number) => {
       try {
@@ -296,10 +313,6 @@ export const ContextProvider: React.FC<Iprops> = ({
     );
   };
 
-  // -----------------------------
-  // FETCH USER PROFILE - Detect user type
-  // -----------------------------
-  // In context.tsx - Update handleFetchUserProfile function
   const handleFetchUserProfile = async () => {
     const profile = await handleGetUserProfile(handleLogout);
 
@@ -309,55 +322,50 @@ export const ContextProvider: React.FC<Iprops> = ({
       setIsAuthenticated(true);
       setGuestMode(false);
 
-      // Determine user type from profile data
       if (profile.role === "PT") {
         setUserType("pt");
       } else {
         setUserType("member");
       }
 
-      return profile; // ✅ Make sure to return the profile here
+      return profile;
     } else {
       setIsAuthenticated(false);
       setUserProfile(undefined);
       setUserType(null);
     }
 
-    return undefined; // ✅ Return undefined if no profile
+    return undefined;
   };
+
   const handleSuccessfulLogin = async (profile: IuserProfile) => {
-    // Set all the necessary state
     handleFetchHomeScreenData(profile.id);
     setUserProfile(profile);
     setIsAuthenticated(true);
     setGuestMode(false);
 
-    // Determine user type
     if (profile.role === "PT") {
       setUserType("pt");
     } else {
       setUserType("member");
     }
   };
+
   const handleUserLogin = async (email: string, password: string) => {
     try {
-      // 1. Authenticate and get token
       await handleAuthenticateUser({ email, password });
 
-      // 2. Fetch user profile
       const profile = await handleGetUserProfile(handleLogout);
 
       if (!profile) {
         throw new Error("Failed to fetch user profile");
       }
 
-      // 3. Update all states
       handleFetchHomeScreenData(profile.id);
       setUserProfile(profile);
       setIsAuthenticated(true);
       setGuestMode(false);
 
-      // Determine user type
       if (profile.role === "PT") {
         setUserType("pt");
       } else {
@@ -374,7 +382,6 @@ export const ContextProvider: React.FC<Iprops> = ({
   return (
     <Context.Provider
       value={{
-        // Existing values
         userProfile,
         bookedEvents,
         handleLogout,
@@ -403,9 +410,13 @@ export const ContextProvider: React.FC<Iprops> = ({
         handleSuccessfulLogin,
         isDarkMode,
         toggleDarkMode,
-        // 👇 NEW: Add userType to context
         userType,
+        isInitializing,
         setUserType,
+
+        // 👇 NEW
+        authIntent,
+        setAuthIntent,
       }}
     >
       {children}
