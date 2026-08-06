@@ -3,7 +3,7 @@
     "name": "Gawi",
     "slug": "Gym",
     "scheme": "gym",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./app/assets/images/MuscleUpLogoColored.png",
     "userInterfaceStyle": "light",
@@ -50,9 +50,14 @@
         {
           "android": {
             "enableJetifier": true
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
           }
         }
+        
       ]
+
     ]
   }
 }
