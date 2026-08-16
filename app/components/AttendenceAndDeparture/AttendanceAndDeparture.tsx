@@ -63,12 +63,16 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
   const memberIdRef = useRef<string | null>(null);
   const notificationHandlerRef = useRef<(msg: GymNotification) => void>();
   const scanLockRef = useRef(false); // 👈 blocks re-entry into handleBarCodeScanned
-  // 👇 NEW — blocks re-entry into the actual network-triggering actions themselves.
+  // 👇 blocks re-entry into the actual network-triggering actions themselves.
   // On iOS, expo-camera can call onBarcodeScanned repeatedly per frame while the
   // code is still visible (no built-in debounce like Android's ML Kit scanner has),
   // so this is a second, independent guard directly around each mutating call —
   // even if the scan handler somehow re-fires, the actual fetch only ever runs once.
   const actionLockRef = useRef(false);
+  // 👇 mirrors isCheckedIn synchronously — state updates are async, so a QR
+  // scanned right after check-in-state changes could read stale state via
+  // closures. Read isCheckedInRef.current instead of isCheckedIn in scan handlers.
+  const isCheckedInRef = useRef(false);
 
   notificationHandlerRef.current = (msg: GymNotification) => {
     console.log("🔔 [QRCodeScreen] notification for member check:", msg);
@@ -77,6 +81,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       msg.memberId?.toString() === memberIdRef.current
     ) {
       setIsCheckedIn(msg.isInGym);
+      isCheckedInRef.current = msg.isInGym;
       AsyncStorage.setItem("isCheckedIn", msg.isInGym.toString());
     }
   };
@@ -87,7 +92,11 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       console.log("📷 [QRCodeScreen] camera permission granted:", granted);
       setHasPermission(granted);
       const storedStatus = await AsyncStorage.getItem("isCheckedIn");
-      if (storedStatus !== null) setIsCheckedIn(storedStatus === "true");
+      if (storedStatus !== null) {
+        const checkedIn = storedStatus === "true";
+        setIsCheckedIn(checkedIn);
+        isCheckedInRef.current = checkedIn;
+      }
     })();
   }, []);
 
@@ -138,7 +147,9 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
     // 👇 idempotency guard — regardless of how many times this gets called,
     // the actual network request only fires once until it resolves
     if (actionLockRef.current) {
-      console.log("⏹️ [QRCodeScreen] handleCheckInOut already in flight, ignoring");
+      console.log(
+        "⏹️ [QRCodeScreen] handleCheckInOut already in flight, ignoring",
+      );
       return;
     }
     actionLockRef.current = true;
@@ -159,17 +170,42 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
         response.status,
       );
 
-      if (!response.ok) {
-        const text = await response.text();
-        Alert.alert(i18n.t("error"), text || i18n.t("an_error_occured"));
+      // 👇 read the body as text ONCE — the "please wait" rate-limit message
+      // can come back as plain text (sometimes even alongside a 200), so we
+      // have to inspect it before deciding whether to JSON.parse it
+      const rawText = await response.text();
+      console.log("📦 [QRCodeScreen] check-in raw response:", rawText);
+
+      const waitMessage = "Please wait 5 minutes before checking in/out again";
+
+      // 👇 keep this literal — it's what the server actually sends back,
+      // independent of device locale. Only the alert shown to the user is localized.
+      if (rawText.includes(waitMessage)) {
+        Alert.alert(i18n.t("error"), i18n.t("wait_5_minutes") || waitMessage);
         return;
       }
 
-      const result = await response.json();
+      if (!response.ok) {
+        Alert.alert(i18n.t("error"), rawText || i18n.t("an_error_occured"));
+        return;
+      }
+
+      let result: any;
+      try {
+        result = JSON.parse(rawText);
+      } catch (parseError) {
+        console.error(
+          "❌ [QRCodeScreen] failed to parse check-in JSON:",
+          parseError,
+        );
+        Alert.alert(i18n.t("error"), i18n.t("an_error_occured"));
+        return;
+      }
       console.log("📦 [QRCodeScreen] check-in result:", result);
 
       const newStatus = result?.isInGym ?? !isCheckedIn;
       setIsCheckedIn(newStatus);
+      isCheckedInRef.current = newStatus; // 👈 keep the sync mirror up to date
       await AsyncStorage.setItem("isCheckedIn", newStatus.toString());
 
       if (result?.gymId) {
@@ -233,8 +269,22 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
   // when there's nothing to purchase, so we just surface response.text() on failure.
   const handlePurchaseOpenTicket = async () => {
     console.log("🎫 [QRCodeScreen] handlePurchaseOpenTicket triggered");
+    // 👇 gym-side rule: can't buy an open ticket while not checked in.
+    // Checked client-side before we even touch the network/action lock.
+    if (!isCheckedInRef.current) {
+      console.log(
+        "⏹️ [QRCodeScreen] handlePurchaseOpenTicket blocked — not checked in",
+      );
+      Alert.alert(
+        i18n.t("error"),
+        i18n.t("must_check_in_first") || "You must check in first",
+      );
+      return;
+    }
     if (actionLockRef.current) {
-      console.log("⏹️ [QRCodeScreen] handlePurchaseOpenTicket already in flight, ignoring");
+      console.log(
+        "⏹️ [QRCodeScreen] handlePurchaseOpenTicket already in flight, ignoring",
+      );
       return;
     }
     actionLockRef.current = true;
@@ -270,7 +320,10 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       // body, not just as an error status — so check the text itself first,
       // regardless of response.ok
       if (text.includes(noTicketMessage)) {
-        Alert.alert(i18n.t("error"), noTicketMessage);
+        Alert.alert(
+          i18n.t("error"),
+          i18n.t("no_open_ticket") || noTicketMessage,
+        );
         return;
       }
 
@@ -291,6 +344,15 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
 
   const fetchQRInfo = async (qrId: string) => {
     console.log("ℹ️ [QRCodeScreen] fetchQRInfo for qrId:", qrId);
+    // 👇 same gym-side rule applies to generic info QRs — not checked in, no fetch
+    if (!isCheckedInRef.current) {
+      console.log("⏹️ [QRCodeScreen] fetchQRInfo blocked — not checked in");
+      Alert.alert(
+        i18n.t("error"),
+        i18n.t("must_check_in_first") || "You must check in first",
+      );
+      return;
+    }
     if (actionLockRef.current) {
       console.log("⏹️ [QRCodeScreen] fetchQRInfo already in flight, ignoring");
       return;

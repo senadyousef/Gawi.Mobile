@@ -25,7 +25,7 @@ const getTheme = (dark: boolean) => ({
   border: dark ? "#2C2C2C" : "#E8E0D0",
   ink: dark ? "#F0F0F0" : "#1A1A1A",
   muted: dark ? "#888888" : "#8A8070",
-  accent: "#C8F04A",
+  accent: "#E8742A",
 });
 
 export default function WalletHistoryScreen() {
@@ -62,10 +62,7 @@ export default function WalletHistoryScreen() {
       );
 
       if (!response.ok) {
-        console.warn(
-          "⚠️ [WalletHistoryScreen] fetch failed:",
-          response.status,
-        );
+        console.warn("⚠️ [WalletHistoryScreen] fetch failed:", response.status);
         setHistory([]);
         return;
       }
@@ -101,10 +98,7 @@ export default function WalletHistoryScreen() {
       minute: "2-digit",
     });
 
-  const totalSpent = history.reduce(
-    (sum, item) => sum + (item.price || 0),
-    0,
-  );
+  const totalSpent = history.reduce((sum, item) => sum + (item.price || 0), 0);
 
   if (loading) {
     return (
@@ -158,11 +152,7 @@ export default function WalletHistoryScreen() {
         ListEmptyComponent={
           <View style={s.emptyWrap}>
             <View style={s.emptyIconWrap}>
-              <Ionicons
-                name="receipt-outline"
-                size={28}
-                color={theme.muted}
-              />
+              <Ionicons name="receipt-outline" size={28} color={theme.muted} />
             </View>
             <Text style={s.emptyText}>
               {i18n.t("no_wallet_history") || "No transactions yet"}

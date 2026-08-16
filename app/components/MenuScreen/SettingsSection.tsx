@@ -70,6 +70,14 @@ const SettingsSection = () => {
       },
       hideForGuest: true,
     },
+    {
+      IoniconsIconName: "alert-circle-outline",
+      title: i18n.t("Complaints"),
+      onPress: () => {
+        navigate("Complaints");
+      },
+      hideForGuest: true,
+    },
     // {
     //   AntDesignIconName: "user",
     //   title: i18n.t("manage_my_account"),

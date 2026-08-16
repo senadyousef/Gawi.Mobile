@@ -96,6 +96,7 @@ import { useI18n } from "../hooks/useI18n";
 import VerifyCodeScreen from "../screens/AuthScreens/VerificationCodeScreen";
 import SplashScreen from "../screens/SplashScreen";
 import WalletHistoryScreen from "../screens/WalletHistoryScreen";
+import ComplaintScreen from "../screens/Complaintscreen";
 
 // ✅ Navigation Creators
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -1147,6 +1148,16 @@ function RootNavigator({ isFirstTime }: { isFirstTime: boolean }) {
                 component={WalletHistoryScreen}
                 options={{
                   title: i18n.t("wallet_history_title") || "Wallet History",
+                  header: (params) => (
+                    <CustomHeader params={params} shouldShowBackArrow />
+                  ),
+                }}
+              />
+              <Stack.Screen
+                name="Complaints"
+                component={ComplaintScreen}
+                options={{
+                  title: i18n.t("Complaints") || "Wallet History",
                   header: (params) => (
                     <CustomHeader params={params} shouldShowBackArrow />
                   ),
