@@ -93,16 +93,7 @@ const MyStatusSection: React.FC<Props> = ({ refreshTrigger = 0 }) => {
   }, [refreshTrigger, loadMembership]);
 
   if (guestMode) {
-    return (
-      <View style={[s.guestContainer, isArabic && { flexDirection: "row" }]}>
-        <View style={s.guestIconWrap}>
-          <Ionicons name="lock-closed-outline" size={24} color={theme.muted} />
-        </View>
-        <Text style={[s.guestText, { textAlign: isArabic ? "right" : "left" }]}>
-          {i18n.t("gym_guest_message")}
-        </Text>
-      </View>
-    );
+    return;
   }
 
   return (

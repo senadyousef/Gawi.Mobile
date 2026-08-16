@@ -12,6 +12,7 @@ import {
   View,
   TouchableOpacity,
   KeyboardAvoidingView,
+  ScrollView,
 } from "../../components/overridedComponents";
 import AuthInput from "../../components/Auth/AuthInput";
 import AuthButton from "../../components/Auth/AuthButton";
@@ -20,7 +21,8 @@ import ErrorText from "../../components/ErrorText";
 import { height, width } from "../../constants";
 import { useAppContext } from "../../context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-
+import { Picker } from "@react-native-picker/picker";
+import { Dropdown } from "react-native-element-dropdown";
 interface ISignUpForm {
   nameAr: string;
   nameEn: string;
@@ -28,6 +30,7 @@ interface ISignUpForm {
   email: string;
   password: string;
   confirmPassword: string;
+  gender: "Male" | "Female";
 }
 
 const DEFAULT_NAME_EN = "player";
@@ -57,8 +60,8 @@ const SignUpScreen = () => {
       setIsLoading(true);
       setErrorMessage("");
 
-      const nameAr = data.nameAr?.trim() ? data.nameAr.trim() : DEFAULT_NAME_AR;
-      const nameEn = data.nameEn?.trim() ? data.nameEn.trim() : DEFAULT_NAME_EN;
+      const nameAr = data.nameAr?.trim() || DEFAULT_NAME_AR;
+      const nameEn = data.nameEn?.trim() || DEFAULT_NAME_EN;
 
       const payload = {
         id: 0,
@@ -68,46 +71,37 @@ const SignUpScreen = () => {
         phoneNumber: data.phoneNumber,
         password: data.password,
         role: "Guest",
+        gender: data.gender,
         photoUrl: "",
       };
 
       console.log("📦 Sending payload:", payload);
 
-      const response = await fetch(
-        "https://gym.useitsmart.com/api/User/signUp",
-        {
-          method: "POST",
-          headers: {
-            accept: "text/plain",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
+      const response = await fetch("https://gym.useitsmart.com/api/User/signUp", {
+        method: "POST",
+        headers: {
+          accept: "text/plain",
+          "Content-Type": "application/json",
         },
-      );
-
-      console.log("🔹 Response status:", response.status);
+        body: JSON.stringify(payload),
+      });
 
       if (response.ok) {
         const result = await response.text();
-        console.log("✅ Registration successful:", result);
 
         Alert.alert("Success", "Account created successfully!", [
-          { text: "OK", onPress: () => navigation.navigate("Login" as never) },
+          {
+            text: "OK",
+            onPress: () => navigation.navigate("Login" as never),
+          },
         ]);
       } else {
         const errorText = await response.text();
-        console.log("❌ Registration failed:", errorText);
-        Alert.alert(
-          "Registration Failed",
-          errorText || "Unable to register. Please try again.",
-        );
+
+        Alert.alert("Registration Failed", errorText || "Unable to register.");
       }
     } catch (error: any) {
-      console.log("🔥 Error during registration:", error);
-      Alert.alert(
-        "Error",
-        error.message || "Something went wrong. Please try again.",
-      );
+      Alert.alert("Error", error.message);
     } finally {
       setIsLoading(false);
     }
@@ -247,7 +241,54 @@ const SignUpScreen = () => {
               <ErrorText>{errors.email.message}</ErrorText>
             )}
           </RNView>
-
+          <Controller
+            control={control}
+            name="gender"
+            defaultValue="Male"
+            render={({ field: { onChange, value } }) => (
+              <View style={styles.genderContainer}>
+                <Dropdown
+                  style={[
+                    styles.dropdown,
+                    {
+                      direction: i18n.language === "ar" ? "rtl" : "ltr",
+                    },
+                  ]}
+                  placeholderStyle={[
+                    styles.placeholderStyle,
+                    {
+                      textAlign: i18n.language === "ar" ? "right" : "left",
+                    },
+                  ]}
+                  selectedTextStyle={[
+                    styles.selectedTextStyle,
+                    {
+                      textAlign: i18n.language === "ar" ? "right" : "left",
+                    },
+                  ]}
+                  containerStyle={styles.dropdownContainer}
+                  itemTextStyle={{
+                    textAlign: i18n.language === "ar" ? "right" : "left",
+                  }}
+                  data={[
+                    {
+                      label: i18n.t("male"),
+                      value: "Male",
+                    },
+                    {
+                      label: i18n.t("female"),
+                      value: "Female",
+                    },
+                  ]}
+                  labelField="label"
+                  valueField="value"
+                  placeholder={i18n.t("selectGender")}
+                  value={value}
+                  onChange={(item) => onChange(item.value)}
+                />
+              </View>
+            )}
+          />
           {/* 🔒 Password */}
           <RNView>
             <Controller
@@ -255,7 +296,10 @@ const SignUpScreen = () => {
               control={control}
               rules={{
                 required: i18n.t("errors.password_required"),
-                minLength: { value: 6, message: i18n.t("errors.password_length") },
+                minLength: {
+                  value: 6,
+                  message: i18n.t("errors.password_length"),
+                },
               }}
               render={({ field: { onChange, onBlur, value } }) => (
                 <AuthInput
@@ -348,7 +392,9 @@ const SignUpScreen = () => {
           style={styles.signInButton}
           onPress={() => navigation.navigate("Login" as never)}
         >
-          <Text style={styles.signInText}>{i18n.t("already_have_account")}</Text>
+          <Text style={styles.signInText}>
+            {i18n.t("already_have_account")}
+          </Text>
         </TouchableOpacity>
 
         <StatusBar style="light" />
@@ -360,6 +406,33 @@ const SignUpScreen = () => {
 export default SignUpScreen;
 
 const styles = StyleSheet.create({
+  genderContainer: {
+    marginBottom: 16,
+  },
+
+  dropdown: {
+    height: 55,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+  },
+
+  dropdownContainer: {
+    borderRadius: 12,
+  },
+
+  placeholderStyle: {
+    fontSize: 16,
+    color: "#999",
+  },
+
+  selectedTextStyle: {
+    fontSize: 16,
+    color: "#000",
+  },
+
   container: {
     flex: 1,
     justifyContent: "flex-end",
@@ -382,7 +455,7 @@ const styles = StyleSheet.create({
     width: width * 0.7,
     height: height * 0.3,
     resizeMode: "contain",
-    marginBottom: 40,
+    marginBottom: -40,
   },
   wrapper: {
     width: "100%",

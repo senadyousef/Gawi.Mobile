@@ -2,113 +2,203 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  FlatList,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import Colors from "../constants/Colors";
 import i18n from "../localization";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAppContext } from "../context";
+import { handleGetToken } from "../helpers";
+
+const API_BASE = "https://gym.useitsmart.com/api/mobile/workout-schedules";
+
+const WEEKDAY_SHORT = [
+  { en: "Su", ar: "أح" },
+  { en: "Mo", ar: "اث" },
+  { en: "Tu", ar: "ثل" },
+  { en: "We", ar: "أر" },
+  { en: "Th", ar: "خم" },
+  { en: "Fr", ar: "جم" },
+  { en: "Sa", ar: "سب" },
+];
 
 // ---------------- THEME ----------------
 const getTheme = (dark: boolean) => ({
-  bg: dark ? "#121212" : "#f3f5f8",
-  surface: dark ? "#1E1E1E" : "#FFFFFF",
-  ink: dark ? "#F0F0F0" : "#222222",
-  muted: dark ? "#AAAAAA" : "#666666",
-  border: dark ? "#2C2C2C" : "#EEEEEE",
-
+  bg: dark ? "#0F0F0F" : "#F5F6F8",
+  surface: dark ? "#1A1A1A" : "#FFFFFF",
+  ink: dark ? "#F5F5F5" : "#1C1C1E",
+  muted: dark ? "#9A9A9A" : "#6B7280",
+  border: dark ? "#262626" : "#ECECEC",
   primary: Colors.primary,
   accent: Colors.tertiary,
+  danger: dark ? "#F2665A" : "#D9483C",
+  rest: dark ? "#5B6472" : "#9AA3B2",
+  heroGradient: (dark
+    ? ["#1C1C1C", "#2A1A0C"]
+    : ["#FFFFFF", "#FFF2E6"]) as [string, string],
 });
 
 // ---------------- TYPES ----------------
-interface IExercise {
+interface IExerciseDetail {
+  id: number;
   exerciseId: number;
-  exerciseName: string;
+  exerciseNameEn: string;
   exerciseNameAr: string;
-  rounds: number;
-  oneRoundCount: number;
+  displayOrder: number;
 }
 
-interface IMuscle {
+interface IMuscleDetail {
+  id: number;
   muscleId: number;
-  muscleName: string;
+  muscleNameEn: string;
   muscleNameAr: string;
-  exercises: IExercise[];
+  displayOrder: number;
+  exercises: IExerciseDetail[];
 }
 
-interface IDay {
-  dayId: number;
+interface IDayDetail {
+  id: number;
+  dayOfWeek: number;
   dayName: string;
-  muscles: IMuscle[];
+  isRestDay: boolean;
+  displayOrder: number;
+  note: string;
+  muscles: IMuscleDetail[];
 }
+
+interface ISchedule {
+  id: number;
+  gymId: number;
+  memberShipId: number;
+  memberUserId: number;
+  memberNameEn: string;
+  memberNameAr: string;
+  planType: string;
+  sourceTemplateId: number;
+  sourceTemplateNameEn: string;
+  nameEn: string;
+  nameAr: string;
+  note: string;
+  startDate: string;
+  endDate: string;
+  assignedByUserId: number;
+  assignedByName: string;
+  createdOn: string;
+  isCurrent: boolean;
+  isCancelled: boolean;
+  scheduleStatus: string;
+  days?: IDayDetail[];
+}
+
+const getMuscleIcon = (nameEn: string) => {
+  const n = (nameEn || "").toLowerCase();
+  if (n.includes("leg")) return "run";
+  if (n.includes("cardio")) return "heart-pulse";
+  if (n.includes("chest")) return "weight-lifter";
+  return "arm-flex";
+};
 
 // ---------------- COMPONENT ----------------
-export default function WorkoutScheduleAlt() {
+export default function WorkoutSchedulesScreen() {
   const { isDarkMode } = useAppContext();
-  const [refreshing, setRefreshing] = useState(false);
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
   const s = React.useMemo(() => createStyles(theme), [theme]);
 
-  const [days, setDays] = useState<IDay[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<{
-    from: string;
-    to: string;
-  } | null>(null);
-
   const isArabic = i18n.locale === "ar";
+  const t = (en: string, ar: string) => (isArabic ? ar : en);
+
+  const [userId, setUserId] = useState<string | null>(null);
+  const [current, setCurrent] = useState<ISchedule | null>(null);
+  const [history, setHistory] = useState<ISchedule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selected, setSelected] = useState<ISchedule | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [activeDayId, setActiveDayId] = useState<number | null>(null);
 
   // ---------------- FETCH ----------------
-  const fetchSchedule = async (showLoader = true) => {
+  const loadAll = async (showLoader = true) => {
     try {
-      if (showLoader) {
-        setLoading(true);
-      }
+      if (showLoader) setLoading(true);
 
       const MemberId = await AsyncStorage.getItem("MemberId");
+      setUserId(MemberId);
+      const token = await handleGetToken();
+      const headers = {
+        accept: "text/plain",
+        Authorization: `Bearer ${token}`,
+      };
 
-      const response = await fetch(
-        `https://gym.useitsmart.com/api/MSSMExercises/getallMSSMExersesforUser?userId=${MemberId}`,
-        { headers: { accept: "text/plain" } },
-      );
+      const [currentRes, historyRes] = await Promise.all([
+        fetch(`${API_BASE}/current?userId=${MemberId}`, { headers }),
+        fetch(`${API_BASE}/history?userId=${MemberId}`, { headers }),
+      ]);
 
-      if (!response.ok) {
-        throw new Error("Failed to load schedule");
-      }
-
-      const data = await response.json();
-
-      setDays(data.days || []);
-
-      if (data.from && data.to) {
-        setDateRange({
-          from: data.from,
-          to: data.to,
-        });
-      }
+      setCurrent(currentRes.ok ? await currentRes.json() : null);
+      setHistory(historyRes.ok ? (await historyRes.json()) || [] : []);
     } catch (err) {
       console.log(err);
     } finally {
-      if (showLoader) {
-        setLoading(false);
-      }
+      setLoading(false);
       setRefreshing(false);
     }
   };
+
   useEffect(() => {
-    fetchSchedule();
+    loadAll();
   }, []);
+
+  useEffect(() => {
+    if (selected?.days?.length) {
+      const firstWorkout = selected.days.find((d) => !d.isRestDay);
+      setActiveDayId((firstWorkout || selected.days[0]).id);
+    }
+  }, [selected]);
+
   const onRefresh = () => {
     setRefreshing(true);
-    fetchSchedule(false);
+    loadAll(false);
   };
+
+  const openDetails = async (schedule: ISchedule) => {
+    setModalVisible(true);
+
+    if (schedule.days && schedule.days.length > 0) {
+      setSelected(schedule);
+      return;
+    }
+
+    try {
+      setDetailsLoading(true);
+      const token = await handleGetToken();
+      const res = await fetch(`${API_BASE}/${schedule.id}?userId=${userId}`, {
+        headers: { accept: "text/plain", Authorization: `Bearer ${token}` },
+      });
+      setSelected(res.ok ? await res.json() : schedule);
+    } catch (err) {
+      console.log(err);
+      setSelected(schedule);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setSelected(null);
+    setActiveDayId(null);
+  };
+
   // ---------------- FORMAT DATE ----------------
   const formatDate = (dateString: string) => {
     try {
@@ -123,94 +213,260 @@ export default function WorkoutScheduleAlt() {
     }
   };
 
-  // ---------------- RENDER ----------------
-  const renderExercise = (exercise: IExercise) => (
-    <TouchableOpacity
-      key={exercise.exerciseId}
-      style={[
-        s.exerciseCard,
-        { flexDirection: isArabic ? "row-reverse" : "row" },
-      ]}
-    >
-      <View style={s.iconCircle}>
-        <MaterialCommunityIcons
-          name="dumbbell"
-          size={18}
-          color={theme.accent}
-        />
-      </View>
+  // ---------------- RENDER: HERO (current) ----------------
+  const renderHero = (schedule: ISchedule) => {
+    const days = schedule.days || [];
+    const workoutCount = days.filter((d) => !d.isRestDay).length;
+    const restCount = days.length - workoutCount;
 
-      <View
-        style={{ flex: 1, alignItems: isArabic ? "flex-end" : "flex-start" }}
+    return (
+      <TouchableOpacity activeOpacity={0.9} onPress={() => openDetails(schedule)}>
+        <LinearGradient
+          colors={theme.heroGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={s.hero}
+        >
+          <View style={[s.heroTopRow, { flexDirection: isArabic ? "row-reverse" : "row" }]}>
+            <Text style={s.heroEyebrow}>{t("Active Program", "البرنامج الحالي")}</Text>
+            <View style={s.heroBadge}>
+              <MaterialCommunityIcons name="dumbbell" size={16} color={theme.bg} />
+            </View>
+          </View>
+
+          <Text style={[s.heroTitle, { textAlign: isArabic ? "right" : "left" }]}>
+            {isArabic ? schedule.nameAr : schedule.nameEn}
+          </Text>
+          <Text style={[s.heroMeta, { textAlign: isArabic ? "right" : "left" }]}>
+            {formatDate(schedule.startDate)} — {formatDate(schedule.endDate)}
+          </Text>
+          {!!schedule.assignedByName && (
+            <Text style={[s.heroMeta, { textAlign: isArabic ? "right" : "left" }]}>
+              {t("Coach", "المدرب")} · {schedule.assignedByName}
+            </Text>
+          )}
+
+          {!!days.length && (
+            <>
+              <View style={[s.weekStrip, { flexDirection: isArabic ? "row-reverse" : "row" }]}>
+                {[...days]
+                  .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+                  .map((day) => (
+                    <View
+                      key={day.id}
+                      style={[s.weekChip, day.isRestDay ? s.weekChipRest : s.weekChipActive]}
+                    >
+                      <Text
+                        style={[
+                          s.weekChipLabel,
+                          day.isRestDay ? s.weekChipLabelRest : s.weekChipLabelActive,
+                        ]}
+                      >
+                        {isArabic ? WEEKDAY_SHORT[day.dayOfWeek]?.ar : WEEKDAY_SHORT[day.dayOfWeek]?.en}
+                      </Text>
+                    </View>
+                  ))}
+              </View>
+              <Text style={[s.heroStats, { textAlign: isArabic ? "right" : "left" }]}>
+                {t(
+                  `${workoutCount} training · ${restCount} rest`,
+                  `${workoutCount} تدريب · ${restCount} راحة`,
+                )}
+              </Text>
+            </>
+          )}
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  };
+
+  // ---------------- RENDER: HISTORY ROW ----------------
+  const renderHistoryRow = (schedule: ISchedule, isLast: boolean) => {
+    const statusColor = schedule.isCancelled ? theme.danger : theme.accent;
+    return (
+      <TouchableOpacity
+        key={schedule.id}
+        onPress={() => openDetails(schedule)}
+        style={[
+          s.historyRow,
+          { flexDirection: isArabic ? "row-reverse" : "row" },
+          !isLast && s.historyRowDivider,
+        ]}
       >
-        <Text style={s.exerciseName}>
-          {isArabic ? exercise.exerciseNameAr : exercise.exerciseName}
-        </Text>
+        <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+        <View style={{ flex: 1, alignItems: isArabic ? "flex-end" : "flex-start" }}>
+          <Text style={s.historyName}>{isArabic ? schedule.nameAr : schedule.nameEn}</Text>
+          <Text style={s.historyMeta}>
+            {formatDate(schedule.startDate)} — {formatDate(schedule.endDate)}
+          </Text>
+        </View>
+        <MaterialCommunityIcons
+          name={isArabic ? "chevron-left" : "chevron-right"}
+          size={20}
+          color={theme.muted}
+        />
+      </TouchableOpacity>
+    );
+  };
 
-        <Text style={s.repsText}>
-          {i18n.t("sets")}: {exercise.rounds} | {i18n.t("reps")}:{" "}
-          {exercise.oneRoundCount}
-        </Text>
+  // ---------------- RENDER: MODAL ----------------
+  const renderExercise = (exercise: IExerciseDetail) => (
+    <View
+      key={exercise.id}
+      style={[s.exerciseRow, { flexDirection: isArabic ? "row-reverse" : "row" }]}
+    >
+      <View style={s.exerciseIcon}>
+        <MaterialCommunityIcons name="dumbbell" size={16} color={theme.accent} />
       </View>
-    </TouchableOpacity>
+      <Text style={s.exerciseName}>
+        {isArabic ? exercise.exerciseNameAr : exercise.exerciseNameEn}
+      </Text>
+    </View>
   );
 
-  const renderMuscleGroup = (muscle: IMuscle) => (
-    <View key={muscle.muscleId} style={s.muscleSection}>
-      <Text style={[s.muscleTitle, { textAlign: isArabic ? "right" : "left" }]}>
-        {isArabic ? muscle.muscleNameAr : muscle.muscleName}
-      </Text>
+  const renderMuscle = (muscle: IMuscleDetail) => (
+    <View key={muscle.id} style={s.muscleSection}>
+      <View style={[s.muscleTitleRow, { flexDirection: isArabic ? "row-reverse" : "row" }]}>
+        <MaterialCommunityIcons
+          name={getMuscleIcon(muscle.muscleNameEn) as any}
+          size={14}
+          color={theme.muted}
+        />
+        <Text style={s.muscleTitle}>
+          {isArabic ? muscle.muscleNameAr : muscle.muscleNameEn}
+        </Text>
+      </View>
       {muscle.exercises.map(renderExercise)}
     </View>
   );
 
-  const renderDay = ({ item }: { item: IDay }) => (
-    <View style={s.dayCard}>
-      <View style={s.sideBar} />
-
-      <View style={s.dayContent}>
-        <Text style={[s.dayTitle, { textAlign: isArabic ? "right" : "left" }]}>
-          {item.dayName}
-        </Text>
-
-        {item.muscles.map(renderMuscleGroup)}
-      </View>
-    </View>
-  );
+  const activeDay = selected?.days?.find((d) => d.id === activeDayId) || null;
 
   // ---------------- LOADING ----------------
-  if (loading)
+  if (loading) {
     return (
       <View style={s.center}>
         <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
+  }
 
   // ---------------- UI ----------------
   return (
     <SafeAreaView style={s.container}>
-      <Text style={s.header}>{i18n.t("weekly_schedule")}</Text>
-
-      {dateRange && (
-        <Text style={s.dateRange}>
-          {formatDate(dateRange.from)} — {formatDate(dateRange.to)}
-        </Text>
-      )}
-
-      <FlatList
-        data={days}
-        keyExtractor={(item) => item.dayId.toString()}
-        renderItem={renderDay}
+      <ScrollView
         contentContainerStyle={s.listContainer}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[theme.primary]} // Android
-            tintColor={theme.primary} // iOS
+            colors={[theme.primary]}
+            tintColor={theme.primary}
           />
         }
-      />
+      >
+        {current ? (
+          renderHero(current)
+        ) : (
+          <View style={s.emptyBox}>
+            <MaterialCommunityIcons name="dumbbell" size={22} color={theme.muted} />
+            <Text style={s.emptyTitle}>{t("No active program", "لا يوجد برنامج حالي")}</Text>
+            <Text style={s.emptyText}>
+              {t("Your coach hasn't assigned one yet.", "لم يقم مدربك بتعيين برنامج بعد.")}
+            </Text>
+          </View>
+        )}
+
+        <Text style={[s.sectionEyebrow, { textAlign: isArabic ? "right" : "left" }]}>
+          {t("Program History", "سجل البرامج")}
+        </Text>
+
+        {history.length === 0 ? (
+          <View style={s.emptyBox}>
+            <MaterialCommunityIcons name="history" size={22} color={theme.muted} />
+            <Text style={s.emptyText}>{t("No previous programs yet.", "لا يوجد سجل سابق.")}</Text>
+          </View>
+        ) : (
+          <View style={s.historyCard}>
+            {history.map((schedule, i) => renderHistoryRow(schedule, i === history.length - 1))}
+          </View>
+        )}
+      </ScrollView>
+
+      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={closeModal}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            <View style={s.dragHandle} />
+
+            <View style={[s.modalHeaderRow, { flexDirection: isArabic ? "row-reverse" : "row" }]}>
+              <Text style={s.modalTitle} numberOfLines={1}>
+                {selected ? (isArabic ? selected.nameAr : selected.nameEn) : ""}
+              </Text>
+              <TouchableOpacity onPress={closeModal}>
+                <MaterialCommunityIcons name="close" size={22} color={theme.ink} />
+              </TouchableOpacity>
+            </View>
+
+            {selected && (
+              <Text style={[s.modalMeta, { textAlign: isArabic ? "right" : "left" }]}>
+                {formatDate(selected.startDate)} — {formatDate(selected.endDate)}
+              </Text>
+            )}
+
+            {detailsLoading ? (
+              <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />
+            ) : (
+              <>
+                {!!selected?.days?.length && (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={[
+                      s.dayTabsRow,
+                      { flexDirection: isArabic ? "row-reverse" : "row" },
+                    ]}
+                  >
+                    {[...selected.days]
+                      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+                      .map((day) => {
+                        const isActive = day.id === activeDayId;
+                        return (
+                          <TouchableOpacity
+                            key={day.id}
+                            onPress={() => setActiveDayId(day.id)}
+                            style={[
+                              s.dayTab,
+                              day.isRestDay && s.dayTabRest,
+                              isActive && (day.isRestDay ? s.dayTabRestActive : s.dayTabActive),
+                            ]}
+                          >
+                            <Text style={[s.dayTabLabel, isActive && s.dayTabLabelActive]}>
+                              {isArabic
+                                ? WEEKDAY_SHORT[day.dayOfWeek]?.ar
+                                : WEEKDAY_SHORT[day.dayOfWeek]?.en}
+                            </Text>
+                            {day.isRestDay && <View style={s.restDot} />}
+                          </TouchableOpacity>
+                        );
+                      })}
+                  </ScrollView>
+                )}
+
+                <ScrollView contentContainerStyle={s.dayPanel}>
+                  {activeDay?.isRestDay ? (
+                    <View style={s.restPanel}>
+                      <MaterialCommunityIcons name="weather-night" size={28} color={theme.muted} />
+                      <Text style={s.restPanelText}>{t("Rest day", "يوم راحة")}</Text>
+                    </View>
+                  ) : (
+                    activeDay?.muscles.map(renderMuscle)
+                  )}
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -218,104 +474,167 @@ export default function WorkoutScheduleAlt() {
 // ---------------- STYLES ----------------
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.bg,
+    container: { flex: 1, backgroundColor: theme.bg },
+    center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: theme.bg },
+    listContainer: { padding: 16 },
+
+    sectionEyebrow: {
+      fontSize: 12,
+      fontWeight: "800",
+      letterSpacing: 1.5,
+      color: theme.muted,
+      textTransform: "uppercase",
+      marginTop: 26,
+      marginBottom: 10,
     },
 
-    center: {
-      flex: 1,
+    // hero
+    hero: {
+      borderRadius: 22,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: theme.accent + "55",
+    },
+    heroTopRow: { justifyContent: "space-between", alignItems: "center" },
+    heroEyebrow: {
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 1.5,
+      color: theme.accent,
+      textTransform: "uppercase",
+    },
+    heroBadge: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: theme.accent,
       justifyContent: "center",
       alignItems: "center",
-      backgroundColor: theme.bg,
     },
+    heroTitle: { fontSize: 22, fontWeight: "800", color: theme.ink, marginTop: 12 },
+    heroMeta: { fontSize: 13, color: theme.muted, marginTop: 4 },
 
-    listContainer: {
-      padding: 16,
-    },
-
-    header: {
-      fontSize: 24,
-      fontWeight: "700",
-      marginTop: 8,
-      textAlign: "center",
-      color: theme.primary,
-    },
-
-    dateRange: {
-      fontSize: 14,
-      marginBottom: 12,
-      textAlign: "center",
-      color: theme.muted,
-    },
-
-    dayCard: {
-      flexDirection: "row",
-      borderRadius: 14,
-      marginBottom: 20,
-      overflow: "hidden",
-      backgroundColor: theme.surface,
-      elevation: 3,
-    },
-
-    sideBar: {
-      width: 6,
-      backgroundColor: theme.accent,
-    },
-
-    dayContent: {
-      flex: 1,
-      padding: 14,
-    },
-
-    dayTitle: {
-      fontSize: 22,
-      fontWeight: "800",
-      marginBottom: 10,
-      color: theme.accent,
-    },
-
-    muscleSection: {
-      marginBottom: 15,
-    },
-
-    muscleTitle: {
-      fontSize: 14,
-      fontWeight: "700",
-      color: theme.muted,
-      marginBottom: 8,
-      letterSpacing: 1,
-    },
-
-    exerciseCard: {
+    weekStrip: { justifyContent: "space-between", marginTop: 18 },
+    weekChip: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      justifyContent: "center",
       alignItems: "center",
-      padding: 10,
-      borderRadius: 8,
+    },
+    weekChipActive: { backgroundColor: theme.accent },
+    weekChipRest: {
+      borderWidth: 1,
+      borderStyle: "dashed",
+      borderColor: theme.border,
+    },
+    weekChipLabel: { fontSize: 11, fontWeight: "700" },
+    weekChipLabelActive: { color: theme.bg },
+    weekChipLabelRest: { color: theme.muted },
+    heroStats: { fontSize: 12, fontWeight: "600", color: theme.muted, marginTop: 12 },
+
+    // empty
+    emptyBox: {
+      padding: 22,
+      borderRadius: 18,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+      alignItems: "center",
+    },
+    emptyTitle: { fontSize: 14, fontWeight: "700", color: theme.ink, marginTop: 8 },
+    emptyText: { fontSize: 12, color: theme.muted, marginTop: 4, textAlign: "center" },
+
+    // history
+    historyCard: {
+      backgroundColor: theme.surface,
+      borderRadius: 18,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    historyRow: { alignItems: "center", padding: 14 },
+    historyRowDivider: { borderBottomWidth: 1, borderBottomColor: theme.border },
+    statusDot: { width: 8, height: 8, borderRadius: 4, marginHorizontal: 12 },
+    historyName: { fontSize: 15, fontWeight: "700", color: theme.ink },
+    historyMeta: { fontSize: 12, color: theme.muted, marginTop: 2 },
+
+    // modal
+    modalOverlay: { flex: 1, backgroundColor: "#00000077", justifyContent: "flex-end" },
+    modalSheet: {
+      maxHeight: "88%",
+      backgroundColor: theme.bg,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingTop: 10,
+    },
+    dragHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.border,
+      alignSelf: "center",
+      marginBottom: 14,
+    },
+    modalHeaderRow: {
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 20,
+    },
+    modalTitle: { fontSize: 19, fontWeight: "800", color: theme.ink, flexShrink: 1 },
+    modalMeta: { fontSize: 13, color: theme.muted, paddingHorizontal: 20, marginTop: 4 },
+
+    dayTabsRow: { paddingHorizontal: 16, marginTop: 18, paddingBottom: 6 },
+    dayTab: {
+      minWidth: 48,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginHorizontal: 4,
+      alignItems: "center",
+    },
+    dayTabRest: { borderStyle: "dashed" },
+    dayTabActive: { backgroundColor: theme.accent, borderColor: theme.accent },
+    dayTabRestActive: { backgroundColor: theme.rest, borderColor: theme.rest },
+    dayTabLabel: { fontSize: 12, fontWeight: "700", color: theme.muted },
+    dayTabLabelActive: { color: theme.bg },
+    restDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: theme.muted, marginTop: 4 },
+
+    dayPanel: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 30 },
+
+    muscleSection: { marginBottom: 16 },
+    muscleTitleRow: { alignItems: "center", gap: 6, marginBottom: 8 },
+    muscleTitle: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: theme.muted,
+      letterSpacing: 1,
+      textTransform: "uppercase",
+    },
+
+    exerciseRow: {
+      alignItems: "center",
+      padding: 12,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.border,
       backgroundColor: theme.surface,
-      marginBottom: 6,
+      marginBottom: 8,
     },
-
-    iconCircle: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+    exerciseIcon: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
       justifyContent: "center",
       alignItems: "center",
       marginHorizontal: 10,
-      backgroundColor: theme.accent + "33",
+      backgroundColor: theme.accent + "22",
     },
+    exerciseName: { fontSize: 14, fontWeight: "600", color: theme.ink },
 
-    exerciseName: {
-      fontSize: 15,
-      fontWeight: "600",
-      color: theme.ink,
-    },
-
-    repsText: {
-      fontSize: 12,
-      marginTop: 2,
-      color: theme.muted,
-    },
+    restPanel: { alignItems: "center", paddingVertical: 40 },
+    restPanelText: { fontSize: 14, fontWeight: "600", color: theme.muted, marginTop: 10 },
   });

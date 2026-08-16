@@ -62,6 +62,14 @@ const SettingsSection = () => {
       },
       hideForGuest: true,
     },
+    {
+      IoniconsIconName: "wallet",
+      title: i18n.t("wallet_history_title"),
+      onPress: () => {
+        navigate("WalletHistory");
+      },
+      hideForGuest: true,
+    },
     // {
     //   AntDesignIconName: "user",
     //   title: i18n.t("manage_my_account"),

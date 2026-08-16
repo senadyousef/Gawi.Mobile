@@ -95,12 +95,12 @@ const AudienceSection: React.FC = () => {
           </View> */}
 
           {/* Display Expo Push Token */}
-          {pushToken && (
+          {/* {pushToken && (
             <View style={[styles.wrapper, getDirection(), { backgroundColor: "#FFF5E6" }]}>
               <Text style={styles.subTitle}>Expo Push Token:</Text>
               <Text selectable style={styles.detail}>{pushToken}</Text>
             </View>
-          )}
+          )} */}
         {/* </>
       )} */}
     </View>

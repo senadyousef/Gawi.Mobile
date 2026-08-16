@@ -46,13 +46,14 @@ const CouponsCarousel: React.FC<Props> = ({ refreshTrigger = 0 }) => {
     const fetchCarousel = async () => {
       try {
         setLoading(true);
-        let MemberId = await AsyncStorage.getItem("MemberId");
+        let MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
         const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
         if (!MemberId || MemberId === "0" || MemberId === "null") {
           MemberId = "0";
         }
+        const Gender = await AsyncStorage.getItem("Gender");
 
-        const url = `https://gym.useitsmart.com/api/Gyms/getAllGymsCarousel?userId=${MemberId}&role=${UserRole}`;
+        const url = `https://gym.useitsmart.com/api/Gyms/getAllGymsCarousel?userId=${MemberId}&role=${UserRole}&gender=${Gender}`;
         const res = await fetch(url, {
           headers: { Accept: "application/json" },
         });

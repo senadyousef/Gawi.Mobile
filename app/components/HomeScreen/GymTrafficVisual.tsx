@@ -1,12 +1,19 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAppContext } from "../../context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import i18n from "../../localization";
 import { useFocusEffect } from "@react-navigation/native";
+import gymHub from "../../services/gymHubConnection"; // 👈
+import { handleGetToken } from "../../helpers";
 
-// ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
   bg: dark ? "#121212" : "#F5F0E8",
   surface: dark ? "#1E1E1E" : "#FDFAF5",
@@ -17,14 +24,54 @@ const getTheme = (dark: boolean) => ({
   accent: "#C8F04A",
 });
 
+const AUTO_REFRESH_MS = 10000; // 👈 fallback poll interval, keeps the number moving even if a websocket push is missed
+const HOURLY_CHART_HEIGHT = 64;
+const HOUR_COL_WIDTH = 34;
+
 interface Props {
   refreshTrigger?: number;
 }
 
+interface HourlyEstimate {
+  hour: number;
+  actualVisits: number;
+  estimatedVisits: number;
+  isEstimated: boolean;
+}
+
+interface AttendanceEstimateResponse {
+  date: string;
+  currentHour: number;
+  actualVisitsSoFar: number;
+  estimatedRemainingVisits: number;
+  estimatedTotalVisits: number;
+  historicalBasisDays: number;
+  hours: HourlyEstimate[];
+}
+
+function formatHourLabel(hour: number) {
+  const period = hour < 12 ? "a" : "p";
+  let h12 = hour % 12;
+  if (h12 === 0) h12 = 12;
+  return `${h12}${period}`;
+}
+
+function formatDate(dateStr: string) {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString(
+      i18n.locale?.startsWith("ar") ? "ar" : "en-US",
+      { month: "short", day: "numeric", year: "numeric" },
+    );
+  } catch {
+    return "";
+  }
+}
+
 export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
-  const { guestMode, isDarkMode } = useAppContext(); // 👈 pull isDarkMode
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
+  const { guestMode, isDarkMode } = useAppContext();
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
+  const s = React.useMemo(() => createStyles(theme), [theme]);
 
   const [traffic, setTraffic] = useState({
     currentMembers: 0,
@@ -34,15 +81,27 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
   });
 
   const [loading, setLoading] = useState(false);
+  const [estimate, setEstimate] = useState<AttendanceEstimateResponse | null>(
+    null,
+  );
+  const [estimateLoading, setEstimateLoading] = useState(false);
+
+  const hourlyScrollRef = useRef<ScrollView>(null);
+  const hasAutoScrolledRef = useRef(false);
+
   const isArabic = i18n.locale?.startsWith("ar");
   const bars = 28;
+
   const fetchCurrentUsers = async () => {
-    if (guestMode) return;
+    if (guestMode) {
+      console.log("👤 [GymTrafficVisual] guestMode true, skipping fetch");
+      return;
+    }
 
     setLoading(true);
 
     try {
-      const token = await AsyncStorage.getItem("authToken");
+      const token = await handleGetToken();
       const MemberId = await AsyncStorage.getItem("MemberId");
 
       if (!MemberId) throw new Error("MemberId missing");
@@ -62,7 +121,7 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
       }
 
       const data = await res.json();
-       console.log("data" , data)
+
       setTraffic({
         currentMembers: data.currentMembers ?? 0,
         maxCapacity: data.maxCapacity ?? 0,
@@ -70,23 +129,164 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
         trafficLevel: data.trafficLevel ?? "Low",
       });
     } catch (err) {
-      console.error("Error fetching traffic:", err);
+      console.error("❌ [GymTrafficVisual] Error fetching traffic:", err);
     } finally {
       setLoading(false);
     }
   };
 
+  // 👇 fetches the today-by-hour attendance estimate chart data
+  const fetchHourlyEstimate = async () => {
+    if (guestMode) {
+      console.log(
+        "👤 [GymTrafficVisual] guestMode true, skipping estimate fetch",
+      );
+      return;
+    }
+
+    setEstimateLoading(true);
+
+    try {
+      const token = await handleGetToken();
+      const MemberId = await AsyncStorage.getItem("MemberId");
+
+      if (!MemberId) throw new Error("MemberId missing");
+
+      const res = await fetch(
+        `https://gym.useitsmart.com/api/MemberShips/getMemberGymTodayAttendanceEstimate?memberId=${MemberId}`,
+        {
+          headers: {
+            Accept: "text/plain",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        },
+      );
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data: AttendanceEstimateResponse = await res.json();
+      setEstimate(data);
+    } catch (err) {
+      console.error(
+        "❌ [GymTrafficVisual] Error fetching hourly estimate:",
+        err,
+      );
+    } finally {
+      setEstimateLoading(false);
+    }
+  };
+
+  const fetchRef = useRef(fetchCurrentUsers);
+  fetchRef.current = fetchCurrentUsers;
+
+  const fetchEstimateRef = useRef(fetchHourlyEstimate);
+  fetchEstimateRef.current = fetchHourlyEstimate;
+
   useFocusEffect(
     useCallback(() => {
+      console.log("🎯 [GymTrafficVisual] screen focused, fetching");
       fetchCurrentUsers();
+      fetchHourlyEstimate();
     }, [guestMode]),
   );
 
   useEffect(() => {
-    if (refreshTrigger > 0) fetchCurrentUsers();
+    if (refreshTrigger > 0) {
+      console.log(
+        "🔁 [GymTrafficVisual] refreshTrigger fired:",
+        refreshTrigger,
+      );
+      fetchCurrentUsers();
+      fetchHourlyEstimate();
+    }
   }, [refreshTrigger]);
 
-  // ─── Guest state ──────────────────────────────────────────────────────────
+  // 👇 auto-refresh fallback — keeps the number current even if a websocket
+  // notification is missed, dropped, or the connection is mid-reconnect
+  useEffect(() => {
+    if (guestMode) return;
+
+    const interval = setInterval(() => {
+      fetchRef.current();
+      fetchEstimateRef.current();
+    }, AUTO_REFRESH_MS);
+
+    return () => clearInterval(interval);
+  }, [guestMode]);
+
+  // 👇 live-refresh traffic whenever anyone checks in/out
+  useEffect(() => {
+    if (guestMode) {
+      console.log(
+        "👤 [GymTrafficVisual] guestMode true, skipping gymHub setup",
+      );
+      return;
+    }
+
+    let cancelled = false;
+    const dispatch = () => {
+      console.log("🔔 [GymTrafficVisual] dispatch fired — refetching traffic");
+      fetchRef.current();
+      fetchEstimateRef.current();
+    };
+
+    (async () => {
+      try {
+        console.log("▶️ [GymTrafficVisual] calling gymHub.start()");
+        await gymHub.start(); // 👈 also joins the stored GymId group internally
+        console.log("✅ [GymTrafficVisual] gymHub.start() resolved");
+
+        if (cancelled) {
+          console.log(
+            "⏹️ [GymTrafficVisual] effect cancelled before listener registration",
+          );
+          return;
+        }
+
+        gymHub.on("ReceiveGymNotification", dispatch);
+        console.log(
+          "📌 [GymTrafficVisual] listener registered for ReceiveGymNotification",
+        );
+      } catch (err) {
+        console.error("❌ [GymTrafficVisual] SignalR connection error:", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      gymHub.off("ReceiveGymNotification", dispatch); // 👈 only drop the listener — leave the shared connection running
+      console.log(
+        "🧹 [GymTrafficVisual] listener removed on unmount/dep change",
+      );
+    };
+  }, [guestMode]);
+
+  const maxHourlyValue = useMemo(() => {
+    if (!estimate?.hours?.length) return 0;
+    return estimate.hours.reduce((max, h) => {
+      const v = h.isEstimated ? h.estimatedVisits : h.actualVisits;
+      return v > max ? v : max;
+    }, 0);
+  }, [estimate]);
+
+  // 👇 auto-scroll the hourly chart so the current hour is roughly centered,
+  // once per load (doesn't fight the user if they scroll manually afterward)
+  useEffect(() => {
+    if (!estimate || hasAutoScrolledRef.current) return;
+    hasAutoScrolledRef.current = true;
+
+    const targetX = Math.max(
+      estimate.currentHour * HOUR_COL_WIDTH - HOUR_COL_WIDTH * 3,
+      0,
+    );
+
+    requestAnimationFrame(() => {
+      hourlyScrollRef.current?.scrollTo({ x: targetX, animated: true });
+    });
+  }, [estimate]);
+
   if (guestMode) {
     return (
       <View
@@ -102,7 +302,6 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
     );
   }
   const barHeight = 32;
-  // ─── Traffic thresholds ───────────────────────────────────────────────────
   const currentUsers = traffic.currentMembers;
 
   const maxCapacity =
@@ -137,78 +336,172 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
   }
 
   return (
-    <View style={s.card}>
-      {/* Header row */}
-      <View
-        style={[
-          s.headerRow,
-          { flexDirection: isArabic ? "row-reverse" : "row" },
-        ]}
-      >
-        {isArabic ? (
-          <>
-            <View style={{ flex: 1, alignItems: "flex-end" }}>
-              <Text style={s.eyebrow}>
-                {loading ? "..." : "Live · " + i18n.t("gym_traffic_title")}
-              </Text>
-              <Text style={s.cardTitle}>{trafficStatus}</Text>
-            </View>
-            <View style={s.metricChip}>
-              <View style={[s.dot, { backgroundColor: statusColor }]} />
-              <Text style={s.metricText}>
-                {currentUsers} / {maxCapacity}
-              </Text>
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={{ flex: 1 }}>
-              <Text style={s.eyebrow}>
-                {loading ? "..." : "Live · " + i18n.t("gym_traffic_title")}
-              </Text>
-              <Text style={s.cardTitle}>{trafficStatus}</Text>
-            </View>
+    <>
+      <View style={s.card}>
+        <View
+          style={[
+            s.headerRow,
+            { flexDirection: isArabic ? "row-reverse" : "row" },
+          ]}
+        >
+          {isArabic ? (
+            <>
+              <View style={{ flex: 1, alignItems: "flex-end" }}>
+                <Text style={s.eyebrow}>
+                  {loading ? "..." : "Live · " + i18n.t("gym_traffic_title")}
+                </Text>
+                <Text style={s.cardTitle}>{trafficStatus}</Text>
+              </View>
+              <View style={s.metricChip}>
+                <View style={[s.dot, { backgroundColor: statusColor }]} />
+                <Text style={s.metricText}>
+                  {currentUsers} / {maxCapacity}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={{ flex: 1 }}>
+                <Text style={s.eyebrow}>
+                  {loading ? "..." : "Live · " + i18n.t("gym_traffic_title")}
+                </Text>
+                <Text style={s.cardTitle}>{trafficStatus}</Text>
+              </View>
 
-            <View style={s.metricChip}>
-              <View style={[s.dot, { backgroundColor: statusColor }]} />
-              <Text style={s.metricText}>
-                {currentUsers} / {maxCapacity}
-              </Text>
-            </View>
-          </>
-        )}
+              <View style={s.metricChip}>
+                <View style={[s.dot, { backgroundColor: statusColor }]} />
+                <Text style={s.metricText}>
+                  {currentUsers} / {maxCapacity}
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+
+        <View style={s.barsRow}>
+          {Array.from({ length: bars }).map((_, i) => {
+            const filled = i < filledBars;
+
+            return (
+              <View
+                key={i}
+                style={{
+                  flex: 1,
+                  height: barHeight,
+                  backgroundColor: filled ? chartColor : theme.hairline,
+                  borderRadius: 2,
+                }}
+              />
+            );
+          })}
+        </View>
+
+        <Text style={[s.subText, { textAlign: isArabic ? "right" : "left" }]}>
+          {`${currentUsers} ${
+            currentUsers === 1 ? i18n.t("user") : i18n.t("users")
+          } ${i18n.t("inside")} • ${traffic.occupancyPercentage}%`}{" "}
+        </Text>
       </View>
 
-      {/* Bar chart */}
-      <View style={s.barsRow}>
-        {Array.from({ length: bars }).map((_, i) => {
-          const filled = i < filledBars;
+      {/* 👇 hourly attendance estimate chart — scrollable, all 24 hours */}
+      <View style={s.card}>
+        <View
+          style={[
+            s.headerRow,
+            { flexDirection: isArabic ? "row-reverse" : "row" },
+          ]}
+        >
+          <View
+            style={{
+              flex: 1,
+              alignItems: isArabic ? "flex-end" : "flex-start",
+            }}
+          >
+            <Text style={s.eyebrow}>
+              {estimateLoading ? "..." : i18n.t("hourly_estimate_title")}
+            </Text>
+            <Text style={s.cardTitle}>
+              {(estimate?.estimatedTotalVisits ?? 0).toFixed(1)}{" "}
+              {i18n.t("visits")}
+            </Text>
+            {estimate?.date && (
+              <Text style={s.dateText}>{formatDate(estimate.date)}</Text>
+            )}
+          </View>
+          <View style={s.metricChip}>
+            <Text style={s.metricText}>
+              {estimate?.actualVisitsSoFar ?? 0} {i18n.t("so_far")}
+            </Text>
+          </View>
+        </View>
 
-          return (
+        <ScrollView
+          ref={hourlyScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.hourlyScrollContent}
+        >
+          {(estimate?.hours ?? []).map((h) => {
+            const value = h.isEstimated ? h.estimatedVisits : h.actualVisits;
+            const barHeightPx =
+              maxHourlyValue > 0
+                ? Math.max(
+                    (value / maxHourlyValue) * HOURLY_CHART_HEIGHT,
+                    value > 0 ? 4 : 2,
+                  )
+                : 2;
+            const isCurrent = estimate?.currentHour === h.hour;
+
+            return (
+              <View key={h.hour} style={s.hourlyCol}>
+                <View style={s.hourlyBarWrap}>
+                  <View
+                    style={{
+                      width: "100%",
+                      height: barHeightPx,
+                      borderRadius: 2,
+                      backgroundColor: isCurrent
+                        ? theme.accent
+                        : h.isEstimated
+                          ? theme.muted + "55"
+                          : theme.accent + "CC",
+                    }}
+                  />
+                </View>
+                <Text
+                  style={[s.hourlyLabel, isCurrent && s.hourlyLabelCurrent]}
+                >
+                  {formatHourLabel(h.hour)}
+                </Text>
+              </View>
+            );
+          })}
+        </ScrollView>
+
+        <View
+          style={[
+            s.legendRow,
+            { flexDirection: isArabic ? "row-reverse" : "row" },
+          ]}
+        >
+          <View style={s.legendItem}>
             <View
-              key={i}
-              style={{
-                flex: 1,
-                height: barHeight,
-               backgroundColor: filled ? chartColor : theme.hairline,
-                borderRadius: 2,
-              }}
+              style={[s.legendDot, { backgroundColor: theme.accent + "CC" }]}
             />
-          );
-        })}
+            <Text style={s.legendText}>{i18n.t("actual")}</Text>
+          </View>
+          <View style={s.legendItem}>
+            <View
+              style={[s.legendDot, { backgroundColor: theme.muted + "55" }]}
+            />
+            <Text style={s.legendText}>{i18n.t("estimated")}</Text>
+          </View>
+        </View>
       </View>
-
-      {/* Sub text */}
-      <Text style={[s.subText, { textAlign: isArabic ? "right" : "left" }]}>
-        {`${currentUsers} ${
-          currentUsers === 1 ? i18n.t("user") : i18n.t("users")
-        } ${i18n.t("inside")} • ${traffic.occupancyPercentage}%`}{" "}
-      </Text>
-    </View>
+    </>
   );
 }
 
-// ─── Styles factory ───────────────────────────────────────────────────────────
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
     card: {
@@ -277,6 +570,56 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     },
     subText: {
       fontSize: 12,
+      color: theme.muted,
+      fontFamily: "SF-Medium",
+    },
+    dateText: {
+      fontSize: 12,
+      color: theme.muted,
+      fontFamily: "SF-Medium",
+      marginTop: 2,
+    },
+    hourlyScrollContent: {
+      alignItems: "flex-end",
+      paddingBottom: 4,
+      paddingHorizontal: 2,
+    },
+    hourlyCol: {
+      width: HOUR_COL_WIDTH,
+      alignItems: "center",
+    },
+    hourlyBarWrap: {
+      width: "100%",
+      height: HOURLY_CHART_HEIGHT,
+      justifyContent: "flex-end",
+      marginBottom: 6,
+    },
+    hourlyLabel: {
+      fontSize: 10,
+      color: theme.muted,
+      fontFamily: "SF-Medium",
+    },
+    hourlyLabelCurrent: {
+      color: theme.ink,
+      fontWeight: "700",
+    },
+    legendRow: {
+      alignItems: "center",
+      gap: 16,
+      marginTop: 12,
+    },
+    legendItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    legendDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    legendText: {
+      fontSize: 11,
       color: theme.muted,
       fontFamily: "SF-Medium",
     },

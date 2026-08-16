@@ -48,6 +48,8 @@ export const handleAuthenticateUser = async (form: IloginForm) => {
       console.log("💾 Saved UserRole:", resjson.role);
     }
 
+    await AsyncStorage.setItem("Gender", resjson.gender);
+    console.log("💾 Saved Gender:", resjson.gender);
     // ✅ Store the gym ID correctly
     if (resjson.gymsId) {
       await AsyncStorage.setItem("GymId", String(resjson.gymsId));
@@ -58,7 +60,6 @@ export const handleAuthenticateUser = async (form: IloginForm) => {
 
     return resjson;
   } else if (res.status === 401) {
-    
     throw new Error(i18n.t("invalid_email_or_password"));
   } else {
     throw new Error(i18n.t("an_error_occured"));

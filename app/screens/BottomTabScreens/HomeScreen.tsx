@@ -26,6 +26,7 @@ import ClassesSection from "../../components/HomeScreen/ClassesSection";
 import GymStoreSection from "../../components/HomeScreen/GymStoreSection";
 import MyStatusSection from "../../components/HomeScreen/MyStatusSection";
 import LatestNewsSection from "../../components/HomeScreen/LatestNewsSection";
+import WalletSection from "../../components/HomeScreen/WalletSection"; // 👈
 import {
   HOMESCREEN_HEADER_translateY,
   HOMESCREEN_HEADER_paddingHorizontal,
@@ -395,222 +396,6 @@ const NotesSection = ({
   );
 };
 
-// ─── Chat FAB ─────────────────────────────────────────────────────────────────
-// const ChatFab = ({
-//   onPress,
-//   theme,
-// }: {
-//   onPress: () => void;
-//   theme: ReturnType<typeof getTheme>;
-// }) => (
-//   <TouchableOpacity
-//     style={{
-//       position: "absolute",
-//       right: 18,
-//       bottom: 96,
-//       width: 54,
-//       height: 54,
-//       borderRadius: 27,
-//       backgroundColor: theme.ink,
-//       alignItems: "center",
-//       justifyContent: "center",
-//       shadowColor: "#000",
-//       shadowOpacity: 0.25,
-//       shadowRadius: 12,
-//       shadowOffset: { width: 0, height: 8 },
-//       elevation: 8,
-//     }}
-//     onPress={onPress}
-//   >
-//     <Ionicons name="chatbubbles-outline" size={24} color={theme.accent} />
-//     <View
-//       style={{
-//         position: "absolute",
-//         top: 4,
-//         right: 4,
-//         width: 10,
-//         height: 10,
-//         borderRadius: 5,
-//         backgroundColor: theme.accent,
-//         borderWidth: 2,
-//         borderColor: theme.ink,
-//       }}
-//     />
-//   </TouchableOpacity>
-// );
-
-// // ─── Chat Modal ───────────────────────────────────────────────────────────────
-// const ChatModal = ({
-//   visible,
-//   onClose,
-//   messages,
-//   input,
-//   setInput,
-//   onSend,
-//   theme,
-// }: {
-//   visible: boolean;
-//   onClose: () => void;
-//   messages: { id: number; text: string; from: string }[];
-//   input: string;
-//   setInput: (v: string) => void;
-//   onSend: () => void;
-//   theme: ReturnType<typeof getTheme>;
-// }) => (
-//   <Modal
-//     visible={visible}
-//     animationType="slide"
-//     transparent
-//     onRequestClose={onClose}
-//   >
-//     <View
-//       style={{
-//         flex: 1,
-//         backgroundColor: "rgba(0,0,0,0.5)",
-//         justifyContent: "flex-end",
-//       }}
-//     >
-//       <View
-//         style={{
-//           height: "70%",
-//           backgroundColor: theme.surface,
-//           borderTopLeftRadius: 24,
-//           borderTopRightRadius: 24,
-//           overflow: "hidden",
-//         }}
-//       >
-//         {/* Header */}
-//         <View
-//           style={{
-//             backgroundColor: theme.bg,
-//             paddingHorizontal: 16,
-//             paddingVertical: 14,
-//             flexDirection: "row",
-//             justifyContent: "space-between",
-//             alignItems: "center",
-//             borderBottomWidth: 1,
-//             borderBottomColor: theme.border,
-//           }}
-//         >
-//           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-//             <View
-//               style={{
-//                 width: 36,
-//                 height: 36,
-//                 borderRadius: 18,
-//                 backgroundColor: theme.accent,
-//               }}
-//             />
-//             <Text
-//               style={{
-//                 color: theme.ink,
-//                 fontSize: 16,
-//                 fontWeight: "700",
-//                 letterSpacing: -0.2,
-//               }}
-//             >
-//               ChatBot Assistant
-//             </Text>
-//           </View>
-//           <TouchableOpacity
-//             onPress={onClose}
-//             style={{
-//               width: 36,
-//               height: 36,
-//               borderRadius: 12,
-//               backgroundColor: theme.bg,
-//               borderWidth: 1,
-//               borderColor: theme.border,
-//               alignItems: "center",
-//               justifyContent: "center",
-//             }}
-//           >
-//             <Ionicons name="close" size={20} color={theme.ink} />
-//           </TouchableOpacity>
-//         </View>
-
-//         {/* Messages */}
-//         <FlatList
-//           data={messages}
-//           keyExtractor={(item) => item.id.toString()}
-//           renderItem={({ item }) => (
-//             <View
-//               style={{
-//                 maxWidth: "75%",
-//                 padding: 12,
-//                 borderRadius: 16,
-//                 marginBottom: 4,
-//                 backgroundColor:
-//                   item.from === "user" ? theme.ink : theme.hairline,
-//                 alignSelf: item.from === "user" ? "flex-end" : "flex-start",
-//                 borderBottomRightRadius: item.from === "user" ? 4 : 16,
-//                 borderBottomLeftRadius: item.from === "user" ? 16 : 4,
-//               }}
-//             >
-//               <Text
-//                 style={{ color: item.from === "user" ? theme.bg : theme.ink }}
-//               >
-//                 {item.text}
-//               </Text>
-//             </View>
-//           )}
-//           contentContainerStyle={{ padding: 16, gap: 10 }}
-//         />
-
-//         {/* Input */}
-//         <KeyboardAvoidingView
-//           behavior={Platform.OS === "ios" ? "padding" : "height"}
-//         >
-//           <View
-//             style={{
-//               flexDirection: "row",
-//               alignItems: "center",
-//               gap: 10,
-//               borderTopWidth: 1,
-//               borderTopColor: theme.border,
-//               paddingHorizontal: 14,
-//               paddingVertical: 10,
-//               marginBottom: 30,
-//               backgroundColor: theme.surface,
-//             }}
-//           >
-//             <TextInput
-//               value={input}
-//               onChangeText={setInput}
-//               placeholder="Type a message..."
-//               placeholderTextColor={theme.muted}
-//               style={{
-//                 flex: 1,
-//                 backgroundColor: theme.bg,
-//                 borderRadius: 20,
-//                 borderWidth: 1,
-//                 borderColor: theme.border,
-//                 paddingHorizontal: 16,
-//                 paddingVertical: 10,
-//                 fontSize: 14,
-//                 color: theme.ink,
-//               }}
-//             />
-//             <TouchableOpacity
-//               onPress={onSend}
-//               style={{
-//                 width: 40,
-//                 height: 40,
-//                 borderRadius: 20,
-//                 backgroundColor: theme.accent,
-//                 alignItems: "center",
-//                 justifyContent: "center",
-//               }}
-//             >
-//               <Ionicons name="send" size={18} color={theme.ink} />
-//             </TouchableOpacity>
-//           </View>
-//         </KeyboardAvoidingView>
-//       </View>
-//     </View>
-//   </Modal>
-// );
-
 // ─── HomeScreen ───────────────────────────────────────────────────────────────
 const HomeScreen = () => {
   const ref = React.useRef(null);
@@ -699,6 +484,14 @@ const HomeScreen = () => {
     }, 800);
     setInput("");
   };
+  console.log(
+    "🔍 guestMode:",
+    guestMode,
+    "| userProfile role:",
+    userProfile?.role,
+    "| isGuestMember:",
+    isGuestMember,
+  );
 
   return (
     <>
@@ -747,11 +540,19 @@ const HomeScreen = () => {
           }}
         >
           <CouponsCarousel refreshTrigger={refreshTrigger} />
+          {!guestMode && isGuestMember && (
+            <WalletSection
+              refreshTrigger={refreshTrigger}
+              theme={theme}
+              isRTL={isRTL}
+            />
+          )}
           {/* <AudienceSection /> */}
           {!guestMode && isGuestMember && (
             <GymTrafficVisual refreshTrigger={refreshTrigger} />
           )}
           <MyStatusSection refreshTrigger={refreshTrigger} />
+
           <NotesSection
             notes={notes}
             loadingNotes={loadingNotes}
