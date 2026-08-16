@@ -78,6 +78,14 @@ const SettingsSection = () => {
       },
       hideForGuest: true,
     },
+    {
+      IoniconsIconName: "alert-circle",
+      title: i18n.t("Complaints_History"),
+      onPress: () => {
+        navigate("ComplaintsHistory");
+      },
+      hideForGuest: true,
+    },
     // {
     //   AntDesignIconName: "user",
     //   title: i18n.t("manage_my_account"),

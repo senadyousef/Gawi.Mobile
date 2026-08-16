@@ -315,7 +315,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       );
 
       const noTicketMessage = "There is no open sale ticket for this gym.";
-
+      const noEnoughBalance = "Wallet balance is not enough for this purchase.";
       // 👇 server can send this back as a 200 OK with the message in the
       // body, not just as an error status — so check the text itself first,
       // regardless of response.ok
@@ -326,13 +326,19 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
         );
         return;
       }
-
+      if (text.includes(noEnoughBalance)) {
+        Alert.alert(
+          i18n.t("error"),
+          i18n.t("no_Enough_balance") || noEnoughBalance,
+        );
+        return;
+      }
       if (!response.ok) {
-        Alert.alert(i18n.t("error"), noTicketMessage);
+        Alert.alert(i18n.t("error"), text);
         return;
       }
 
-      Alert.alert(i18n.t("success"), "Ticket purchased successfully");
+      Alert.alert(i18n.t("success"), i18n.t("ticket_purchased_success"));
     } catch (error) {
       console.error("❌ [QRCodeScreen] handlePurchaseOpenTicket error:", error);
       Alert.alert(i18n.t("error"), i18n.t("an_error_occured"));

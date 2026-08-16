@@ -1014,4 +1014,13 @@ export default {
   complaint_generic_error: "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
   media_permission_required: "إذن الوصول إلى الوسائط مطلوب.",
   mic_permission_required: "إذن الميكروفون مطلوب لتسجيل ملاحظة صوتية.",
+  no_Enough_balance: "لا يوجد رصيد كافي",
+  ticket_purchased_success: "تم شراء التذكرة بنجاح",
+  Complaints_History: "سجل الشكاوي",
+  complaint_status_pending: "قيد الانتظار",
+  complaint_status_resolved: "تم الحل",
+  complaint_status_rejected: "مرفوضة",
+  complaint_video: "فيديو",
+  complaint_voice: "ملاحظة صوتية",
+  no_complaints: "لا توجد شكاوى بعد",
 };

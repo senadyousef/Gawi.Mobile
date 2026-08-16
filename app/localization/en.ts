@@ -1035,4 +1035,13 @@ export default {
   media_permission_required: "Media library permission is required.",
   mic_permission_required:
     "Microphone permission is required to record a voice note.",
+  no_Enough_balance: "Wallet balance is not enough for this purchase.",
+  ticket_purchased_success: "Ticket purchased successfully",
+  Complaints_History: "Complaints History",
+  complaint_status_pending: "Pending",
+  complaint_status_resolved: "Resolved",
+  complaint_status_rejected: "Rejected",
+  complaint_video: "Video",
+  complaint_voice: "Voice Note",
+  no_complaints: "No complaints yet",
 };
