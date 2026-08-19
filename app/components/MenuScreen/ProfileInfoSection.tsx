@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useCallback } from "react";
 import { View, Image, StyleSheet, ActivityIndicator } from "react-native";
 import CardWrapper from "../CardWrapper";
 import Colors from "../../constants/Colors";
@@ -6,7 +6,7 @@ import { useI18n } from "../../hooks/useI18n";
 import { Text, TouchableOpacity } from "../overridedComponents";
 import { fetchCurrentUserProfile, IUserProfile } from "../../api/profile";
 import { useAppContext } from "../../context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import i18n from "../../localization";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
@@ -26,16 +26,33 @@ const ProfileInfoSection = () => {
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
   const s = React.useMemo(() => createStyles(theme), [theme]);
 
-  useEffect(() => {
-    const loadProfile = async () => {
-      setLoading(true);
-      const data = await fetchCurrentUserProfile();
-      console.log("FULL PROFILE:", JSON.stringify(data, null, 2));
-      setProfile(data);
-      setLoading(false);
-    };
-    loadProfile();
-  }, []);
+  // Re-fetch whenever the parent screen regains focus
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+
+      const loadProfile = async () => {
+        setLoading(true);
+        try {
+          const data = await fetchCurrentUserProfile();
+          if (isMounted) {
+            console.log("FULL PROFILE:", JSON.stringify(data, null, 2));
+            setProfile(data);
+          }
+        } catch (error) {
+          console.error("❌ Failed to load profile:", error);
+        } finally {
+          if (isMounted) setLoading(false);
+        }
+      };
+
+      loadProfile();
+
+      return () => {
+        isMounted = false;
+      };
+    }, []),
+  );
 
   const imageUri = profile?.photoUrl || null;
 

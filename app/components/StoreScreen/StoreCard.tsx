@@ -51,7 +51,7 @@ const StoreCard: React.FC<Props> = ({
           source={{
             uri:
               item.photoUrl && item.photoUrl.trim() !== ""
-                ? `https://gym.useitsmart.com/${item.photoUrl.replace(/^\//, "")}`
+                ? `https://gawifit.com/${item.photoUrl.replace(/^\//, "")}`
                 : "https://via.placeholder.com/300x300.png?text=No+Image",
           }}
         />

@@ -45,6 +45,7 @@ interface INote {
   color: string;
   date: string;
   userId?: number;
+  type?: string;
 }
 
 const CalendarScreen = () => {
@@ -95,16 +96,13 @@ const CalendarScreen = () => {
   const fetchNotes = async () => {
     try {
       const token = await handleGetToken();
-      const res = await fetch(
-        "https://gym.useitsmart.com/api/Notes/getallNotes",
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "text/plain",
-          },
+      const res = await fetch("https://gawifit.com/api/Notes/getallNotes", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "text/plain",
         },
-      );
+      });
       if (!res.ok) throw new Error(`Failed to fetch notes: ${res.status}`);
       const data = await res.json();
       const allNotes = Array.isArray(data.result) ? data.result : [];
@@ -113,8 +111,11 @@ const CalendarScreen = () => {
       );
       const formattedNotes = userNotes.map((n: any) => ({
         ...n,
+        type: "Note",
         date: n.date ? n.date.split("T")[0] : format(new Date(), "yyyy-MM-dd"),
       }));
+      // 👇 used only for calendar dot-marking, NOT rendered in the FlatList
+      // (the gyms endpoint already returns notes as part of its payload)
       setNotes(formattedNotes);
     } catch (error: any) {
       console.error("❌ Error fetching notes:", error);
@@ -129,7 +130,7 @@ const CalendarScreen = () => {
       const memberId = await AsyncStorage.getItem("MemberId");
 
       const response = await fetch(
-        `https://gym.useitsmart.com/api/Gyms/GetAllGymsCarouselWithClass?userId=${memberId}&selectedDate=${selected}`,
+        `https://gawifit.com/api/Gyms/GetAllGymsCarouselWithClass?userId=${memberId}&selectedDate=${selected}`,
         {
           method: "GET",
           headers: {
@@ -167,7 +168,7 @@ const CalendarScreen = () => {
     }
     try {
       const token = await handleGetToken();
-      const res = await fetch("https://gym.useitsmart.com/api/Notes", {
+      const res = await fetch("https://gawifit.com/api/Notes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -190,9 +191,16 @@ const CalendarScreen = () => {
           color: noteColor,
           date: selected,
           userId: userProfile?.id,
+          type: "Note",
         };
 
+        // 👇 push into `gyms` (what the FlatList actually renders) so it shows
+        // instantly — do NOT also add to a separate array the list reads from,
+        // that's what caused the duplicate
+        setGyms((prev) => [...prev, newNote]);
+        // keep `notes` in sync too, only used for calendar dot-marking
         setNotes((prev) => [...prev, newNote]);
+
         setNoteText("");
         setNoteColor(NOTE_COLORS[0]);
         setIsNoteModalOpen(false);
@@ -213,8 +221,6 @@ const CalendarScreen = () => {
       setIsNoteModalOpen(true);
     }
   };
-
-  const notesForSelectedDate = notes.filter((n) => n.date === selected);
 
   const markedDates: Record<string, any> = {};
   notes.forEach((note) => {
@@ -238,7 +244,7 @@ const CalendarScreen = () => {
               title: i18n.locale === "ar" ? item.nameAr : item.nameEn,
               photo:
                 item.photoUrl && !item.photoUrl.startsWith("http")
-                  ? `https://gym.useitsmart.com${item.photoUrl}`
+                  ? `https://gawifit.com${item.photoUrl}`
                   : item.photoUrl,
               description:
                 i18n.locale === "ar" ? item.contentAr : item.contentEn,
@@ -279,7 +285,7 @@ const CalendarScreen = () => {
             <View style={s.newsCard}>
               <Image
                 source={{
-                  uri: `https://gym.useitsmart.com${item.photoUrl}`,
+                  uri: `https://gawifit.com${item.photoUrl}`,
                 }}
                 style={s.image}
               />
@@ -307,7 +313,7 @@ const CalendarScreen = () => {
             <View style={s.offerCard}>
               <Image
                 source={{
-                  uri: `https://gym.useitsmart.com${item.photoUrl}`,
+                  uri: `https://gawifit.com${item.photoUrl}`,
                 }}
                 style={s.offerImage}
               />
@@ -329,7 +335,12 @@ const CalendarScreen = () => {
         return (
           <TouchableOpacity activeOpacity={0.9} onPress={handlePress}>
             <View style={s.classCard}>
-              <Image source={{ uri: item.photoUrl }} style={s.classImage} />
+              <Image
+                source={{
+                  uri: `https://gawifit.com${item.photoUrl}`,
+                }}
+                style={s.classImage}
+              />
 
               <View style={s.classInfo}>
                 <Text style={s.classTitle}>
@@ -447,7 +458,9 @@ const CalendarScreen = () => {
       {/* Notes list */}
       <FlatList
         data={gyms}
-        keyExtractor={(item, index) => `${item.type}-${item.classId}-${index}`}
+        keyExtractor={(item, index) =>
+          `${item.type}-${item.id ?? item.classId}-${index}`
+        }
         renderItem={renderItem}
         extraData={selected}
         contentContainerStyle={{ paddingBottom: 20 }}

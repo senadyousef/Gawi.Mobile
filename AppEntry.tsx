@@ -59,7 +59,7 @@ export default function AppEntry() {
     responseListener.current =
       Notifications.addNotificationResponseReceivedListener((response) => {
         handleNotificationNavigation(
-          response.notification.request.content.data
+          response.notification.request.content.data,
         );
       });
 
@@ -67,7 +67,7 @@ export default function AppEntry() {
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (response?.notification?.request?.content?.data) {
         handleNotificationNavigation(
-          response.notification.request.content.data
+          response.notification.request.content.data,
         );
       }
     });
@@ -82,7 +82,7 @@ export default function AppEntry() {
     };
   }, []);
 
-    function waitForNavigationReady() {
+  function waitForNavigationReady() {
     return new Promise((resolve) => {
       const interval = setInterval(() => {
         if (navReady) {
@@ -123,8 +123,6 @@ export default function AppEntry() {
     }
   }
 
-
-
   // ----------------------
   // Splash screen while loading
   // ----------------------
@@ -133,7 +131,6 @@ export default function AppEntry() {
   }
 
   return (
-    
     <Navigation
       ref={navigationRef}
       onReady={() => setNavReady(true)}

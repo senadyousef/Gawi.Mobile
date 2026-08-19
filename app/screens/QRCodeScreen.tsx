@@ -39,7 +39,7 @@ export default function QRCodeScreen() {
     setLoading(true);
     try {
       const response = await fetch(
-        `https://gym.useitsmart.com/api/QR/getallQR`,
+        `https://gawifit.com/api/QR/getallQR`,
       );
       if (!response.ok) throw new Error("Failed to fetch QR codes");
 

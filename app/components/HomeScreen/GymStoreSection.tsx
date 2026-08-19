@@ -36,7 +36,7 @@ const GymStoreSection = ({ refreshTrigger = 0 }: Props) => {
         storedId = "0";
       }
 
-      const url = `https://gym.useitsmart.com/api/Gyms/getAllGymsStoreItems?userId=${storedId}&role=${UserRole}`;
+      const url = `https://gawifit.com/api/Gyms/getAllGymsStoreItems?userId=${storedId}&role=${UserRole}`;
       const res = await fetch(url, { headers: { Accept: "application/json" } });
 
       if (!res.ok) {

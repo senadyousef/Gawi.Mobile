@@ -82,7 +82,7 @@ const GymInfoScreen = () => {
     const fetchGymInfo = async () => {
       if (!userId) return;
       try {
-        const API_URL = `https://gym.useitsmart.com/api/Gyms/getGymInfo?userId=${userId}`;
+        const API_URL = `https://gawifit.com/api/Gyms/getGymInfo?userId=${userId}`;
         const response = await fetch(API_URL, {
           headers: { Accept: "text/plain" },
         });
@@ -205,7 +205,7 @@ const GymInfoScreen = () => {
         style={s.header}
       >
         <Image
-          source={{ uri: `https://gym.useitsmart.com/${gym.gymPhotoUrl}` }}
+          source={{ uri: `https://gawifit.com/${gym.gymPhotoUrl}` }}
           style={s.logo}
         />
         <Text style={s.gymName}>{gym.nameEn || "Unknown Gym"}</Text>

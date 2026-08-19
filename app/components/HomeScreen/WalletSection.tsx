@@ -65,7 +65,7 @@ export default function WalletSection({
       }
 
       const response = await fetch(
-        "https://gym.useitsmart.com/api/MemberWallet/me",
+        "https://gawifit.com/api/MemberWallet/me",
         {
           method: "GET",
           headers: {

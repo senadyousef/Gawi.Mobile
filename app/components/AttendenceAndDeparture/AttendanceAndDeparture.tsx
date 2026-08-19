@@ -4,11 +4,11 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   ScrollView,
   ActivityIndicator,
   useWindowDimensions,
   Image,
+  DeviceEventEmitter,
 } from "react-native";
 import RenderHtml from "react-native-render-html";
 import { CameraView, Camera, BarcodeScanningResult } from "expo-camera";
@@ -18,8 +18,9 @@ import { StatusBar } from "expo-status-bar";
 import i18n from "../../localization";
 import { useAppContext } from "../../context";
 import HtmlRenderer from "../renderHtml";
-import gymHub, { GymNotification } from "../../services/gymHubConnection"; // 👈
-import { handleGetToken } from "../../helpers"; // 👈 shared auth token helper
+import SweetAlert, { SweetAlertButton, SweetAlertType } from "../SweetAlert"; // 👈 custom alert
+import gymHub, { GymNotification } from "../../services/gymHubConnection";
+import { handleGetToken } from "../../helpers";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -50,28 +51,40 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
   const [loading, setLoading] = useState(false);
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [loadingCheck, setLoadingCheck] = useState(false);
-  const [loadingPurchase, setLoadingPurchase] = useState(false); // 👈 loading state for open-ticket purchase
+  const [loadingPurchase, setLoadingPurchase] = useState(false);
+
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
 
   const { width } = useWindowDimensions();
   const navigation = useNavigation();
-  const gymApiUrl =
-    "https://gym.useitsmart.com/api/MemberShips/checkMemberInOrOut";
+  const gymApiUrl = "https://gawifit.com/api/MemberShips/checkMemberInOrOut";
   const purchaseOpenTicketUrl =
-    "https://gym.useitsmart.com/api/MemberWallet/me/purchase-open-ticket"; // 👈
+    "https://gawifit.com/api/MemberWallet/me/purchase-open-ticket";
   const isRTL = i18n.locale === "ar";
 
   const memberIdRef = useRef<string | null>(null);
   const notificationHandlerRef = useRef<(msg: GymNotification) => void>();
-  const scanLockRef = useRef(false); // 👈 blocks re-entry into handleBarCodeScanned
-  // 👇 blocks re-entry into the actual network-triggering actions themselves.
-  // On iOS, expo-camera can call onBarcodeScanned repeatedly per frame while the
-  // code is still visible (no built-in debounce like Android's ML Kit scanner has),
-  // so this is a second, independent guard directly around each mutating call —
-  // even if the scan handler somehow re-fires, the actual fetch only ever runs once.
+  const scanLockRef = useRef(false);
   const actionLockRef = useRef(false);
-  // 👇 mirrors isCheckedIn synchronously — state updates are async, so a QR
-  // scanned right after check-in-state changes could read stale state via
-  // closures. Read isCheckedInRef.current instead of isCheckedIn in scan handlers.
   const isCheckedInRef = useRef(false);
 
   notificationHandlerRef.current = (msg: GymNotification) => {
@@ -100,7 +113,6 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
     })();
   }, []);
 
-  // 👇 listen for live check-in/out events for this member
   useEffect(() => {
     let cancelled = false;
     const dispatch = (msg: GymNotification) =>
@@ -138,14 +150,12 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
 
     return () => {
       cancelled = true;
-      gymHub.off("ReceiveGymNotification", dispatch); // only drop the listener — leave the shared connection running for other screens
+      gymHub.off("ReceiveGymNotification", dispatch);
     };
   }, []);
 
   const handleCheckInOut = async () => {
     console.log("🏃 [QRCodeScreen] handleCheckInOut triggered");
-    // 👇 idempotency guard — regardless of how many times this gets called,
-    // the actual network request only fires once until it resolves
     if (actionLockRef.current) {
       console.log(
         "⏹️ [QRCodeScreen] handleCheckInOut already in flight, ignoring",
@@ -158,7 +168,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       const storedMemberId = await AsyncStorage.getItem("MemberId");
       console.log("🆔 [QRCodeScreen] check-in storedMemberId:", storedMemberId);
       if (!storedMemberId) {
-        Alert.alert(i18n.t("error"), "Member ID not found!");
+        showAlert("error", i18n.t("error"), "Member ID not found!");
         return;
       }
       const response = await fetch(`${gymApiUrl}?id=${storedMemberId}`, {
@@ -170,23 +180,26 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
         response.status,
       );
 
-      // 👇 read the body as text ONCE — the "please wait" rate-limit message
-      // can come back as plain text (sometimes even alongside a 200), so we
-      // have to inspect it before deciding whether to JSON.parse it
       const rawText = await response.text();
       console.log("📦 [QRCodeScreen] check-in raw response:", rawText);
 
-      const waitMessage = "Please wait 5 minutes before checking in/out again";
+      const waitMessage = "Please wait 1 minutes before checking in/out again";
 
-      // 👇 keep this literal — it's what the server actually sends back,
-      // independent of device locale. Only the alert shown to the user is localized.
       if (rawText.includes(waitMessage)) {
-        Alert.alert(i18n.t("error"), i18n.t("wait_5_minutes") || waitMessage);
+        showAlert(
+          "warning",
+          i18n.t("error"),
+          i18n.t("wait_5_minutes") || waitMessage,
+        );
         return;
       }
 
       if (!response.ok) {
-        Alert.alert(i18n.t("error"), rawText || i18n.t("an_error_occured"));
+        showAlert(
+          "error",
+          i18n.t("error"),
+          rawText || i18n.t("an_error_occured"),
+        );
         return;
       }
 
@@ -198,18 +211,17 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
           "❌ [QRCodeScreen] failed to parse check-in JSON:",
           parseError,
         );
-        Alert.alert(i18n.t("error"), i18n.t("an_error_occured"));
+        showAlert("error", i18n.t("error"), i18n.t("an_error_occured"));
         return;
       }
       console.log("📦 [QRCodeScreen] check-in result:", result);
 
       const newStatus = result?.isInGym ?? !isCheckedIn;
       setIsCheckedIn(newStatus);
-      isCheckedInRef.current = newStatus; // 👈 keep the sync mirror up to date
+      isCheckedInRef.current = newStatus;
       await AsyncStorage.setItem("isCheckedIn", newStatus.toString());
 
       if (result?.gymId) {
-        // keep GymId fresh and make sure we're joined to that group right away
         await AsyncStorage.setItem("GymId", result.gymId.toString());
         console.log(
           "👥 [QRCodeScreen] calling gymHub.joinGroup with",
@@ -224,20 +236,14 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
         console.log("⚠️ [QRCodeScreen] check-in result had no gymId");
       }
 
-      // 👇 don't wait for the server to push this back over the socket —
-      // this device already knows the check-in succeeded, so fire the same
-      // event locally right away. Any screen listening for
-      // "ReceiveGymNotification" (e.g. GymTrafficVisual) updates instantly.
       gymHub.emitLocal("ReceiveGymNotification", {
         memberId: Number(storedMemberId),
         gymId: result?.gymId ?? null,
         isInGym: newStatus,
       } as GymNotification);
 
-      // 👇 one check-in/out per scan — acknowledge, then leave the screen
-      // instead of sitting on "scan again" where a second scan could fire
-      // another check-in/out right away
-      Alert.alert(
+      showAlert(
+        "success",
         i18n.t("success"),
         newStatus
           ? i18n.t("check_in_button") || "Checked In Successfully"
@@ -245,6 +251,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
         [
           {
             text: i18n.t("ok") || "OK",
+            style: "primary",
             onPress: () => {
               if (handleClose) {
                 handleClose();
@@ -257,25 +264,21 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       );
     } catch (error) {
       console.error("❌ [QRCodeScreen] handleCheckInOut error:", error);
-      Alert.alert(i18n.t("error"), i18n.t("an_error_occured"));
+      showAlert("error", i18n.t("error"), i18n.t("an_error_occured"));
     } finally {
       actionLockRef.current = false;
       setLoadingCheck(false);
     }
   };
 
-  // 👇 QR keyword: "PurchaseOpenTicket" — buys an open sale ticket for the member.
-  // The server returns the "no open ticket" message as the plain-text body
-  // when there's nothing to purchase, so we just surface response.text() on failure.
   const handlePurchaseOpenTicket = async () => {
     console.log("🎫 [QRCodeScreen] handlePurchaseOpenTicket triggered");
-    // 👇 gym-side rule: can't buy an open ticket while not checked in.
-    // Checked client-side before we even touch the network/action lock.
     if (!isCheckedInRef.current) {
       console.log(
         "⏹️ [QRCodeScreen] handlePurchaseOpenTicket blocked — not checked in",
       );
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("error"),
         i18n.t("must_check_in_first") || "You must check in first",
       );
@@ -292,7 +295,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       setLoadingPurchase(true);
       const token = await handleGetToken();
       if (!token) {
-        Alert.alert(i18n.t("error"), "Auth token not found!");
+        showAlert("error", i18n.t("error"), "Auth token not found!");
         return;
       }
 
@@ -316,32 +319,49 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
 
       const noTicketMessage = "There is no open sale ticket for this gym.";
       const noEnoughBalance = "Wallet balance is not enough for this purchase.";
-      // 👇 server can send this back as a 200 OK with the message in the
-      // body, not just as an error status — so check the text itself first,
-      // regardless of response.ok
       if (text.includes(noTicketMessage)) {
-        Alert.alert(
+        showAlert(
+          "warning",
           i18n.t("error"),
           i18n.t("no_open_ticket") || noTicketMessage,
         );
         return;
       }
       if (text.includes(noEnoughBalance)) {
-        Alert.alert(
+        showAlert(
+          "warning",
           i18n.t("error"),
           i18n.t("no_Enough_balance") || noEnoughBalance,
         );
         return;
       }
       if (!response.ok) {
-        Alert.alert(i18n.t("error"), text);
+        showAlert("error", i18n.t("error"), text);
         return;
       }
 
-      Alert.alert(i18n.t("success"), i18n.t("ticket_purchased_success"));
+      showAlert(
+        "success",
+        i18n.t("success"),
+        i18n.t("ticket_purchased_success"),
+        [
+          {
+            text: i18n.t("ok") || "OK",
+            style: "primary",
+            onPress: () => {
+              DeviceEventEmitter.emit("homeRefresh");
+              if (handleClose) {
+                handleClose();
+              } else {
+                navigation.goBack();
+              }
+            },
+          },
+        ],
+      );
     } catch (error) {
       console.error("❌ [QRCodeScreen] handlePurchaseOpenTicket error:", error);
-      Alert.alert(i18n.t("error"), i18n.t("an_error_occured"));
+      showAlert("error", i18n.t("error"), i18n.t("an_error_occured"));
     } finally {
       actionLockRef.current = false;
       setLoadingPurchase(false);
@@ -350,10 +370,10 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
 
   const fetchQRInfo = async (qrId: string) => {
     console.log("ℹ️ [QRCodeScreen] fetchQRInfo for qrId:", qrId);
-    // 👇 same gym-side rule applies to generic info QRs — not checked in, no fetch
     if (!isCheckedInRef.current) {
       console.log("⏹️ [QRCodeScreen] fetchQRInfo blocked — not checked in");
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("error"),
         i18n.t("must_check_in_first") || "You must check in first",
       );
@@ -366,16 +386,18 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
     actionLockRef.current = true;
     setLoading(true);
     try {
-      const response = await fetch(
-        "https://gym.useitsmart.com/api/QR/getallQR",
-      );
+      const response = await fetch("https://gawifit.com/api/QR/getallQR");
       if (!response.ok) throw new Error("Failed to fetch QR codes");
       const result = await response.json();
       const qrItem = result.result.find(
         (item: any) => item.id.toString() === qrId.toString(),
       );
       if (!qrItem) {
-        Alert.alert(i18n.t("not_found"), i18n.t("qr_code_info_not_found"));
+        showAlert(
+          "info",
+          i18n.t("not_found"),
+          i18n.t("qr_code_info_not_found"),
+        );
         setQrBody(null);
       } else {
         setQrHeader(qrItem.header);
@@ -383,7 +405,8 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       }
     } catch (error: any) {
       console.error("❌ [QRCodeScreen] fetchQRInfo error:", error);
-      Alert.alert(
+      showAlert(
+        "error",
         i18n.t("error"),
         error.message || i18n.t("something_went_wrong"),
       );
@@ -424,12 +447,26 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
     setQrHeader(null);
   };
 
+  const alertNode = (
+    <SweetAlert
+      visible={alertConfig.visible}
+      type={alertConfig.type}
+      title={alertConfig.title}
+      message={alertConfig.message}
+      buttons={alertConfig.buttons}
+      isDarkMode={!!isDarkMode}
+      isRTL={isRTL}
+      onRequestClose={hideAlert}
+    />
+  );
+
   if (hasPermission === null) {
     return (
       <View style={[s.center, { backgroundColor: theme.bg }]}>
         <Text style={s.permissionText}>
           {i18n.t("request_camera_permission")}
         </Text>
+        {alertNode}
       </View>
     );
   }
@@ -440,6 +477,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
         <Text style={[s.permissionText, { color: "#E55" }]}>
           {i18n.t("camera_permission_denied")}
         </Text>
+        {alertNode}
       </View>
     );
   }
@@ -484,6 +522,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
           )}
         </ScrollView>
         <StatusBar style={isDarkMode ? "light" : "dark"} />
+        {alertNode}
       </View>
     );
   }
@@ -505,7 +544,10 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
         activeOpacity={0.9}
         style={s.cameraContainer}
         onPress={() =>
-          Alert.alert(i18n.t("scanning_message") || "Scanning in progress...")
+          showAlert(
+            "info",
+            i18n.t("scanning_message") || "Scanning in progress...",
+          )
         }
       >
         {!scanned && hasPermission ? (
@@ -543,6 +585,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
         </TouchableOpacity>
       )}
       <StatusBar style={isDarkMode ? "light" : "dark"} />
+      {alertNode}
     </View>
   );
 }

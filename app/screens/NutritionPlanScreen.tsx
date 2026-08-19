@@ -62,7 +62,7 @@ export default function NutritionPlanScreen() {
   const [modalVisible, setModalVisible] = useState(false);
 
   const API_URL =
-    "https://gym.useitsmart.com/api/NutritionPlan/GetAllNutritionPlanForUser";
+    "https://gawifit.com/api/NutritionPlan/GetAllNutritionPlanForUser";
 
   const rtl = (style: any = {}) => ({
     ...style,

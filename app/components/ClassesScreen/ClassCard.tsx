@@ -48,7 +48,7 @@ const ClassCard: React.FC<Props> = ({
       <View style={s.container}>
         <View>
           <Image
-            source={{ uri: `https://gym.useitsmart.com/${item.photoUrl}` }}
+            source={{ uri: `https://gawifit.com/${item.photoUrl}` }}
             style={[s.image, imageStyle]}
             resizeMode="cover"
           />

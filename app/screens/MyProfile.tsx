@@ -8,7 +8,6 @@ import {
   ScrollView,
   TextInput,
   Platform,
-  Alert,
   I18nManager,
   Modal,
   ActivityIndicator,
@@ -26,6 +25,11 @@ import { Picker } from "@react-native-picker/picker";
 import { useNavigation } from "@react-navigation/native";
 import { API_BASE_ENDPOINT, TOKEN } from "../constants";
 import { SafeAreaView } from "react-native-safe-area-context";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, {
+  SweetAlertButton,
+  SweetAlertType,
+} from "../components/SweetAlert";
 
 // ─── RTL helper ───────────────────────────────────────────────────────────────
 const isRTL = (): boolean => {
@@ -85,9 +89,30 @@ export default function MyProfileScreen() {
   const navigation = useNavigation();
   const { handleLogout } = useAppContext();
 
-  // Photo is staged locally until explicitly saved — separate from the rest of personalData.
   const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
   const [photoSaving, setPhotoSaving] = useState(false);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
 
   const formatDate = (dateStr: string): string => {
     if (!dateStr) return "—";
@@ -109,12 +134,12 @@ export default function MyProfileScreen() {
     phoneNumber: "",
     photo: "",
     photoUrl: "",
+    gender: "",
   });
 
   const [physicalData, setPhysicalData] = useState({
     height: "",
     weight: "",
-    gender: "",
     age: "",
     target: "",
     activity_level: "",
@@ -127,18 +152,21 @@ export default function MyProfileScreen() {
     subscriptionStatus: string;
     expiryDate: string;
     startDate?: string;
+    status?: string;
   }>({ subscriptionStatus: "", expiryDate: "" });
 
   const fetchUserProfile = async () => {
     const MemberId = await AsyncStorage.getItem("MemberId");
     try {
       const response = await fetch(
-        `https://gym.useitsmart.com/api/MemberShips/MemberShipsforuser/${MemberId}`,
+        `https://gawifit.com/api/MemberShips/MemberShipsforuser/${MemberId}`,
         { method: "GET", headers: { accept: "application/json" } },
       );
       if (!response.ok) throw new Error("Failed to fetch membership");
       const data = await response.json();
+      console.log("data", data);
       setMemberIdApi(data.id);
+      setAvatarLoadFailed(false);
       setPersonalData({
         nameEn: data.nameEn || "",
         nameAr: data.nameAr || "",
@@ -149,11 +177,11 @@ export default function MyProfileScreen() {
         bio: "",
         dob: "",
         location: "",
+        gender: data.gender || "",
       });
       setPhysicalData({
         height: data.height_cm?.toString() || "",
         weight: data.weight_kg?.toString() || "",
-        gender: data.gender || "",
         age: data.age?.toString() || "",
         target: data.target || "",
         activity_level: data.activity_level || "",
@@ -165,11 +193,12 @@ export default function MyProfileScreen() {
         subscriptionStatus: data.isActive ? "Active" : "Inactive",
         expiryDate: formatDate(data.subscriptionExpiryDate),
         startDate: formatDate(data.subscriptionStartDate),
+        status: data.status,
       });
 
       setLoading(false);
     } catch (error) {
-      Alert.alert("Error", "Failed to load membership");
+      showAlert("error", "Error", "Failed to load membership");
       setLoading(false);
     }
   };
@@ -181,8 +210,9 @@ export default function MyProfileScreen() {
     setLocale(i18n.locale);
   }, [i18n.locale]);
 
-  const handleDeleteAccount = async () => {
-    Alert.alert(
+  const handleDeleteAccount = () => {
+    showAlert(
+      "warning",
       i18n.t("profile.delete_account"),
       i18n.t("profile.delete_account_confirmation"),
       [
@@ -199,7 +229,8 @@ export default function MyProfileScreen() {
               const token = await AsyncStorage.getItem(TOKEN);
 
               if (!memberId) {
-                Alert.alert(
+                showAlert(
+                  "error",
                   i18n.t("profile.error"),
                   i18n.t("profile.member_not_found"),
                 );
@@ -207,7 +238,7 @@ export default function MyProfileScreen() {
               }
 
               const response = await fetch(
-                `https://gym.useitsmart.com/api/User/deleteUserByEmail?id=${memberId}`,
+                `https://gawifit.com/api/User/deleteUserByEmail?id=${memberId}`,
                 {
                   method: "PUT",
                   headers: {
@@ -228,7 +259,8 @@ export default function MyProfileScreen() {
 
               await AsyncStorage.clear();
 
-              Alert.alert(
+              showAlert(
+                "success",
                 i18n.t("profile.success"),
                 i18n.t("profile.account_deleted"),
               );
@@ -236,7 +268,8 @@ export default function MyProfileScreen() {
               handleLogout();
             } catch (error) {
               console.log(error);
-              Alert.alert(
+              showAlert(
+                "error",
                 i18n.t("profile.error"),
                 i18n.t("profile.unable_delete_account"),
               );
@@ -248,24 +281,26 @@ export default function MyProfileScreen() {
   };
 
   const handleGeneratePlan = async () => {
+    if (loadingPlan) return;
     const requiredFields = [
       { key: "age", label: "Age" },
       { key: "height", label: "Height" },
       { key: "weight", label: "Weight" },
-      { key: "gender", label: "Gender" },
       { key: "target", label: "Target" },
       { key: "activity_level", label: "Activity Level" },
       { key: "training_days_per_week", label: "Training Days Per Week" },
       { key: "meals_per_day", label: "Meals Per Day" },
     ];
 
-    const hasEmptyField = requiredFields.some(
-      ({ key }) =>
-        !physicalData[key as keyof typeof physicalData]?.toString().trim(),
-    );
+    const hasEmptyField =
+      requiredFields.some(
+        ({ key }) =>
+          !physicalData[key as keyof typeof physicalData]?.toString().trim(),
+      ) || !personalData.gender?.toString().trim();
 
     if (hasEmptyField) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.locale.startsWith("ar") ? "بيانات ناقصة" : "Missing Information",
         i18n.locale.startsWith("ar")
           ? "يرجى تعبئة جميع بيانات المعلومات الصحية قبل إنشاء الخطة. حقل الملاحظات اختياري."
@@ -276,7 +311,7 @@ export default function MyProfileScreen() {
 
     try {
       if (!memberIdApi) {
-        Alert.alert("Error", "Membership ID not found");
+        showAlert("error", "Error", "Membership ID not found");
         return;
       }
 
@@ -284,7 +319,7 @@ export default function MyProfileScreen() {
       setLoadingPlan(true);
 
       const response = await fetch(
-        `https://gym.useitsmart.com/api/MemberShips/generate-dietary-chart/${memberIdApi}?lang=${lang}`,
+        `https://gawifit.com/api/MemberShips/generate-dietary-chart/${memberIdApi}?lang=${lang}`,
         {
           method: "POST",
           headers: { accept: "*/*" },
@@ -294,14 +329,14 @@ export default function MyProfileScreen() {
       const data = await response.json();
 
       if (!response.ok) {
-        Alert.alert("Error", "Failed to generate plan");
+        showAlert("error", "Error", "Failed to generate plan");
         return;
       }
 
       setDietPlan(data);
       setPlanModalVisible(true);
     } catch (error) {
-      Alert.alert("Error", "Something went wrong");
+      showAlert("error", "Error", "Something went wrong");
     } finally {
       setLoadingPlan(false);
     }
@@ -316,61 +351,75 @@ export default function MyProfileScreen() {
   };
 
   // Just stages the picked image locally now — nothing is uploaded yet.
-  const handleSelectPhoto = async () => {
-    Alert.alert(i18n.t("profile.select_photo") || "Select Photo", "", [
-      {
-        text: i18n.t("profile.camera") || "Camera",
-        onPress: async () => {
-          const permission = await ImagePicker.requestCameraPermissionsAsync();
-          if (permission.status !== "granted") {
-            Alert.alert(
-              i18n.t("profile.permission_required"),
-              i18n.t("profile.camera_permission") ||
-                "Camera permission is required",
-            );
-            return;
-          }
-          const result = await ImagePicker.launchCameraAsync({
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-          });
-          if (!result.canceled && result.assets?.length > 0) {
-            setPendingPhotoUri(result.assets[0].uri);
-          }
+  const handleSelectPhoto = () => {
+    showAlert(
+      "info",
+      i18n.t("profile.select_photo") || "Select Photo",
+      undefined,
+      [
+        {
+          text: i18n.t("profile.camera") || "Camera",
+          style: "primary",
+          onPress: async () => {
+            const permission =
+              await ImagePicker.requestCameraPermissionsAsync();
+            if (permission.status !== "granted") {
+              showAlert(
+                "warning",
+                i18n.t("profile.permission_required"),
+                i18n.t("profile.camera_permission") ||
+                  "Camera permission is required",
+              );
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.length > 0) {
+              setAvatarLoadFailed(false);
+              setPendingPhotoUri(result.assets[0].uri);
+            }
+          },
         },
-      },
-      {
-        text: i18n.t("profile.gallery") || "Gallery",
-        onPress: async () => {
-          const permission =
-            await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (permission.status !== "granted") {
-            Alert.alert(
-              i18n.t("profile.permission_required"),
-              i18n.t("profile.gallery_permission"),
-            );
-            return;
-          }
-          const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-          });
-          if (!result.canceled && result.assets?.length > 0) {
-            setPendingPhotoUri(result.assets[0].uri);
-          }
+        {
+          text: i18n.t("profile.gallery") || "Gallery",
+          style: "primary",
+          onPress: async () => {
+            const permission =
+              await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (permission.status !== "granted") {
+              showAlert(
+                "warning",
+                i18n.t("profile.permission_required"),
+                i18n.t("profile.gallery_permission"),
+              );
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              aspect: [1, 1],
+              quality: 0.8,
+            });
+            if (!result.canceled && result.assets?.length > 0) {
+              setAvatarLoadFailed(false);
+              setPendingPhotoUri(result.assets[0].uri);
+            }
+          },
         },
-      },
-      {
-        text: i18n.t("profile.cancel") || "Cancel",
-        style: "cancel",
-      },
-    ]);
+        {
+          text: i18n.t("profile.cancel") || "Cancel",
+          style: "cancel",
+        },
+      ],
+    );
   };
 
-  // Photo has its own save call, independent of the personal-info form.
+  const genderQuery = (gender: string) =>
+    gender ? `?gender=${encodeURIComponent(gender)}` : "";
+
   const handleSavePhoto = async () => {
     if (!pendingPhotoUri) return;
     try {
@@ -378,14 +427,36 @@ export default function MyProfileScreen() {
       const token = await handleGetToken();
       const MemberId = await AsyncStorage.getItem("MemberId");
       if (!token || !MemberId) {
-        Alert.alert(i18n.t("profile.error"), i18n.t("profile.auth_error"));
+        showAlert(
+          "error",
+          i18n.t("profile.error"),
+          i18n.t("profile.auth_error"),
+        );
         return;
       }
 
       const form = new FormData();
+
       form.append("id", MemberId);
+      form.append("nameEn", personalData.nameEn || "");
+      form.append("nameAr", personalData.nameAr || "");
+      form.append("phoneNumber", personalData.phoneNumber || "");
+      form.append("Email", personalData.email || "");
+      form.append("age", physicalData.age || "");
+      form.append("height_cm", physicalData.height || "");
+      form.append("weight_kg", physicalData.weight || "");
+      form.append("target", physicalData.target || "");
+      form.append("activity_level", physicalData.activity_level || "");
+      form.append(
+        "training_days_per_week",
+        physicalData.training_days_per_week || "",
+      );
+      form.append("meals_per_day", physicalData.meals_per_day || "");
+      form.append("notes", physicalData.notes || "");
+
       const fileName = pendingPhotoUri.split("/").pop();
       const fileExt = fileName?.split(".").pop()?.toLowerCase() ?? "jpg";
+
       form.append("file", {
         uri: pendingPhotoUri,
         name: fileName ?? `photo.${fileExt}`,
@@ -393,7 +464,7 @@ export default function MyProfileScreen() {
       } as any);
 
       const response = await fetch(
-        `https://gym.useitsmart.com/api/User/updateuser`,
+        `https://gawifit.com/api/User/updateuser${genderQuery(personalData.gender)}`,
         {
           method: "PUT",
           headers: { accept: "*/*", Authorization: `Bearer ${token}` },
@@ -402,21 +473,23 @@ export default function MyProfileScreen() {
       );
 
       const text = await response.text();
+
       console.log("photo response:", response.status, text);
 
       if (!response.ok) {
-        Alert.alert("❌ Update failed", text || "Unknown error");
+        showAlert("error", "❌ Update failed", text || "Unknown error");
         return;
       }
 
-      Alert.alert(
+      showAlert(
+        "success",
         i18n.t("profile.success"),
         i18n.t("profile.personal_updated"),
       );
       setPendingPhotoUri(null);
       fetchUserProfile();
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to save photo");
+      showAlert("error", "Error", error.message || "Failed to save photo");
     } finally {
       setPhotoSaving(false);
     }
@@ -424,6 +497,17 @@ export default function MyProfileScreen() {
 
   const handleCancelPhoto = () => {
     setPendingPhotoUri(null);
+    setAvatarLoadFailed(false);
+  };
+
+  const setFieldValue = (
+    section: "personal" | "physical",
+    key: string,
+    val: string,
+  ) => {
+    if (section === "personal")
+      setPersonalData((prev) => ({ ...prev, [key]: val }));
+    else setPhysicalData((prev) => ({ ...prev, [key]: val }));
   };
 
   const handleSaveSection = async (sectionKey: string) => {
@@ -431,11 +515,14 @@ export default function MyProfileScreen() {
       const token = await handleGetToken();
       const MemberId = await AsyncStorage.getItem("MemberId");
       if (!token || !MemberId) {
-        Alert.alert(i18n.t("profile.error"), i18n.t("profile.auth_error"));
+        showAlert(
+          "error",
+          i18n.t("profile.error"),
+          i18n.t("profile.auth_error"),
+        );
         return;
       }
       if (sectionKey === "personal") {
-        // Text fields only — the photo now saves through its own call.
         const form = new FormData();
         form.append("id", MemberId);
         form.append("nameEn", personalData.nameEn || "");
@@ -444,7 +531,7 @@ export default function MyProfileScreen() {
         form.append("Email", personalData.email || "");
 
         const response = await fetch(
-          `https://gym.useitsmart.com/api/User/updateuser`,
+          `https://gawifit.com/api/User/updateuser${genderQuery(personalData.gender)}`,
           {
             method: "PUT",
             headers: { accept: "*/*", Authorization: `Bearer ${token}` },
@@ -456,11 +543,12 @@ export default function MyProfileScreen() {
         console.log("response:", response.status, text);
 
         if (!response.ok) {
-          Alert.alert("❌ Update failed", text || "Unknown error");
+          showAlert("error", "❌ Update failed", text || "Unknown error");
           return;
         }
 
-        Alert.alert(
+        showAlert(
+          "success",
           i18n.t("profile.success"),
           i18n.t("profile.personal_updated"),
         );
@@ -469,14 +557,14 @@ export default function MyProfileScreen() {
       }
       if (sectionKey === "physical") {
         if (!memberIdApi) {
-          Alert.alert("Error", "Membership ID missing");
+          showAlert("error", "Error", "Membership ID missing");
           return;
         }
         const body = {
           age: Number(physicalData.age),
           weight_kg: Number(physicalData.weight),
           height_cm: Number(physicalData.height),
-          gender: physicalData.gender,
+          gender: personalData.gender,
           target: physicalData.target,
           activity_level: physicalData.activity_level,
           moderately_active: "1",
@@ -484,8 +572,10 @@ export default function MyProfileScreen() {
           meals_per_day: physicalData.meals_per_day,
           notes: physicalData.notes,
         };
+        console.log("personalData.gender =", personalData.gender);
+        console.log(body);
         const response = await fetch(
-          `https://gym.useitsmart.com/api/MemberShips/UpdateMemberHealthData/${memberIdApi}`,
+          `https://gawifit.com/api/MemberShips/UpdateMemberHealthData/${memberIdApi}`,
           {
             method: "PUT",
             headers: {
@@ -498,19 +588,18 @@ export default function MyProfileScreen() {
         );
         const text = await response.text();
         if (!response.ok) {
-          Alert.alert("Update failed", text);
+          showAlert("error", "Update failed", text);
           return;
         }
-        Alert.alert("Success", "Health data updated");
+        showAlert("success", "Success", "Health data updated");
         setIsEditing((prev) => ({ ...prev, physical: false }));
         fetchUserProfile();
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to save changes");
+      showAlert("error", "Error", error.message || "Failed to save changes");
     }
   };
 
-  // Small icon-per-field lookup — purely cosmetic, doesn't touch data flow.
   const fieldIcon = (key: string): keyof typeof Ionicons.glyphMap => {
     switch (key) {
       case "nameEn":
@@ -543,7 +632,6 @@ export default function MyProfileScreen() {
     }
   };
 
-  // ─── Render field (iOS-settings-style list row, not a card-per-field) ─────
   const renderField = (
     label: string,
     key: string,
@@ -555,11 +643,7 @@ export default function MyProfileScreen() {
         ? (personalData as any)[key]
         : (physicalData as any)[key];
 
-    const onChangeText = (text: string) => {
-      if (section === "personal")
-        setPersonalData((prev) => ({ ...prev, [key]: text }));
-      else setPhysicalData((prev) => ({ ...prev, [key]: text }));
-    };
+    const onChangeText = (text: string) => setFieldValue(section, key, text);
 
     return (
       <View
@@ -627,9 +711,7 @@ export default function MyProfileScreen() {
                   <TouchableOpacity
                     key={item.en}
                     style={[s.genderChip, selected && s.genderChipActive]}
-                    onPress={() =>
-                      setPhysicalData((prev) => ({ ...prev, gender: item.en }))
-                    }
+                    onPress={() => setFieldValue(section, "gender", item.en)}
                   >
                     <Text
                       style={[
@@ -668,13 +750,13 @@ export default function MyProfileScreen() {
     { label: i18n.t("profile.arabic_name"), key: "nameAr" },
     { label: i18n.t("profile.email"), key: "email" },
     { label: i18n.t("profile.phone"), key: "phoneNumber" },
+    { label: i18n.t("profile.gender"), key: "gender" },
   ];
 
   const physicalFields = [
     { label: i18n.t("profile.age"), key: "age" },
     { label: i18n.t("profile.height"), key: "height" },
     { label: i18n.t("profile.weight"), key: "weight" },
-    { label: i18n.t("profile.gender"), key: "gender" },
     { label: i18n.t("profile.target"), key: "target" },
     { label: i18n.t("profile.activity_level"), key: "activity_level" },
     { label: i18n.t("profile.training_days"), key: "training_days_per_week" },
@@ -724,6 +806,8 @@ export default function MyProfileScreen() {
     );
 
   const isActive = subscriptionData.subscriptionStatus === "Active";
+  const avatarUri = pendingPhotoUri || personalData.photoUrl;
+  const showAvatarPlaceholder = !avatarUri || avatarLoadFailed;
 
   return (
     <LinearGradient colors={[theme.bg, theme.bgEnd]} style={s.container}>
@@ -732,17 +816,31 @@ export default function MyProfileScreen() {
           contentContainerStyle={s.scrollContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* Compact header — avatar + name only, details live in tabs below */}
           <View style={s.headerSection}>
             <View style={s.avatarRing}>
               <TouchableOpacity
                 onPress={handleSelectPhoto}
                 disabled={photoSaving}
               >
-                <Image
-                  source={{ uri: pendingPhotoUri || personalData.photoUrl }}
-                  style={s.avatar}
-                />
+                {showAvatarPlaceholder ? (
+                  <View style={[s.avatar, s.avatarPlaceholder]}>
+                    <Ionicons name="person" size={40} color={theme.muted} />
+                  </View>
+                ) : (
+                  <Image
+                    source={{ uri: avatarUri }}
+                    style={s.avatar}
+                    onError={(e) => {
+                      console.log(
+                        "Avatar failed to load:",
+                        avatarUri,
+                        e.nativeEvent?.error,
+                      );
+                      setAvatarLoadFailed(true);
+                    }}
+                    onLoad={() => setAvatarLoadFailed(false)}
+                  />
+                )}
                 {!pendingPhotoUri && (
                   <View style={s.editIconContainer}>
                     <Ionicons name="camera" size={14} color={theme.accentInk} />
@@ -757,7 +855,6 @@ export default function MyProfileScreen() {
                 : personalData.nameEn}
             </Text>
 
-            {/* Photo save/cancel — only appears once a new photo is staged */}
             {pendingPhotoUri && (
               <View style={[s.photoActions, rtl && s.photoActionsRTL]}>
                 <TouchableOpacity
@@ -796,7 +893,6 @@ export default function MyProfileScreen() {
             )}
           </View>
 
-          {/* Segmented tab switcher */}
           <View style={[s.tabBar, rtl && s.tabBarRTL]}>
             {tabs.map((tab) => {
               const active = activeTab === tab.key;
@@ -820,7 +916,6 @@ export default function MyProfileScreen() {
             })}
           </View>
 
-          {/* Personal tab */}
           {activeTab === "personal" && (
             <View style={s.panel}>
               {personalFields.map((f, i) =>
@@ -869,7 +964,6 @@ export default function MyProfileScreen() {
             </View>
           )}
 
-          {/* Health tab */}
           {activeTab === "physical" && (
             <View style={s.panel}>
               <View style={[s.statGrid, rtl && s.statGridRTL]}>
@@ -951,7 +1045,6 @@ export default function MyProfileScreen() {
             </View>
           )}
 
-          {/* Membership tab — an actual gym card, not a list */}
           {activeTab === "subscription" && (
             <View style={s.panel}>
               <LinearGradient
@@ -965,7 +1058,7 @@ export default function MyProfileScreen() {
                     <View style={s.chipLine} />
                     <View style={s.chipLine} />
                   </View>
-                  {/* <View
+                  <View
                     style={[
                       s.memberStatusPill,
                       {
@@ -979,7 +1072,7 @@ export default function MyProfileScreen() {
                       style={[
                         s.statusDot,
                         {
-                          backgroundColor: isActive
+                          backgroundColor: subscriptionData.status
                             ? theme.success
                             : theme.danger,
                         },
@@ -991,9 +1084,9 @@ export default function MyProfileScreen() {
                         { color: isActive ? "#DFFCE6" : "#FFE1E1" },
                       ]}
                     >
-                      {subscriptionData.subscriptionStatus || "—"}
+                      {subscriptionData.status || "—"}
                     </Text>
-                  </View> */}
+                  </View>
                 </View>
 
                 <Text style={[s.memberCardName, rtl && s.memberCardNameRTL]}>
@@ -1032,25 +1125,32 @@ export default function MyProfileScreen() {
             </View>
           )}
 
-          {/* Generate Plan Button */}
           <TouchableOpacity
-            style={s.generateButton}
+            style={[s.generateButton, loadingPlan && { opacity: 0.6 }]}
             onPress={handleGeneratePlan}
             activeOpacity={0.85}
+            disabled={loadingPlan}
           >
-            <Ionicons
-              name="nutrition-outline"
-              size={18}
-              color={theme.accentInk}
-            />
+            {loadingPlan ? (
+              <ActivityIndicator size="small" color={theme.accentInk} />
+            ) : (
+              <Ionicons
+                name="nutrition-outline"
+                size={18}
+                color={theme.accentInk}
+              />
+            )}
             <Text style={s.generateButtonText}>
-              {i18n.locale.startsWith("ar")
-                ? "إنشاء الخطة الغذائية"
-                : "Generate Plan"}
+              {loadingPlan
+                ? i18n.locale.startsWith("ar")
+                  ? "جاري الإنشاء..."
+                  : "Generating..."
+                : i18n.locale.startsWith("ar")
+                  ? "إنشاء الخطة الغذائية"
+                  : "Generate Plan"}
             </Text>
           </TouchableOpacity>
 
-          {/* Delete account — quiet, danger-outlined */}
           <TouchableOpacity
             onPress={handleDeleteAccount}
             style={s.deleteButton}
@@ -1108,6 +1208,17 @@ export default function MyProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={!!isDarkMode}
+        isRTL={rtl}
+        onRequestClose={hideAlert}
+      />
     </LinearGradient>
   );
 }
@@ -1234,6 +1345,10 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       height: 96,
       borderRadius: 48,
       backgroundColor: theme.surface,
+    },
+    avatarPlaceholder: {
+      alignItems: "center",
+      justifyContent: "center",
     },
     editIconContainer: {
       position: "absolute",
@@ -1417,7 +1532,6 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       fontWeight: "700",
     },
 
-    // Membership card — the signature element
     memberCard: {
       borderRadius: 20,
       padding: 18,

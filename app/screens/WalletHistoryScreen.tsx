@@ -51,7 +51,7 @@ export default function WalletHistoryScreen() {
       }
 
       const response = await fetch(
-        "https://gym.useitsmart.com/api/MemberWallet/me/sales-history",
+        "https://gawifit.com/api/MemberWallet/me/sales-history",
         {
           method: "GET",
           headers: {

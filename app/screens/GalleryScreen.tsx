@@ -112,7 +112,7 @@ const GalleryScreen = () => {
             // ✅ معالجة الرابط
             const sourceUrl =
               rawUrl && !rawUrl.startsWith("http")
-                ? `https://gym.useitsmart.com${rawUrl}`
+                ? `https://gawifit.com${rawUrl}`
                 : rawUrl;
 
             const isYoutube = sourceUrl?.includes("youtube.com/watch?v=");

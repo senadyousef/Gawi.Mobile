@@ -70,14 +70,14 @@ const SettingsSection = () => {
       },
       hideForGuest: true,
     },
-    {
-      IoniconsIconName: "alert-circle-outline",
-      title: i18n.t("Complaints"),
-      onPress: () => {
-        navigate("Complaints");
-      },
-      hideForGuest: true,
-    },
+    // {
+    //   IoniconsIconName: "alert-circle-outline",
+    //   title: i18n.t("Complaints"),
+    //   onPress: () => {
+    //     navigate("Complaints");
+    //   },
+    //   hideForGuest: true,
+    // },
     {
       IoniconsIconName: "alert-circle",
       title: i18n.t("Complaints_History"),

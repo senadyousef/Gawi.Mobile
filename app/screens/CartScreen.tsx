@@ -5,6 +5,7 @@ import { width } from "../constants";
 import { useAppContext } from "../context";
 import { StatusBar } from "expo-status-bar";
 import { defaultErrorToast, handleGetToken } from "../helpers";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import BottomButton from "../components/BottomButton";
 import CartItemCard from "../components/CartScreen/CartItemCard";
 import { LoadingIndicator } from "../components/LoadingIndicator";
@@ -32,6 +33,13 @@ const getTheme = (dark: boolean) => ({
   borderColor: dark ? "#444444" : "#DDDDDD",
 });
 
+interface IProfileDefaults {
+  nameEn: string;
+  nameAr: string;
+  email: string;
+  phoneNumber: string;
+}
+
 const CartScreen: React.FC = () => {
   const { cartId, setCartId, handleLogout, setTotalCartItems, isDarkMode } =
     useAppContext();
@@ -51,6 +59,10 @@ const CartScreen: React.FC = () => {
   const [phone, setPhone] = React.useState<string>("");
   const [location, setLocation] = React.useState<string>("");
 
+  // Profile defaults, fetched once so checkout can prefill from them
+  const [profileDefaults, setProfileDefaults] =
+    React.useState<IProfileDefaults | null>(null);
+
   const fetchCartItems = async (isRefresh: boolean = false) => {
     try {
       if (isRefresh) {
@@ -60,7 +72,7 @@ const CartScreen: React.FC = () => {
       }
       const token = await handleGetToken();
       const res = await fetch(
-        `https://gym.useitsmart.com/api/Cart/getCartWithItems?cartId=${cartId}`,
+        `https://gawifit.com/api/Cart/getCartWithItems?cartId=${cartId}`,
         {
           method: "GET",
           headers: {
@@ -94,9 +106,39 @@ const CartScreen: React.FC = () => {
     }
   };
 
+  // Same membership endpoint MyProfileScreen uses — just pulled for
+  // name/email/phone so the checkout form doesn't start blank.
+  const fetchProfileDefaults = async () => {
+    try {
+      const MemberId = await AsyncStorage.getItem("MemberId");
+      if (!MemberId) return;
+
+      const res = await fetch(
+        `https://gawifit.com/api/MemberShips/MemberShipsforuser/${MemberId}`,
+        { method: "GET", headers: { accept: "application/json" } },
+      );
+      if (!res.ok) return;
+
+      const data = await res.json();
+      setProfileDefaults({
+        nameEn: data.nameEn || "",
+        nameAr: data.nameAr || "",
+        email: data.email || "",
+        phoneNumber: data.phoneNumber || "",
+      });
+    } catch (err) {
+      // Silent — checkout form just falls back to empty fields
+      console.log("Failed to fetch profile defaults for checkout:", err);
+    }
+  };
+
   React.useEffect(() => {
     fetchCartItems();
   }, [cartId]);
+
+  React.useEffect(() => {
+    fetchProfileDefaults();
+  }, []);
 
   const handleRefresh = React.useCallback(() => {
     fetchCartItems(true);
@@ -104,6 +146,18 @@ const CartScreen: React.FC = () => {
 
   const handleCheckout = () => {
     if (cartItems.length === 0) return;
+
+    // Prefill from profile, but only fields the user hasn't already typed into
+    if (profileDefaults) {
+      setFullName((prev) =>
+        prev.trim()
+          ? prev
+          : profileDefaults.nameEn || profileDefaults.nameAr || "",
+      );
+      setEmail((prev) => (prev.trim() ? prev : profileDefaults.email));
+      setPhone((prev) => (prev.trim() ? prev : profileDefaults.phoneNumber));
+    }
+
     setIsModalVisible(true);
   };
 
@@ -140,7 +194,7 @@ const CartScreen: React.FC = () => {
 
       console.log("Submitting order:", orderData);
 
-      const response = await fetch("https://gym.useitsmart.com/api/Orders/checkout", {
+      const response = await fetch("https://gawifit.com/api/Orders/checkout", {
         method: "POST",
         headers: {
           accept: "text/plain",
@@ -201,10 +255,11 @@ const CartScreen: React.FC = () => {
   const handleCloseModal = () => {
     if (!isSubmitting) {
       setIsModalVisible(false);
-      // Reset form
-      setFullName("");
-      setEmail("");
-      setPhone("");
+      // Reset form back to profile defaults (not blank) so reopening
+      // the modal still shows the prefilled values
+      setFullName(profileDefaults?.nameEn || profileDefaults?.nameAr || "");
+      setEmail(profileDefaults?.email || "");
+      setPhone(profileDefaults?.phoneNumber || "");
       setLocation("");
     }
   };

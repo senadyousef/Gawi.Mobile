@@ -38,6 +38,10 @@ interface GymClass {
   to: string;
   isBooked: boolean;
   capacity: number;
+  // 👇 optional — API sends these too, used to detect a full class
+  bookedCount?: number;
+  isFull?: boolean;
+  availableSeats?: number;
 }
 
 export default function BookClassScreen() {
@@ -62,7 +66,7 @@ export default function BookClassScreen() {
       const MemberId = await AsyncStorage.getItem("MemberId");
 
       const response = await fetch(
-        `https://gym.useitsmart.com/api/GymClass/getAllGymClassByUser?userId=${MemberId}`,
+        `https://gawifit.com/api/GymClass/getAllGymClassByUser?userId=${MemberId}`,
         { headers: { accept: "text/plain" } },
       );
 
@@ -158,6 +162,14 @@ export default function BookClassScreen() {
   }
   const now = new Date();
   const todayStr = now.toISOString().split("T")[0]; // 👈 today's date, YYYY-MM-DD
+
+  // 👇 Same "is full" check used on the class details screen
+  const isGymClassFull = (item: GymClass) =>
+    item.isFull === true ||
+    item.availableSeats === 0 ||
+    (item.capacity != null &&
+      item.bookedCount != null &&
+      item.bookedCount >= item.capacity);
 
   return (
     <View style={s.container}>
@@ -278,12 +290,15 @@ export default function BookClassScreen() {
           renderItem={({ item }) => {
             const itemDateStr = item.date.split("T")[0]; // 👈
             const isEnded = itemDateStr < todayStr; // 👈 class date before today
+            const isFull = !isEnded && !item.isBooked && isGymClassFull(item); // 👈 full only matters if upcoming & not already booked by this user
 
             const statusColor = isEnded // 👈
               ? "#9CA3AF"
               : item.isBooked
                 ? "#3B82F6"
-                : "#FF7002";
+                : isFull
+                  ? "#EF4444" // 👈 red for full/unavailable
+                  : "#FF7002";
 
             const statusLabelText = isEnded // 👈
               ? isArabic
@@ -291,7 +306,10 @@ export default function BookClassScreen() {
                 : "Ended"
               : item.isBooked
                 ? i18n.t("already_booked")
-                : i18n.t("available");
+                : isFull
+                  ? i18n.t("class_full_short") ||
+                    (isArabic ? "ممتلئ - غير متاح" : "Full - Not Available") // 👈
+                  : i18n.t("available");
 
             return (
               <TouchableOpacity
@@ -303,7 +321,7 @@ export default function BookClassScreen() {
               >
                 <ImageBackground
                   source={{
-                    uri: `https://gym.useitsmart.com/${item.photoUrl}`,
+                    uri: `https://gawifit.com/${item.photoUrl}`,
                   }}
                   style={s.imageBackground}
                   imageStyle={{ borderRadius: 16 }}
@@ -349,7 +367,7 @@ export default function BookClassScreen() {
                           },
                         ]}
                       >
-                        {item.form}:00 - {item.to}:00
+                        {item.form} - {item.to}
                       </Text>
                     </View>
                     <View style={s.infoRow}>

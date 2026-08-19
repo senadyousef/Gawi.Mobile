@@ -22,7 +22,7 @@ export const handleFetchGalleryItems = async ({
     console.log("🪪 MemberId:", MemberId);
 
     // ✅ Always fetch from API (even if MemberId = 0)
-    const url = `https://gym.useitsmart.com/api/Gyms/getAllGymsGallery?userId=${MemberId}&role=${UserRole}`;
+    const url = `https://gawifit.com/api/Gyms/getAllGymsGallery?userId=${MemberId}&role=${UserRole}`;
     console.log("📸 Fetching gallery from:", url);
 
     const res = await fetch(url, {

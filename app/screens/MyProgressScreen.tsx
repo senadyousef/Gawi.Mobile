@@ -84,7 +84,7 @@ export default function MyProgressScreen() {
       const token = await handleGetToken();
 
       const res = await fetch(
-        `https://gym.useitsmart.com/api/MyProgress/getallMyProgress?userId=${MemberId || 3}`,
+        `https://gawifit.com/api/MyProgress/getallMyProgress?userId=${MemberId || 3}`,
         {
           headers: {
             Accept: "application/json",
@@ -107,7 +107,7 @@ export default function MyProgressScreen() {
         baseProgress.map(async (p) => {
           try {
             const res = await fetch(
-              `https://gym.useitsmart.com/api/MyProgressHistory/getallMyProgressHistory?myProgressId=${p.id}`,
+              `https://gawifit.com/api/MyProgressHistory/getallMyProgressHistory?myProgressId=${p.id}`,
               {
                 headers: {
                   Accept: "text/plain",
@@ -152,8 +152,8 @@ export default function MyProgressScreen() {
       const MemberId = await AsyncStorage.getItem("MemberId");
       const token = await handleGetToken();
       const url = editingProgressId
-        ? `https://gym.useitsmart.com/api/MyProgress/${editingProgressId}`
-        : "https://gym.useitsmart.com/api/MyProgress";
+        ? `https://gawifit.com/api/MyProgress/${editingProgressId}`
+        : "https://gawifit.com/api/MyProgress";
       const method = editingProgressId ? "PUT" : "POST";
       const res = await fetch(url, {
         method,
@@ -197,7 +197,7 @@ export default function MyProgressScreen() {
         onPress: async () => {
           try {
             const token = await handleGetToken();
-            await fetch(`https://gym.useitsmart.com/api/MyProgress/${id}`, {
+            await fetch(`https://gawifit.com/api/MyProgress/${id}`, {
               method: "DELETE",
               headers: { Accept: "*/*", Authorization: `Bearer ${token}` },
             });
@@ -216,7 +216,7 @@ export default function MyProgressScreen() {
     try {
       const token = await handleGetToken();
       const res = await fetch(
-        `https://gym.useitsmart.com/api/MyProgressHistory/getallMyProgressHistory?myProgressId=${progress.id}`,
+        `https://gawifit.com/api/MyProgressHistory/getallMyProgressHistory?myProgressId=${progress.id}`,
         { headers: { Accept: "text/plain", Authorization: `Bearer ${token}` } },
       );
       const json = await res.json();
@@ -262,8 +262,8 @@ export default function MyProgressScreen() {
     try {
       const token = await handleGetToken();
       const url = editingHistoryId
-        ? `https://gym.useitsmart.com/api/MyProgressHistory/${editingHistoryId}`
-        : "https://gym.useitsmart.com/api/MyProgressHistory";
+        ? `https://gawifit.com/api/MyProgressHistory/${editingHistoryId}`
+        : "https://gawifit.com/api/MyProgressHistory";
       const method = editingHistoryId ? "PUT" : "POST";
 
       await fetch(url, {
@@ -311,7 +311,7 @@ export default function MyProgressScreen() {
           try {
             const token = await handleGetToken();
             await fetch(
-              `https://gym.useitsmart.com/api/MyProgressHistory/${id}`,
+              `https://gawifit.com/api/MyProgressHistory/${id}`,
               {
                 method: "DELETE",
                 headers: { Accept: "*/*", Authorization: `Bearer ${token}` },

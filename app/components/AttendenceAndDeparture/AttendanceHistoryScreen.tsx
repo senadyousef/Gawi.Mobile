@@ -52,7 +52,7 @@ export default function AttendanceHistoryScreen() {
       }
 
       const response = await fetch(
-        `https://gym.useitsmart.com/api/MemberShips/getMemberAttendanceHistory?id=${memberId}`,
+        `https://gawifit.com/api/MemberShips/getMemberAttendanceHistory?id=${memberId}`,
       );
 
       if (!response.ok) {

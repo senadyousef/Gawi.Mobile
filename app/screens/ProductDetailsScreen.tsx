@@ -126,7 +126,7 @@ const ProductDetailsScreen: React.FC<
       const note = cartNote?.trim() ?? "";
 
       const url =
-        `https://gym.useitsmart.com/api/Cart/addToCart` +
+        `https://gawifit.com/api/Cart/addToCart` +
         `?itemsId=${productDetails.id}` +
         `&quantity=${qty}` +
         `&note=${encodeURIComponent(note)}`;
@@ -198,7 +198,7 @@ const ProductDetailsScreen: React.FC<
               imageUrl && imageUrl.trim() !== ""
                 ? imageUrl.startsWith("http")
                   ? imageUrl
-                  : `https://gym.useitsmart.com/${imageUrl.replace(/^\//, "")}`
+                  : `https://gawifit.com/${imageUrl.replace(/^\//, "")}`
                 : "https://via.placeholder.com/300x300.png?text=No+Image",
           }}
           resizeMode="cover"
@@ -286,7 +286,7 @@ const ProductDetailsScreen: React.FC<
             <Text style={s.title}>Add to Cart</Text>
 
             <Image
-              source={{ uri: `https://gym.useitsmart.com/${imageUrl}` }}
+              source={{ uri: `https://gawifit.com/${imageUrl}` }}
               style={s.productImage}
             />
 

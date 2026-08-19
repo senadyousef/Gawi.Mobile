@@ -6,7 +6,13 @@ import { useI18n } from "../../hooks/useI18n";
 import { useNavigation, CommonActions } from "@react-navigation/native";
 import { useForm, Controller, SubmitHandler } from "react-hook-form";
 import { LinearGradient } from "expo-linear-gradient";
-import { StyleSheet, Image, View as RNView, Alert } from "react-native";
+import {
+  StyleSheet,
+  Image,
+  View as RNView,
+  Alert,
+  Platform,
+} from "react-native";
 import {
   Text,
   View,
@@ -23,6 +29,7 @@ import { useAppContext } from "../../context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { Dropdown } from "react-native-element-dropdown";
+
 interface ISignUpForm {
   nameAr: string;
   nameEn: string;
@@ -55,6 +62,26 @@ const SignUpScreen = () => {
 
   const password = watch("password");
 
+  const getSignUpErrorMessage = (status: number, rawText: string) => {
+    const lower = rawText.toLowerCase();
+    const isDuplicateEmail =
+      status === 409 ||
+      lower.includes("ix_users_email") ||
+      lower.includes("duplicate key") ||
+      lower.includes("duplicate key row");
+
+    if (isDuplicateEmail) {
+      return i18n.t("errors.email_taken", {
+        defaultValue:
+          "This email is already registered. Please sign in or use a different email.",
+      });
+    }
+
+    return i18n.t("errors.signup_failed", {
+      defaultValue: "Something went wrong. Please try again.",
+    });
+  };
+
   const onSubmit: SubmitHandler<ISignUpForm> = async (data) => {
     try {
       setIsLoading(true);
@@ -77,7 +104,7 @@ const SignUpScreen = () => {
 
       console.log("📦 Sending payload:", payload);
 
-      const response = await fetch("https://gym.useitsmart.com/api/User/signUp", {
+      const response = await fetch("https://gawifit.com/api/User/signUp", {
         method: "POST",
         headers: {
           accept: "text/plain",
@@ -87,8 +114,6 @@ const SignUpScreen = () => {
       });
 
       if (response.ok) {
-        const result = await response.text();
-
         Alert.alert("Success", "Account created successfully!", [
           {
             text: "OK",
@@ -96,12 +121,25 @@ const SignUpScreen = () => {
           },
         ]);
       } else {
-        const errorText = await response.text();
+        const rawText = await response.text();
+        console.log(rawText);
 
-        Alert.alert("Registration Failed", errorText || "Unable to register.");
+        const message = getSignUpErrorMessage(response.status, rawText);
+        setErrorMessage(message);
+        Alert.alert(
+          i18n.t("errors.registration_failed", {
+            defaultValue: "Registration Failed",
+          }),
+          message,
+        );
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      const message = i18n.t("errors.network_error", {
+        defaultValue:
+          "Network error. Please check your connection and try again.",
+      });
+      setErrorMessage(message);
+      Alert.alert("Error", message);
     } finally {
       setIsLoading(false);
     }
@@ -119,297 +157,314 @@ const SignUpScreen = () => {
   };
 
   return (
-    <KeyboardAvoidingView style={{ height }}>
-      <View style={styles.container}>
-        <Image
-          style={styles.background}
-          source={require("../../assets/images/auth-screens-image.png")}
-        />
-        <LinearGradient
-          style={styles.gradient}
-          colors={["transparent", Colors.backgroundBlue]}
-        />
+    <View style={styles.root}>
+      {/* 👇 background stays fixed behind everything — sized to the device screen */}
+      <Image
+        style={styles.background}
+        source={require("../../assets/images/auth-screens-image.png")}
+      />
+      <LinearGradient
+        style={styles.gradient}
+        colors={["transparent", Colors.backgroundBlue]}
+      />
 
-        <Image
-          style={styles.logo}
-          source={require("../../assets/images/MuscleUpLogoColored.png")}
-        />
-
-        <RNView
-          style={[styles.wrapper, { direction: isArabic() ? "rtl" : "ltr" }]}
+      {/* 👇 the actual bug: this ScrollView was imported but never used before —
+          everything lived in a plain View with justifyContent:"flex-end" inside
+          a height-locked KeyboardAvoidingView, so on shorter screens the top of
+          the form (logo included) rendered off-screen with no way to reach it */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <ErrorMessage width={width - 50} message={errorMessage} />
-
-          {/* 🗣️ Name Arabic (optional — defaults to "لاعب") */}
-          <RNView style={{ width: "100%" }}>
-            <Controller
-              name="nameAr"
-              control={control}
-              rules={{}}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <AuthInput
-                  value={value}
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  iconName="account-outline"
-                  placeholder={i18n.t("name_ar")}
-                  textAlign={isArabic() ? "right" : "left"}
-                />
-              )}
-            />
-            {errors.nameAr?.message && (
-              <ErrorText>{errors.nameAr.message}</ErrorText>
-            )}
-          </RNView>
-
-          {/* 🗣️ Name English (optional — defaults to "player") */}
-          <RNView>
-            <Controller
-              name="nameEn"
-              control={control}
-              rules={{}}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <AuthInput
-                  value={value}
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  iconName="account-outline"
-                  placeholder={i18n.t("name_en")}
-                  textAlign={isArabic() ? "right" : "left"}
-                />
-              )}
-            />
-            {errors.nameEn?.message && (
-              <ErrorText>{errors.nameEn.message}</ErrorText>
-            )}
-          </RNView>
-
-          {/* 📞 Phone Number */}
-          <RNView>
-            <Controller
-              name="phoneNumber"
-              control={control}
-              rules={{
-                required: i18n.t("errors.phone_required"),
-                pattern: {
-                  value: /^[0-9]{8,15}$/,
-                  message: i18n.t("errors.invalid_phone"),
-                },
-              }}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <AuthInput
-                  value={value}
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  iconName="phone-outline"
-                  keyboardType="phone-pad"
-                  placeholder={i18n.t("phone")}
-                  textAlign={isArabic() ? "right" : "left"}
-                />
-              )}
-            />
-            {errors.phoneNumber?.message && (
-              <ErrorText>{errors.phoneNumber.message}</ErrorText>
-            )}
-          </RNView>
-
-          {/* 📧 Email */}
-          <RNView>
-            <Controller
-              name="email"
-              control={control}
-              rules={{
-                required: i18n.t("errors.email_required"),
-                pattern: {
-                  value: /^\S+@\S+$/i,
-                  message: i18n.t("errors.invalid_email"),
-                },
-              }}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <AuthInput
-                  value={value}
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  iconName="email-outline"
-                  keyboardType="email-address"
-                  placeholder={i18n.t("email")}
-                  textAlign={isArabic() ? "right" : "left"}
-                />
-              )}
-            />
-            {errors.email?.message && (
-              <ErrorText>{errors.email.message}</ErrorText>
-            )}
-          </RNView>
-          <Controller
-            control={control}
-            name="gender"
-            defaultValue="Male"
-            render={({ field: { onChange, value } }) => (
-              <View style={styles.genderContainer}>
-                <Dropdown
-                  style={[
-                    styles.dropdown,
-                    {
-                      direction: i18n.language === "ar" ? "rtl" : "ltr",
-                    },
-                  ]}
-                  placeholderStyle={[
-                    styles.placeholderStyle,
-                    {
-                      textAlign: i18n.language === "ar" ? "right" : "left",
-                    },
-                  ]}
-                  selectedTextStyle={[
-                    styles.selectedTextStyle,
-                    {
-                      textAlign: i18n.language === "ar" ? "right" : "left",
-                    },
-                  ]}
-                  containerStyle={styles.dropdownContainer}
-                  itemTextStyle={{
-                    textAlign: i18n.language === "ar" ? "right" : "left",
-                  }}
-                  data={[
-                    {
-                      label: i18n.t("male"),
-                      value: "Male",
-                    },
-                    {
-                      label: i18n.t("female"),
-                      value: "Female",
-                    },
-                  ]}
-                  labelField="label"
-                  valueField="value"
-                  placeholder={i18n.t("selectGender")}
-                  value={value}
-                  onChange={(item) => onChange(item.value)}
-                />
-              </View>
-            )}
+          <Image
+            style={styles.logo}
+            source={require("../../assets/images/MuscleUpLogoColored.png")}
           />
-          {/* 🔒 Password */}
-          <RNView>
+
+          <RNView
+            style={[styles.wrapper, { direction: isArabic() ? "rtl" : "ltr" }]}
+          >
+            <ErrorMessage width={width - 50} message={errorMessage} />
+
+            <RNView style={{ width: "100%" }}>
+              <Controller
+                name="nameAr"
+                control={control}
+                rules={{}}
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <AuthInput
+                    value={value}
+                    onBlur={onBlur}
+                    onChangeText={onChange}
+                    iconName="account-outline"
+                    placeholder={i18n.t("name_ar")}
+                    textAlign={isArabic() ? "right" : "left"}
+                  />
+                )}
+              />
+              {errors.nameAr?.message && (
+                <ErrorText>{errors.nameAr.message}</ErrorText>
+              )}
+            </RNView>
+
+            <RNView>
+              <Controller
+                name="nameEn"
+                control={control}
+                rules={{}}
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <AuthInput
+                    value={value}
+                    onBlur={onBlur}
+                    onChangeText={onChange}
+                    iconName="account-outline"
+                    placeholder={i18n.t("name_en")}
+                    textAlign={isArabic() ? "right" : "left"}
+                  />
+                )}
+              />
+              {errors.nameEn?.message && (
+                <ErrorText>{errors.nameEn.message}</ErrorText>
+              )}
+            </RNView>
+
+            <RNView>
+              <Controller
+                name="phoneNumber"
+                control={control}
+                rules={{
+                  required: i18n.t("errors.phone_required"),
+                  pattern: {
+                    value: /^[0-9]{8,15}$/,
+                    message: i18n.t("errors.invalid_phone"),
+                  },
+                }}
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <AuthInput
+                    value={value}
+                    onBlur={onBlur}
+                    onChangeText={onChange}
+                    iconName="phone-outline"
+                    keyboardType="phone-pad"
+                    placeholder={i18n.t("phone")}
+                    textAlign={isArabic() ? "right" : "left"}
+                  />
+                )}
+              />
+              {errors.phoneNumber?.message && (
+                <ErrorText>{errors.phoneNumber.message}</ErrorText>
+              )}
+            </RNView>
+
+            <RNView>
+              <Controller
+                name="email"
+                control={control}
+                rules={{
+                  required: i18n.t("errors.email_required"),
+                  pattern: {
+                    value: /^\S+@\S+$/i,
+                    message: i18n.t("errors.invalid_email"),
+                  },
+                }}
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <AuthInput
+                    value={value}
+                    onBlur={onBlur}
+                    onChangeText={onChange}
+                    iconName="email-outline"
+                    keyboardType="email-address"
+                    placeholder={i18n.t("email")}
+                    textAlign={isArabic() ? "right" : "left"}
+                  />
+                )}
+              />
+              {errors.email?.message && (
+                <ErrorText>{errors.email.message}</ErrorText>
+              )}
+            </RNView>
+
             <Controller
-              name="password"
               control={control}
-              rules={{
-                required: i18n.t("errors.password_required"),
-                minLength: {
-                  value: 6,
-                  message: i18n.t("errors.password_length"),
-                },
-              }}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <AuthInput
-                  value={value}
-                  secureTextEntry={!isPasswordVisible}
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  iconName="lock-outline"
-                  placeholder={i18n.t("password")}
-                  textAlign={isArabic() ? "right" : "left"}
-                  rightIcon={
-                    <TouchableOpacity
-                      onPress={() => setIsPasswordVisible(!isPasswordVisible)}
-                    >
-                      <MaterialCommunityIcons
-                        name={
-                          !isPasswordVisible ? "eye-off-outline" : "eye-outline"
-                        }
-                        size={22}
-                        color={Colors.gray}
-                      />
-                    </TouchableOpacity>
-                  }
-                />
+              name="gender"
+              defaultValue="Male"
+              render={({ field: { onChange, value } }) => (
+                <View style={styles.genderContainer}>
+                  <Dropdown
+                    style={[
+                      styles.dropdown,
+                      {
+                        direction: i18n.language === "ar" ? "rtl" : "ltr",
+                      },
+                    ]}
+                    placeholderStyle={[
+                      styles.placeholderStyle,
+                      {
+                        textAlign: i18n.language === "ar" ? "right" : "left",
+                      },
+                    ]}
+                    selectedTextStyle={[
+                      styles.selectedTextStyle,
+                      {
+                        textAlign: i18n.language === "ar" ? "right" : "left",
+                      },
+                    ]}
+                    containerStyle={styles.dropdownContainer}
+                    itemTextStyle={{
+                      textAlign: i18n.language === "ar" ? "right" : "left",
+                    }}
+                    data={[
+                      {
+                        label: i18n.t("male"),
+                        value: "Male",
+                      },
+                      {
+                        label: i18n.t("female"),
+                        value: "Female",
+                      },
+                    ]}
+                    labelField="label"
+                    valueField="value"
+                    placeholder={i18n.t("selectGender")}
+                    value={value}
+                    onChange={(item) => onChange(item.value)}
+                  />
+                </View>
               )}
             />
-            {errors.password?.message && (
-              <ErrorText>{errors.password.message}</ErrorText>
-            )}
-          </RNView>
 
-          {/* 🔒 Confirm Password */}
-          <RNView>
-            <Controller
-              name="confirmPassword"
-              control={control}
-              rules={{
-                required: i18n.t("errors.password_match"),
-                validate: (value) =>
-                  value === password || i18n.t("errors.password_match"),
-              }}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <AuthInput
-                  value={value}
-                  secureTextEntry={!isConfirmVisible}
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  iconName="lock-check-outline"
-                  placeholder={i18n.t("confirm_password")}
-                  textAlign={isArabic() ? "right" : "left"}
-                  rightIcon={
-                    <TouchableOpacity
-                      onPress={() => setIsConfirmVisible(!isConfirmVisible)}
-                    >
-                      <MaterialCommunityIcons
-                        name={
-                          !isConfirmVisible ? "eye-off-outline" : "eye-outline"
-                        }
-                        size={22}
-                        color={Colors.gray}
-                      />
-                    </TouchableOpacity>
-                  }
-                />
+            <RNView>
+              <Controller
+                name="password"
+                control={control}
+                rules={{
+                  required: i18n.t("errors.password_required"),
+                  minLength: {
+                    value: 6,
+                    message: i18n.t("errors.password_length"),
+                  },
+                }}
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <AuthInput
+                    value={value}
+                    secureTextEntry={!isPasswordVisible}
+                    onBlur={onBlur}
+                    onChangeText={onChange}
+                    iconName="lock-outline"
+                    placeholder={i18n.t("password")}
+                    textAlign={isArabic() ? "right" : "left"}
+                    rightIcon={
+                      <TouchableOpacity
+                        onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+                      >
+                        <MaterialCommunityIcons
+                          name={
+                            !isPasswordVisible
+                              ? "eye-off-outline"
+                              : "eye-outline"
+                          }
+                          size={22}
+                          color={Colors.gray}
+                        />
+                      </TouchableOpacity>
+                    }
+                  />
+                )}
+              />
+              {errors.password?.message && (
+                <ErrorText>{errors.password.message}</ErrorText>
               )}
-            />
-            {errors.confirmPassword?.message && (
-              <ErrorText>{errors.confirmPassword.message}</ErrorText>
-            )}
+            </RNView>
+
+            <RNView>
+              <Controller
+                name="confirmPassword"
+                control={control}
+                rules={{
+                  required: i18n.t("errors.password_match"),
+                  validate: (value) =>
+                    value === password || i18n.t("errors.password_match"),
+                }}
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <AuthInput
+                    value={value}
+                    secureTextEntry={!isConfirmVisible}
+                    onBlur={onBlur}
+                    onChangeText={onChange}
+                    iconName="lock-check-outline"
+                    placeholder={i18n.t("confirm_password")}
+                    textAlign={isArabic() ? "right" : "left"}
+                    rightIcon={
+                      <TouchableOpacity
+                        onPress={() => setIsConfirmVisible(!isConfirmVisible)}
+                      >
+                        <MaterialCommunityIcons
+                          name={
+                            !isConfirmVisible
+                              ? "eye-off-outline"
+                              : "eye-outline"
+                          }
+                          size={22}
+                          color={Colors.gray}
+                        />
+                      </TouchableOpacity>
+                    }
+                  />
+                )}
+              />
+              {errors.confirmPassword?.message && (
+                <ErrorText>{errors.confirmPassword.message}</ErrorText>
+              )}
+            </RNView>
           </RNView>
-        </RNView>
 
-        <AuthButton
-          isLoading={isLoading}
-          style={{ width: width - 50 }}
-          label={i18n.t("create_account")}
-          onPress={handleSubmit(onSubmit)}
-        />
+          <AuthButton
+            isLoading={isLoading}
+            style={{ width: width - 50 }}
+            label={i18n.t("create_account")}
+            onPress={handleSubmit(onSubmit)}
+          />
 
-        <TouchableOpacity
-          disabled={isLoading}
-          style={styles.guestButton}
-          onPress={handleGuestLogin}
-        >
-          <Text style={styles.guestText}>{i18n.t("continue_as_guest")}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            disabled={isLoading}
+            style={styles.guestButton}
+            onPress={handleGuestLogin}
+          >
+            <Text style={styles.guestText}>{i18n.t("continue_as_guest")}</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          disabled={isLoading}
-          style={styles.signInButton}
-          onPress={() => navigation.navigate("Login" as never)}
-        >
-          <Text style={styles.signInText}>
-            {i18n.t("already_have_account")}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            disabled={isLoading}
+            style={styles.signInButton}
+            onPress={() => navigation.navigate("Login" as never)}
+          >
+            <Text style={styles.signInText}>
+              {i18n.t("already_have_account")}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-        <StatusBar style="light" />
-      </View>
-    </KeyboardAvoidingView>
+      <StatusBar style="light" />
+    </View>
   );
 };
 
 export default SignUpScreen;
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: Colors.backgroundBlue,
+  },
   genderContainer: {
     marginBottom: 16,
   },
-
   dropdown: {
     height: 55,
     backgroundColor: "#fff",
@@ -418,27 +473,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E5E5",
   },
-
   dropdownContainer: {
     borderRadius: 12,
   },
-
   placeholderStyle: {
     fontSize: 16,
     color: "#999",
   },
-
   selectedTextStyle: {
     fontSize: 16,
     color: "#000",
-  },
-
-  container: {
-    flex: 1,
-    justifyContent: "flex-end",
-    alignItems: "center",
-    paddingHorizontal: 25,
-    backgroundColor: Colors.backgroundBlue,
   },
   background: {
     width,
@@ -450,6 +494,13 @@ const styles = StyleSheet.create({
     width,
     height,
     position: "absolute",
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "flex-end",
+    alignItems: "center",
+    paddingHorizontal: 25,
+    paddingBottom: 30,
   },
   logo: {
     width: width * 0.7,

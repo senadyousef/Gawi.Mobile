@@ -1,5 +1,8 @@
 import React from "react";
-import { DrawerContentScrollView } from "@react-navigation/drawer";
+import {
+  DrawerContentScrollView,
+  useDrawerStatus,
+} from "@react-navigation/drawer";
 import {
   View,
   Text,
@@ -31,7 +34,7 @@ const getTheme = (dark: boolean) => ({
   footerText: dark ? "#666666" : Colors.gray,
 });
 
-const API_BASE_URL = "https://gym.useitsmart.com/api";
+const API_BASE_URL = "https://gawifit.com/api";
 
 // ─── Drawer Row ───────────────────────────────────────────────────────────────
 function DrawerRow({
@@ -80,7 +83,7 @@ export default function CustomDrawerContent(props) {
     useAppContext();
 
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
-
+  const isDrawerOpen = useDrawerStatus() === "open";
   const navigation = useNavigation();
   const { isArabic } = useI18n();
   const rtl = isArabic();
@@ -98,7 +101,7 @@ export default function CustomDrawerContent(props) {
       if (guestMode) return;
 
       try {
-        const token =await handleGetToken();
+        const token = await handleGetToken();
 
         const response = await fetch(`${API_BASE_URL}/Profile/GetMyProfile`, {
           method: "GET",
@@ -131,12 +134,15 @@ export default function CustomDrawerContent(props) {
       }
     };
 
-    fetchProfileNames();
+    // Re-fetch profile data whenever drawer opens
+    if (isDrawerOpen) {
+      fetchProfileNames();
+    }
 
     return () => {
       isMounted = false;
     };
-  }, [guestMode]);
+  }, [guestMode, isDrawerOpen]);
 
   const userName =
     (rtl ? profileNames.nameAr : profileNames.nameEn) || i18n.t("guest_user");
@@ -240,7 +246,7 @@ export default function CustomDrawerContent(props) {
               {!guestMode ? userName : i18n.t("guest_user")}
             </Text>
             <Text style={[styles.userEmail, rtl && styles.rtlText]}>
-              { userProfile?.email}
+              {userProfile?.email}
             </Text>
           </View>
         </SafeAreaView>

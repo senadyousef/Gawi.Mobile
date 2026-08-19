@@ -15,7 +15,7 @@ import { toastConfig } from "./app/config/toastConfig";
 import { navigate } from "./app/context/RootNavigation";
 import { useNavigation } from "@react-navigation/native";
 import navigation from "./app/navigation";
-
+import SweetAlert, { sweetAlertRef } from "./app/components/SweetAlert";
 
 // ----------------------
 // Foreground notification handler
@@ -54,7 +54,7 @@ export default function App() {
 
     const ID = parsed.Id || parsed.classId || parsed.ptId || null;
 
-    const pageName = (parsed.pageName || "");
+    const pageName = parsed.pageName || "";
 
     console.log("Parsed URL:", parsed);
 
@@ -148,7 +148,8 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ContextProvider expoPushToken={expoPushToken} deviceId={deviceId}>
-          <AppEntry  />
+          <AppEntry />
+
           <Toast config={toastConfig} />
         </ContextProvider>
       </SafeAreaProvider>

@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   TextInput,
   ScrollView,
 } from "react-native";
@@ -15,7 +14,9 @@ import { Calendar } from "react-native-calendars";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { handleGetToken } from "../helpers";
 import i18n from "../localization";
-import { useAppContext } from "../context"; // 👈
+import { useAppContext } from "../context";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, { SweetAlertButton, SweetAlertType } from "../components/SweetAlert";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -34,9 +35,9 @@ const getTheme = (dark: boolean) => ({
 export default function BookPTScreen() {
   const route = useRoute<RouteProp<{ params: any }, "params">>();
   const { trainer } = route.params || {};
-  const { isDarkMode } = useAppContext(); // 👈
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
+  const { isDarkMode } = useAppContext();
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
+  const s = React.useMemo(() => createStyles(theme), [theme]);
 
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [fromTime, setFromTime] = useState<Date>(new Date());
@@ -52,6 +53,27 @@ export default function BookPTScreen() {
   const [workToTime, setWorkToTime] = useState<Date | null>(null);
 
   const isAr = i18n.locale === "ar";
+
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
 
   const dayNameToIndex: any = {
     Sunday: 0,
@@ -120,14 +142,15 @@ export default function BookPTScreen() {
     today.setHours(0, 0, 0, 0);
 
     if (dateObj < today) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("invalid_past_date"),
         i18n.t("invalid_past_date_message"),
       );
       return;
     }
     if (!isDayAvailable(dateObj)) {
-      Alert.alert(i18n.t("unavailable"), i18n.t("trainer_not_working"));
+      showAlert("warning", i18n.t("unavailable"), i18n.t("trainer_not_working"));
       setDayHours(null);
       return;
     }
@@ -136,7 +159,7 @@ export default function BookPTScreen() {
       return dayNameToIndex[normalizedDay] === dateObj.getDay();
     });
     if (!workingDay) {
-      Alert.alert(i18n.t("unavailable"), i18n.t("trainer_not_working"));
+      showAlert("warning", i18n.t("unavailable"), i18n.t("trainer_not_working"));
       setDayHours(null);
       return;
     }
@@ -156,17 +179,18 @@ export default function BookPTScreen() {
 
   const handleBooking = async () => {
     if (!selectedDate) {
-      Alert.alert(i18n.t("missing_date"), i18n.t("missing_date_message"));
+      showAlert("warning", i18n.t("missing_date"), i18n.t("missing_date_message"));
       return;
     }
     if (toTime <= fromTime) {
-      Alert.alert(i18n.t("invalid_time"), i18n.t("invalid_time_message"));
+      showAlert("warning", i18n.t("invalid_time"), i18n.t("invalid_time_message"));
       return;
     }
     const diffInMinutes = (toTime.getTime() - fromTime.getTime()) / (1000 * 60);
 
     if (diffInMinutes !== 60) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("invalid_time"),
         i18n.locale === "ar"
           ? "يجب أن تكون مدة الحجز ساعة واحدة فقط"
@@ -180,7 +204,7 @@ export default function BookPTScreen() {
       (d: any) => dayNameToIndex[normalizeDay(d.day)] === dateObj.getDay(),
     );
     if (!workingDay) {
-      Alert.alert(i18n.t("unavailable"), i18n.t("trainer_not_working"));
+      showAlert("warning", i18n.t("unavailable"), i18n.t("trainer_not_working"));
       return;
     }
 
@@ -189,7 +213,8 @@ export default function BookPTScreen() {
     if (workFrom >= workTo) workTo.setDate(workTo.getDate() + 1);
 
     if (fromTime < workFrom || toTime > workTo) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("unavailable"),
         i18n.t("outside_working_hours", {
           from: dayHours?.from,
@@ -213,18 +238,18 @@ export default function BookPTScreen() {
     });
 
     if (overlappingClass) {
-      Alert.alert(i18n.t("time_conflict"), i18n.t("time_conflict_message"));
+      showAlert("warning", i18n.t("time_conflict"), i18n.t("time_conflict_message"));
       return;
     }
 
     try {
       const storedUserId = await AsyncStorage.getItem("MemberId");
       if (!storedUserId) {
-        Alert.alert(i18n.t("error_generic"), i18n.t("error_user_not_found"));
+        showAlert("error", i18n.t("error_generic"), i18n.t("error_user_not_found"));
         return;
       }
       const token = await handleGetToken();
-      const response = await fetch("https://gym.useitsmart.com/api/PTClass", {
+      const response = await fetch("https://gawifit.com/api/PTClass", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -240,9 +265,14 @@ export default function BookPTScreen() {
         }),
       });
       if (!response.ok) throw new Error("Failed to book session");
-      Alert.alert(i18n.t("booking_success"), i18n.t("booking_success_message"));
+      showAlert(
+        "success",
+        i18n.t("booking_success"),
+        i18n.t("booking_success_message"),
+      );
     } catch (error: any) {
-      Alert.alert(
+      showAlert(
+        "error",
         i18n.t("error_generic"),
         error.message || i18n.t("error_generic"),
       );
@@ -274,7 +304,6 @@ export default function BookPTScreen() {
       }
     }
 
-    // ✅ أضف كل أيام الماضي كـ disabled
     for (let i = 1; i < 365; i++) {
       const past = new Date(today.getTime());
       past.setDate(today.getDate() - i);
@@ -292,152 +321,166 @@ export default function BookPTScreen() {
   }, [trainer]);
 
   return (
-    <ScrollView style={[s.container, { direction: isAr ? "rtl" : "ltr" }]}>
-      <Text style={[s.header, { textAlign: isAr ? "right" : "left" }]}>
-        {i18n.t("book_session_with")} {trainer?.ptName}
-      </Text>
-
-      {/* 👇 Calendar with dynamic theme + key to force remount on toggle */}
-      <Calendar
-        key={isDarkMode ? "dark" : "light"}
-        minDate={new Date().toISOString().split("T")[0]} // ✅ يمنع الضغط على الماضي من مستوى التقويم
-        onDayPress={handleDateSelect}
-        markedDates={{
-          ...markedDates,
-          [selectedDate]: { selected: true, selectedColor: "#FF8C00" },
-        }}
-        theme={{
-          backgroundColor: theme.calBg, // 👈
-          calendarBackground: theme.calBg, // 👈
-          dayTextColor: theme.calInk, // 👈
-          monthTextColor: theme.calInk, // 👈
-          textDisabledColor: theme.calMuted, // 👈
-          textSectionTitleColor: theme.calMuted, // 👈
-          todayTextColor: "#FF8C00",
-          disabledDayTextColor: theme.calMuted, // 👈
-          arrowColor: "#FF8C00",
-          selectedDayBackgroundColor: "#FF8C00",
-          selectedDayTextColor: "#FFFFFF",
-        }}
-      />
-
-      {dayHours && (
-        <Text style={[s.label, { textAlign: isAr ? "right" : "left" }]}>
-          {i18n.t("available_hours")}: {dayHours.from} - {dayHours.to}
+    <>
+      <ScrollView style={[s.container, { direction: isAr ? "rtl" : "ltr" }]}>
+        <Text style={[s.header, { textAlign: isAr ? "right" : "left" }]}>
+          {i18n.t("book_session_with")} {trainer?.ptName}
         </Text>
-      )}
 
-      {selectedDate && (
-        <View style={{ marginTop: 10 }}>
-          <TouchableOpacity
-            onPress={() => setShowFromPicker(true)}
-            style={s.timeButton}
-          >
-            <Text style={s.timeButtonText}>
-              {i18n.t("from")}:{" "}
-              {fromTime.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setShowToPicker(true)}
-            style={s.timeButton}
-          >
-            <Text style={s.timeButtonText}>
-              {i18n.t("to")}:{" "}
-              {toTime.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {showFromPicker && workFromTime && workToTime && (
-        <DateTimePicker
-          value={fromTime}
-          mode="time"
-          display="default"
-          minimumDate={workFromTime}
-          maximumDate={workToTime}
-          onChange={(_, date) => {
-            setShowFromPicker(false);
-            if (!date) return;
-            const newTime = new Date(fromTime.getTime());
-            newTime.setHours(date.getHours(), date.getMinutes(), 0, 0);
-            if (newTime < workFromTime || newTime >= workToTime) {
-              Alert.alert(
-                i18n.t("unavailable"),
-                i18n.t("outside_working_hours", {
-                  from: dayHours?.from,
-                  to: dayHours?.to,
-                }),
-              );
-              return;
-            }
-            setFromTime(newTime);
-            const oneHourLater = new Date(newTime);
-            oneHourLater.setHours(oneHourLater.getHours() + 1);
-            setToTime(oneHourLater);
+        <Calendar
+          key={isDarkMode ? "dark" : "light"}
+          minDate={new Date().toISOString().split("T")[0]}
+          onDayPress={handleDateSelect}
+          markedDates={{
+            ...markedDates,
+            [selectedDate]: { selected: true, selectedColor: "#FF8C00" },
+          }}
+          theme={{
+            backgroundColor: theme.calBg,
+            calendarBackground: theme.calBg,
+            dayTextColor: theme.calInk,
+            monthTextColor: theme.calInk,
+            textDisabledColor: theme.calMuted,
+            textSectionTitleColor: theme.calMuted,
+            todayTextColor: "#FF8C00",
+            disabledDayTextColor: theme.calMuted,
+            arrowColor: "#FF8C00",
+            selectedDayBackgroundColor: "#FF8C00",
+            selectedDayTextColor: "#FFFFFF",
           }}
         />
-      )}
 
-      {showToPicker && workFromTime && workToTime && (
-        <DateTimePicker
-          value={toTime}
-          mode="time"
-          display="default"
-          minimumDate={fromTime}
-          maximumDate={workToTime}
-          onChange={(_, date) => {
-            setShowToPicker(false);
-            if (!date) return;
-            const newTime = new Date(toTime.getTime());
-            newTime.setHours(date.getHours(), date.getMinutes(), 0, 0);
-            if (newTime > workToTime || newTime <= fromTime) {
-              Alert.alert(
-                i18n.t("unavailable"),
-                i18n.t("outside_working_hours", {
-                  from: dayHours?.from,
-                  to: dayHours?.to,
-                }),
-              );
-              return;
-            }
-            setToTime(newTime);
-          }}
+        {dayHours && (
+          <Text style={[s.label, { textAlign: isAr ? "right" : "left" }]}>
+            {i18n.t("available_hours")}: {dayHours.from} - {dayHours.to}
+          </Text>
+        )}
+
+        {selectedDate && (
+          <View style={{ marginTop: 10 }}>
+            <TouchableOpacity
+              onPress={() => setShowFromPicker(true)}
+              style={s.timeButton}
+            >
+              <Text style={s.timeButtonText}>
+                {i18n.t("from")}:{" "}
+                {fromTime.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowToPicker(true)}
+              style={s.timeButton}
+            >
+              <Text style={s.timeButtonText}>
+                {i18n.t("to")}:{" "}
+                {toTime.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {showFromPicker && workFromTime && workToTime && (
+          <DateTimePicker
+            value={fromTime}
+            mode="time"
+            display="default"
+            minimumDate={workFromTime}
+            maximumDate={workToTime}
+            onChange={(_, date) => {
+              setShowFromPicker(false);
+              if (!date) return;
+              const newTime = new Date(fromTime.getTime());
+              newTime.setHours(date.getHours(), date.getMinutes(), 0, 0);
+              if (newTime < workFromTime || newTime >= workToTime) {
+                showAlert(
+                  "warning",
+                  i18n.t("unavailable"),
+                  i18n.t("outside_working_hours", {
+                    from: dayHours?.from,
+                    to: dayHours?.to,
+                  }),
+                );
+                return;
+              }
+              setFromTime(newTime);
+              const oneHourLater = new Date(newTime);
+              oneHourLater.setHours(oneHourLater.getHours() + 1);
+              setToTime(oneHourLater);
+            }}
+          />
+        )}
+
+        {showToPicker && workFromTime && workToTime && (
+          <DateTimePicker
+            value={toTime}
+            mode="time"
+            display="default"
+            minimumDate={fromTime}
+            maximumDate={workToTime}
+            onChange={(_, date) => {
+              setShowToPicker(false);
+              if (!date) return;
+              const newTime = new Date(toTime.getTime());
+              newTime.setHours(date.getHours(), date.getMinutes(), 0, 0);
+              if (newTime > workToTime || newTime <= fromTime) {
+                showAlert(
+                  "warning",
+                  i18n.t("unavailable"),
+                  i18n.t("outside_working_hours", {
+                    from: dayHours?.from,
+                    to: dayHours?.to,
+                  }),
+                );
+                return;
+              }
+              setToTime(newTime);
+            }}
+          />
+        )}
+
+        <Text style={[s.label, { textAlign: isAr ? "right" : "left" }]}>
+          {i18n.t("notes_optional")}
+        </Text>
+
+        <TextInput
+          style={[s.input, { textAlign: isAr ? "right" : "left" }]}
+          placeholder={i18n.t("add_notes_placeholder")}
+          placeholderTextColor={theme.placeholder}
+          multiline
+          value={notes}
+          onChangeText={setNotes}
+          color={theme.ink}
         />
-      )}
 
-      <Text style={[s.label, { textAlign: isAr ? "right" : "left" }]}>
-        {i18n.t("notes_optional")}
-      </Text>
+        <TouchableOpacity style={s.bookButton} onPress={handleBooking}>
+          <LinearGradient
+            colors={["#FF8C00", "#FF8C00"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={s.bookGradient}
+          >
+            <Text style={s.bookText}>{i18n.t("confirm_booking")}</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </ScrollView>
 
-      <TextInput
-        style={[s.input, { textAlign: isAr ? "right" : "left" }]}
-        placeholder={i18n.t("add_notes_placeholder")}
-        placeholderTextColor={theme.placeholder} // 👈
-        multiline
-        value={notes}
-        onChangeText={setNotes}
-        color={theme.ink} // 👈
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={!!isDarkMode}
+        isRTL={isAr}
+        onRequestClose={hideAlert}
       />
-
-      <TouchableOpacity style={s.bookButton} onPress={handleBooking}>
-        <LinearGradient
-          colors={["#FF8C00", "#FF8C00"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={s.bookGradient}
-        >
-          <Text style={s.bookText}>{i18n.t("confirm_booking")}</Text>
-        </LinearGradient>
-      </TouchableOpacity>
-    </ScrollView>
+    </>
   );
 }
 
@@ -447,44 +490,44 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     container: {
       flex: 1,
       padding: 16,
-      backgroundColor: theme.bg, // 👈
+      backgroundColor: theme.bg,
     },
     header: {
       fontSize: 20,
       fontWeight: "700",
       marginBottom: 20,
-      color: theme.ink, // 👈
+      color: theme.ink,
     },
     label: {
       fontWeight: "600",
       fontSize: 16,
       marginBottom: 8,
       marginTop: 10,
-      color: theme.label, // 👈
+      color: theme.label,
     },
     input: {
-      backgroundColor: theme.surface, // 👈
+      backgroundColor: theme.surface,
       borderRadius: 10,
       padding: 12,
       height: 100,
       textAlignVertical: "top",
       marginBottom: 30,
       borderWidth: 1,
-      borderColor: theme.border, // 👈
-      color: theme.ink, // 👈
+      borderColor: theme.border,
+      color: theme.ink,
     },
     bookButton: { borderRadius: 10, overflow: "hidden", marginBottom: 40 },
     bookGradient: { paddingVertical: 14, alignItems: "center" },
     bookText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
     timeButton: {
-      backgroundColor: theme.surface, // 👈
+      backgroundColor: theme.surface,
       padding: 12,
       borderRadius: 10,
       marginBottom: 10,
       borderWidth: 1,
-      borderColor: theme.border, // 👈
+      borderColor: theme.border,
     },
     timeButtonText: {
-      color: theme.ink, // 👈
+      color: theme.ink,
     },
   });

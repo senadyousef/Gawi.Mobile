@@ -49,7 +49,7 @@ const CartItemCard: React.FC<Props> = ({
     try {
       setIsLoading(true);
       const token = await handleGetToken();
-      const URL = `https://gym.useitsmart.com/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=-1`;
+      const URL = `https://gawifit.com/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=-1`;
       const response = await fetch(URL, {
         method: "POST",
         headers: { accept: "text/plain", Authorization: `Bearer ${token}` },
@@ -77,7 +77,7 @@ const CartItemCard: React.FC<Props> = ({
     try {
       setIsLoading(true);
       const token = await handleGetToken();
-      const URL = `https://gym.useitsmart.com/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=1`;
+      const URL = `https://gawifit.com/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=1`;
       const response = await fetch(URL, {
         method: "POST",
         headers: { accept: "text/plain", Authorization: `Bearer ${token}` },
@@ -100,7 +100,7 @@ const CartItemCard: React.FC<Props> = ({
     try {
       setIsLoading(true);
       const token = await handleGetToken();
-      const URL = `https://gym.useitsmart.com/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=-${quantity}`;
+      const URL = `https://gawifit.com/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=-${quantity}`;
       const response = await fetch(URL, {
         method: "POST",
         headers: { accept: "text/plain", Authorization: `Bearer ${token}` },
@@ -128,7 +128,7 @@ const CartItemCard: React.FC<Props> = ({
           source={{
             uri:
               cartItem.photoUrl && cartItem.photoUrl.trim() !== ""
-                ? `https://gym.useitsmart.com/${cartItem.photoUrl.replace(/^\//, "")}`
+                ? `https://gawifit.com/${cartItem.photoUrl.replace(/^\//, "")}`
                 : "https://via.placeholder.com/300x300.png?text=No+Image",
           }}
         />
@@ -169,7 +169,7 @@ const CartItemCard: React.FC<Props> = ({
           <View
             style={[
               s.iconsContainer,
-              { backgroundColor: isDarkMode ? "1E1E1E" : "#fff" },
+              { backgroundColor: isDarkMode ? "#1E1E1E" : "#fff" },
             ]}
           >
             <TouchableOpacity

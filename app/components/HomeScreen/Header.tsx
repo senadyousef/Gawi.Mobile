@@ -6,7 +6,11 @@ import { useAppContext } from "../../context";
 import IconsContainer from "../IconsContainer";
 import AttendanceAndDepartureModal from "../AttendenceAndDeparture";
 import { Text, View } from "../overridedComponents";
-import { useNavigation, DrawerActions } from "@react-navigation/native";
+import {
+  useNavigation,
+  DrawerActions,
+  useFocusEffect,
+} from "@react-navigation/native";
 import {
   Image,
   StyleSheet,
@@ -46,52 +50,55 @@ const Header: React.FC = () => {
     nameEn?: string;
   }>({});
 
-  React.useEffect(() => {
-    let isMounted = true;
+  // Re-fetch profile names every time the Home screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      let isMounted = true;
 
-    const fetchProfileNames = async () => {
-      if (guestMode) return;
+      const fetchProfileNames = async () => {
+        if (guestMode) return;
 
-      try {
-        const token = await handleGetToken();
+        try {
+          const token = await handleGetToken();
 
-        const response = await fetch(`${API_BASE_URL}/Profile/GetMyProfile`, {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json; charset=utf-8",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          console.error(
-            "❌ GetMyProfile failed:",
-            response.status,
-            await response.text(),
-          );
-          return;
-        }
-
-        const data = await response.json();
-
-        if (isMounted) {
-          setProfileNames({
-            nameAr: data?.nameAr ?? data?.result?.nameAr,
-            nameEn: data?.nameEn ?? data?.result?.nameEn,
+          const response = await fetch(`${API_BASE_URL}/Profile/GetMyProfile`, {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json; charset=utf-8",
+              Authorization: `Bearer ${token}`,
+            },
           });
+
+          if (!response.ok) {
+            console.error(
+              "❌ GetMyProfile failed:",
+              response.status,
+              await response.text(),
+            );
+            return;
+          }
+
+          const data = await response.json();
+
+          if (isMounted) {
+            setProfileNames({
+              nameAr: data?.nameAr ?? data?.result?.nameAr,
+              nameEn: data?.nameEn ?? data?.result?.nameEn,
+            });
+          }
+        } catch (error) {
+          console.error("❌ Error fetching profile names:", error);
         }
-      } catch (error) {
-        console.error("❌ Error fetching profile names:", error);
-      }
-    };
+      };
 
-    fetchProfileNames();
+      fetchProfileNames();
 
-    return () => {
-      isMounted = false;
-    };
-  }, [guestMode]);
+      return () => {
+        isMounted = false;
+      };
+    }, [guestMode]),
+  );
 
   const isGuestMember = !guestMode && userProfile?.role !== "Guest";
   // Sync guest status from AsyncStorage

@@ -58,7 +58,7 @@ export default function PTListScreen() {
       const userId = (await AsyncStorage.getItem("MemberId")) || "0";
 
       const res = await fetch(
-        `https://gym.useitsmart.com/api/PT/getPTWithUser?userId=${userId}`,
+        `https://gawifit.com/api/PT/getPTWithUser?userId=${userId}`,
       );
       const data: PT[] = await res.json();
       setTrainers(data);
@@ -96,7 +96,7 @@ export default function PTListScreen() {
       onPress={() => navigation.navigate("PTDetails", { trainer: item })}
     >
       <Image
-        source={{ uri: `https://gym.useitsmart.com/${item.url}` }}
+        source={{ uri: `https://gawifit.com/${item.url}` }}
         style={s.image}
       />
       <LinearGradient

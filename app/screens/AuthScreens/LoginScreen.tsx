@@ -224,7 +224,7 @@ const LoginScreen = () => {
         try {
           const pushToken = await registerForPushNotificationsAsync();
           if (pushToken) {
-            await fetch("https://gym.useitsmart.com/api/Notification", {
+            await fetch("https://gawifit.com/api/Notification", {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${authResponse.token}`,

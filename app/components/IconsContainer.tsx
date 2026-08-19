@@ -58,7 +58,7 @@ const IconsContainer: React.FC<Props> = ({ icons, isHomeScreen = false }) => {
     try {
       const token = await handleGetToken();
       const res = await fetch(
-        "https://gym.useitsmart.com/api/Cart/getCartItemsCount",
+        "https://gawifit.com/api/Cart/getCartItemsCount",
         {
           method: "GET",
           headers: { Accept: "*/*", Authorization: `Bearer ${token}` },

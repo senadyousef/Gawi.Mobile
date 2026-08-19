@@ -15,7 +15,9 @@ const SectionTitle: React.FC<Props> = ({ title, onPress }) => {
   const { isArabic, getDirection } = useI18n();
   const isRTL = i18n.locale === "ar";
   return (
-    <View style={[styles.wrapper]}>
+    <View
+      style={[styles.wrapper, { flexDirection: isRTL ? "row-reverse" : "row" }]}
+    >
       <Text style={[styles.title, { textAlign: isRTL ? "right" : "left" }]}>
         {title}
       </Text>
@@ -42,7 +44,6 @@ const styles = StyleSheet.create({
   wrapper: {
     paddingBottom: 14,
     alignItems: "center",
-    flexDirection: "row",
     justifyContent: "space-between",
   },
   button: {

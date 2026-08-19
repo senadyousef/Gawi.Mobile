@@ -1,4 +1,5 @@
-import * as React from 'react';import app from '../../../app.json';
+import * as React from 'react';
+import app from '../../../app.json';
 import i18n from '../../localization';
 import Colors from '../../constants/Colors';
 import { StatusBar } from 'expo-status-bar';

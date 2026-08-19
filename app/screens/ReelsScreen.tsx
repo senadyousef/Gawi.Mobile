@@ -66,7 +66,7 @@ export default function ReelsScreen() {
 
       while (true) {
         const res = await fetch(
-          `https://gym.useitsmart.com/api/Reels/getReelsCommentsAndLikes?currentPage=${page}&pageSize=3&userId=${userId}`,
+          `https://gawifit.com/api/Reels/getReelsCommentsAndLikes?currentPage=${page}&pageSize=3&userId=${userId}`,
           { headers: { accept: "text/plain" } }
         );
         if (!res.ok) throw new Error(`Failed to fetch reels: ${res.status}`);
@@ -123,7 +123,7 @@ export default function ReelsScreen() {
       setLikes((prev) => ({ ...prev, [reelId]: !prev[reelId] }));
 
       const res = await fetch(
-        `https://gym.useitsmart.com/api/Reels/like?userId=${userId}&reelId=${reelId}`,
+        `https://gawifit.com/api/Reels/like?userId=${userId}&reelId=${reelId}`,
         { method: "PUT", headers: { accept: "text/plain" } }
       );
 
@@ -140,7 +140,7 @@ export default function ReelsScreen() {
   // Deep link to your app
   const appDeepLink = `gym://reel/${reelId}`;
   // Fallback web link (in case the user doesn't have the app)
-  const webLink = `https://gym.useitsmart.com/reel/${reelId}`;  
+  const webLink = `https://gawifit.com/reel/${reelId}`;  
   // Message to share
   const msg = `${title}\n${appDeepLink}\n(If the app is not installed, open the link: ${webLink})`;
   
@@ -167,7 +167,7 @@ export default function ReelsScreen() {
     try {
       const userId = await AsyncStorage.getItem("MemberId");
       const res = await fetch(
-        `https://gym.useitsmart.com/api/Reels/getReelsCommentsAndLikes?currentPage=1&pageSize=3&userId=${userId}`
+        `https://gawifit.com/api/Reels/getReelsCommentsAndLikes?currentPage=1&pageSize=3&userId=${userId}`
       );
       const data = await res.json();
       const reel = data.result?.find((r: any) => r.id === reelId);
@@ -188,7 +188,7 @@ export default function ReelsScreen() {
     try {
       const userId = await AsyncStorage.getItem("MemberId");
       const res = await fetch(
-        `https://gym.useitsmart.com/api/Reels/comment?userId=${userId}&reelId=${selectedReel.id}&comment=${encodeURIComponent(newComment)}`,
+        `https://gawifit.com/api/Reels/comment?userId=${userId}&reelId=${selectedReel.id}&comment=${encodeURIComponent(newComment)}`,
         { method: "PUT", headers: { accept: "text/plain" } }
       );
       if (res.ok) {

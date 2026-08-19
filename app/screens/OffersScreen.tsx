@@ -51,7 +51,7 @@ export default function OffersScreen() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const BASE_URL = "https://gym.useitsmart.com";
+  const BASE_URL = "https://gawifit.com";
 
   // ---------------- FETCH ----------------
   const fetchOffers = async (showLoader = true) => {
@@ -73,7 +73,7 @@ export default function OffersScreen() {
       }
 
       const response = await fetch(
-        `https://gym.useitsmart.com/api/Offers/getallOffers?userId=${MemberId}&role=${UserRole}`,
+        `https://gawifit.com/api/Offers/getallOffers?userId=${MemberId}&role=${UserRole}`,
         {
           method: "GET",
           headers: { Accept: "application/json" },

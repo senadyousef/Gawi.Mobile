@@ -18,7 +18,7 @@ import i18n from "../localization";
 import { useAppContext } from "../context";
 import { handleGetToken } from "../helpers";
 
-const API_URL = "https://gym.useitsmart.com/api/Complaints";
+const API_URL = "https://gawifit.com/api/Complaints";
 
 const getTheme = (dark: boolean) => ({
   bg: dark ? "#121212" : "#F5F0E8",

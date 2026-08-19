@@ -33,7 +33,7 @@ const OrdersScreen = () => {
       }
 
       const res = await fetch(
-        `https://gym.useitsmart.com/api/Orders/my-orders?userId=${userId}`,
+        `https://gawifit.com/api/Orders/my-orders?userId=${userId}`,
         {
           method: "GET",
           headers: {
@@ -66,7 +66,7 @@ const OrdersScreen = () => {
       <Text style={styles.orderTitle}>
         Order #{item.id} - {item.totalAmount} JOD
       </Text>
-      <Image source={{ uri: `https://gym.useitsmart.com/${item.photoUrl}` }} />
+      <Image source={{ uri: `https://gawifit.com/${item.photoUrl}` }} />
       <Text style={styles.itemName}>Status: {item.Status}</Text>
       <Text style={styles.itemName}>Name: {item.fullName}</Text>
       <Text style={styles.itemName}>Phone: {item.phone}</Text>

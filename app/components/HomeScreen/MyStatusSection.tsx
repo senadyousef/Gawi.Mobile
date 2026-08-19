@@ -42,7 +42,7 @@ const MyStatusSection: React.FC<Props> = ({ refreshTrigger = 0 }) => {
     const token = await handleGetToken();
 
     const response = await fetch(
-      `https://gym.useitsmart.com/api/MemberShips/MemberShipsforuser/${memberId}`,
+      `https://gawifit.com/api/MemberShips/MemberShipsforuser/${memberId}`,
       {
         method: "GET",
         cache: "no-store",
@@ -97,8 +97,18 @@ const MyStatusSection: React.FC<Props> = ({ refreshTrigger = 0 }) => {
   }
 
   return (
-    <View style={[s.container, { direction: isRTL ? "rtl" : "ltr" }]}>
-      <SectionTitle title={i18n.t("my_status_title")} />
+    <View style={[s.container]}>
+      <Text
+        style={{
+          fontSize: 18,
+          color: "#0189ff",
+          letterSpacing: -0.3,
+          textAlign: isRTL ? "right" : "left",
+          marginBottom: 15,
+        }}
+      >
+        {i18n.t("my_status_title")}
+      </Text>
 
       <View style={s.grid}>
         <View style={s.rightCol}>
@@ -112,8 +122,13 @@ const MyStatusSection: React.FC<Props> = ({ refreshTrigger = 0 }) => {
               </View>
               <Text style={s.cardLabel}>{i18n.t("weight")}</Text>
             </View>
-            <View style={s.valRow}>
-              <Text style={s.bigVal}>{membership?.weight_kg ?? 0}</Text>
+            <View
+              style={[
+                s.valRow,
+                { alignSelf: isRTL ? "flex-end" : "flex-start" },
+              ]}
+            >
+              <Text style={[s.bigVal]}>{membership?.weight_kg ?? 0}</Text>
               <Text style={s.valUnit}>kg</Text>
             </View>
           </View>

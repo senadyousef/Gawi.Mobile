@@ -30,7 +30,7 @@ interface Props {
   isDarkMode?: boolean; // 👈 ADD
 }
 
-const BASE_URL = "https://gym.useitsmart.com";
+const BASE_URL = "https://gawifit.com";
 
 const NewsCard: React.FC<Props> = ({
   item,

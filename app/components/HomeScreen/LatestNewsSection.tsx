@@ -55,7 +55,7 @@ const LatestNewsSection = ({ refreshTrigger = 0 }: Props) => {
       setLoading(true);
 
       const response = await fetch(
-        `https://gym.useitsmart.com/api/News/getallNews?userId=${MemberId}&role=${UserRole}`,
+        `https://gawifit.com/api/News/getallNews?userId=${MemberId}&role=${UserRole}`,
         {
           method: "GET",
           headers: {

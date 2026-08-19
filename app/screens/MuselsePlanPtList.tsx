@@ -299,7 +299,7 @@ const MuselsePlanPtList = () => {
       try {
         setLoading(true);
         const response = await fetch(
-          "https://gym.useitsmart.com/api/Days/getallDays",
+          "https://gawifit.com/api/Days/getallDays",
           { method: "GET", headers: { accept: "text/plain" } },
         );
         if (!response.ok)
@@ -383,7 +383,7 @@ const MuselsePlanPtList = () => {
       const ptUserId = await AsyncStorage.getItem("MemberId");
       if (!token || !ptUserId) return;
       const res = await fetch(
-        `https://gym.useitsmart.com/api/PT/GetAllUserForPT?userId=${ptUserId}`,
+        `https://gawifit.com/api/PT/GetAllUserForPT?userId=${ptUserId}`,
         {
           method: "GET",
           headers: {
@@ -411,7 +411,7 @@ const MuselsePlanPtList = () => {
       const token = await getCleanToken();
       if (!token) return;
       const res = await fetch(
-        "https://gym.useitsmart.com/api/Muscles/getallMuscles?gymsId=3",
+        "https://gawifit.com/api/Muscles/getallMuscles?gymsId=3",
         {
           method: "GET",
           headers: {
@@ -435,7 +435,7 @@ const MuselsePlanPtList = () => {
       const token = await getCleanToken();
       if (!token) return;
       const res = await fetch(
-        "https://gym.useitsmart.com/api/Exercises/getallExercises",
+        "https://gawifit.com/api/Exercises/getallExercises",
         {
           method: "GET",
           headers: {
@@ -477,7 +477,7 @@ const MuselsePlanPtList = () => {
         return;
       }
       const res = await fetch(
-        `https://gym.useitsmart.com/api/MSSMExercises/getallMSSMExersesforPT?userId=${userId}`,
+        `https://gawifit.com/api/MSSMExercises/getallMSSMExersesforPT?userId=${userId}`,
         {
           method: "GET",
           headers: {
@@ -703,7 +703,7 @@ const MuselsePlanPtList = () => {
     try {
       setAddingExercise(true);
       const token = await handleGetToken();
-      const res = await fetch("https://gym.useitsmart.com/api/MSSMExercises", {
+      const res = await fetch("https://gawifit.com/api/MSSMExercises", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -747,7 +747,7 @@ const MuselsePlanPtList = () => {
                 return;
               }
               const res = await fetch(
-                `https://gym.useitsmart.com/api/MSSMExercises/${exercise.id}`,
+                `https://gawifit.com/api/MSSMExercises/${exercise.id}`,
                 {
                   method: "DELETE",
                   headers: {
@@ -806,7 +806,7 @@ const MuselsePlanPtList = () => {
         return;
       }
       const res = await fetch(
-        "https://gym.useitsmart.com/api/MSSMExercises/CreateMSSMExercisesForschedule",
+        "https://gawifit.com/api/MSSMExercises/CreateMSSMExercisesForschedule",
         {
           method: "POST",
           headers: {

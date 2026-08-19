@@ -13,10 +13,16 @@ import {
   ActivityIndicator,
   RefreshControl,
   Pressable,
+  DeviceEventEmitter,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useScrollToTop } from "@react-navigation/native";
+import {
+  useFocusEffect,
+  useScrollToTop,
+  useNavigation,
+  DrawerActions,
+} from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import i18n from "../../localization";
 import Header from "../../components/HomeScreen/Header";
@@ -30,13 +36,18 @@ import WalletSection from "../../components/HomeScreen/WalletSection"; // 👈
 import {
   HOMESCREEN_HEADER_translateY,
   HOMESCREEN_HEADER_paddingHorizontal,
+  statusBarHeight,
 } from "../../constants";
 import Colors from "../../constants/Colors";
 import GymTrafficVisual from "../../components/HomeScreen/GymTrafficVisual";
 import AudienceSection from "../../components/HomeScreen/AudienceSection";
 import { useAppContext } from "../../context";
 import { useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+
+// 👇 Once the user has scrolled this many px, Header has scrolled off
+// screen, so the floating menu button fades in to keep the drawer reachable.
+const FLOATING_MENU_SCROLL_THRESHOLD = 120;
+
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
   bg: dark ? "#121212" : "#F5F0E8",
@@ -173,22 +184,7 @@ const NotesSection = ({
           </Text>
         </View>
       ) : notes.length === 0 ? (
-        <View style={{ alignItems: "center", paddingVertical: 28, gap: 6 }}>
-          <View
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 18,
-              backgroundColor: theme.surface,
-              borderWidth: 1,
-              borderColor: theme.border,
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 4,
-            }}
-          >
-            <Ionicons name="document-outline" size={28} color={theme.muted} />
-          </View>
+        <View style={{ alignItems: "center", gap: 6 }}>
           <Text
             style={{
               fontSize: 14,
@@ -400,6 +396,7 @@ const NotesSection = ({
 const HomeScreen = () => {
   const ref = React.useRef(null);
   useScrollToTop(ref);
+  const navigation = useNavigation<any>(); // 👈 for the floating menu button
 
   const { guestMode, userProfile, isDarkMode } = useAppContext(); // 👈 pull isDarkMode
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
@@ -415,10 +412,22 @@ const HomeScreen = () => {
   const [notes, setNotes] = React.useState<any[]>([]);
   const [loadingNotes, setLoadingNotes] = React.useState(false);
   const [initialLoading, setInitialLoading] = React.useState(true);
+  // 👇 Shows the floating menu button once Header has scrolled off screen
+  const [showFloatingMenu, setShowFloatingMenu] = React.useState(false);
 
   const isGuestMember = !guestMode && userProfile?.role !== "Guest";
   const isRTL = i18n.locale === "ar";
+  React.useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener(
+      "homeRefresh",
+      async () => {
+        setRefreshTrigger((prev) => prev + 1);
+        await fetchNotes(false);
+      },
+    );
 
+    return () => subscription.remove();
+  }, []);
   React.useEffect(() => {
     const checkGuestMode = async () => {
       try {
@@ -438,7 +447,7 @@ const HomeScreen = () => {
       const userId = await AsyncStorage.getItem("MemberId");
       if (!userId) return;
       const response = await fetch(
-        `https://gym.useitsmart.com/api/Notes/getallNotes?userId=${userId}`,
+        `https://gawifit.com/api/Notes/getallNotes?userId=${userId}`,
         { method: "GET", headers: { accept: "text/plain" } },
       );
       if (response.ok) {
@@ -456,14 +465,26 @@ const HomeScreen = () => {
   useFocusEffect(
     React.useCallback(() => {
       fetchNotes(true);
+      setRefreshTrigger((prev) => prev + 1);
+      // Lets any currently-mounted screen outside this tree (e.g.
+      // ClassDetailsScreen) know it's time to silently refetch too.
+      DeviceEventEmitter.emit("homeRefresh");
     }, []),
   );
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
     setRefreshTrigger((prev) => prev + 1);
+    DeviceEventEmitter.emit("homeRefresh");
     await fetchNotes(false);
     setRefreshing(false);
+  }, []);
+
+  // 👇 Toggles the floating menu button on/off as the user scrolls past Header
+  const handleScroll = React.useCallback((event: any) => {
+    const y = event.nativeEvent.contentOffset.y;
+    const shouldShow = y > FLOATING_MENU_SCROLL_THRESHOLD;
+    setShowFloatingMenu((prev) => (prev === shouldShow ? prev : shouldShow));
   }, []);
 
   const handleSend = () => {
@@ -503,6 +524,8 @@ const HomeScreen = () => {
         showsVerticalScrollIndicator={false}
         // 👇 Screen background reacts to dark mode
         style={{ backgroundColor: theme.bg }}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -568,6 +591,21 @@ const HomeScreen = () => {
         </View>
       </ScrollView>
 
+      {/* 👇 Floating menu button — lives outside the ScrollView so it stays
+          fixed on screen; only shown once Header has scrolled out of view */}
+      {showFloatingMenu && (
+        <TouchableOpacity
+          onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
+          activeOpacity={0.85}
+          style={[
+            floatingMenuStyles.button,
+            isRTL ? { right: 16 } : { left: 16 },
+          ]}
+        >
+          <Ionicons name="menu-outline" size={24} color={Colors.white} />
+        </TouchableOpacity>
+      )}
+
       {/* <ChatFab onPress={() => setIsChatOpen(true)} theme={theme} /> */}
 
       {/* <ChatModal
@@ -585,10 +623,27 @@ const HomeScreen = () => {
 
 export default HomeScreen;
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-// ─── DELETE the entire bottom const s = StyleSheet.create({...}) ───────────
-// ─── REPLACE with this function above HomeScreen or at the bottom ──────────
+// ─── Floating menu button styles ───────────────────────────────────────────────
+const floatingMenuStyles = StyleSheet.create({
+  button: {
+    position: "absolute",
+    top: statusBarHeight + 8,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.backgroundBlue,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 50,
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+});
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
     safeArea: {

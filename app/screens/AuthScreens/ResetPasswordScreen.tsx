@@ -9,7 +9,8 @@ import AuthInput from '../../components/Auth/AuthInput';
 import ErrorMessage from '../../components/ErrorMessage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import AuthButton from '../../components/Auth/AuthButton';
-import { StyleSheet, View as RNView } from 'react-native';
+import { StyleSheet, View as RNView, TouchableOpacity } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { resetPasswordFormRules } from '../../formRules';
 import { Text, View } from '../../components/overridedComponents';
 import { Controller, SubmitHandler, useForm } from 'react-hook-form';
@@ -25,6 +26,11 @@ const ResetPasswordScreen = () => {
   const { email, code } = route.params;
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
   const [errorMessage, setErrorMessage] = React.useState<string>('');
+  // 👇 Toggle state for each password field's visibility
+  const [showPassword, setShowPassword] = React.useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] =
+    React.useState<boolean>(false);
+  const isRTL = i18n.locale === 'ar';
 
   const onSubmit: SubmitHandler<IresetPasswordForm> = async (data) => {
     try {
@@ -37,7 +43,7 @@ const ResetPasswordScreen = () => {
       }
 
       const res = await fetch(
-        'https://gym.useitsmart.com/resetpassmobile/reset-password',
+        'https://gawifit.com/resetpassmobile/reset-password',
         {
           method: 'POST',
           headers: { Accept: '*/*', 'Content-Type': 'application/json' },
@@ -74,45 +80,81 @@ const ResetPasswordScreen = () => {
         <RNView style={{ gap: 10 }}>
           <ErrorMessage width={width - 50} message={errorMessage} />
           <RNView>
-            <Controller
-              name='password'
-              control={control}
-              rules={resetPasswordFormRules['password']}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <AuthInput
-                  value={value}
-                  secureTextEntry
-                  onBlur={onBlur}
-                  keyboardType='default'
-                  onChangeText={onChange}
-                  iconName='lock-outline'
-                  containerStyle={styles.passwordInput}
-                  placeholder={i18n.t('new_password_input_placeholder')}
+            <RNView style={styles.inputWrapper}>
+              <Controller
+                name='password'
+                control={control}
+                rules={resetPasswordFormRules['password']}
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <AuthInput
+                    value={value}
+                    secureTextEntry={!showPassword}
+                    onBlur={onBlur}
+                    keyboardType='default'
+                    onChangeText={onChange}
+                    iconName='lock-outline'
+                    containerStyle={styles.passwordInput}
+                    placeholder={i18n.t('new_password_input_placeholder')}
+                  />
+                )}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword((prev) => !prev)}
+                style={[
+                  styles.eyeButton,
+                  isRTL ? { left: 14 } : { right: 14 },
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color={Colors.lightGray}
                 />
-              )}
-            />
+              </TouchableOpacity>
+            </RNView>
             {errors.password?.message && (
               <ErrorText>{errors.password.message}</ErrorText>
             )}
           </RNView>
           <RNView>
-            <Controller
-              control={control}
-              name='confirmation_password'
-              rules={resetPasswordFormRules['confirmation_password']}
-              render={({ field: { onChange, onBlur, value } }) => (
-                <AuthInput
-                  value={value}
-                  onBlur={onBlur}
-                  secureTextEntry
-                  keyboardType='default'
-                  onChangeText={onChange}
-                  iconName='lock-outline'
-                  containerStyle={styles.passwordInput}
-                  placeholder={i18n.t('confirm_new_password_input_placeholder')}
+            <RNView style={styles.inputWrapper}>
+              <Controller
+                control={control}
+                name='confirmation_password'
+                rules={resetPasswordFormRules['confirmation_password']}
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <AuthInput
+                    value={value}
+                    onBlur={onBlur}
+                    secureTextEntry={!showConfirmPassword}
+                    keyboardType='default'
+                    onChangeText={onChange}
+                    iconName='lock-outline'
+                    containerStyle={styles.passwordInput}
+                    placeholder={i18n.t(
+                      'confirm_new_password_input_placeholder'
+                    )}
+                  />
+                )}
+              />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword((prev) => !prev)}
+                style={[
+                  styles.eyeButton,
+                  isRTL ? { left: 14 } : { right: 14 },
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name={
+                    showConfirmPassword ? 'eye-off-outline' : 'eye-outline'
+                  }
+                  size={20}
+                  color={Colors.lightGray}
                 />
-              )}
-            />
+              </TouchableOpacity>
+            </RNView>
             {errors.confirmation_password?.message && (
               <ErrorText>{errors.confirmation_password.message}</ErrorText>
             )}
@@ -165,5 +207,17 @@ const styles = StyleSheet.create({
   passwordInput: {
     borderWidth: 1,
     borderColor: Colors.lightGray,
+  },
+  // 👇 Wraps AuthInput so the eye toggle can sit on top of it
+  inputWrapper: {
+    justifyContent: 'center',
+  },
+  eyeButton: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 28,
   },
 });

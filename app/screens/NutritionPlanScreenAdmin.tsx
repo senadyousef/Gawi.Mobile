@@ -200,7 +200,7 @@ const NutritionPlanScreenAdmin = ({ route, navigation }) => {
         return;
       }
       const res = await fetch(
-        `https://gym.useitsmart.com/api/PT/GetAllUserForPT?userId=${memberId}`,
+        `https://gawifit.com/api/PT/GetAllUserForPT?userId=${memberId}`,
         {
           method: "GET",
           headers: { accept: "text/plain", Authorization: `Bearer ${token}` },
@@ -275,7 +275,7 @@ const NutritionPlanScreenAdmin = ({ route, navigation }) => {
         Alert.alert(t.errorTitle, t.errorNoToken);
         return;
       }
-      const res = await fetch("https://gym.useitsmart.com/api/NutritionPlan", {
+      const res = await fetch("https://gawifit.com/api/NutritionPlan", {
         method: "POST",
         headers: {
           accept: "text/plain",

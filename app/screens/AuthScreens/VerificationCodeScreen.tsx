@@ -38,7 +38,7 @@ const VerifyCodeScreen = () => {
       setErrorMessage('');
 
       const res = await fetch(
-        'https://gym.useitsmart.com/resetpassmobile/verify-code',
+        'https://gawifit.com/resetpassmobile/verify-code',
         {
           method: 'POST',
           headers: { Accept: '*/*', 'Content-Type': 'application/json' },
