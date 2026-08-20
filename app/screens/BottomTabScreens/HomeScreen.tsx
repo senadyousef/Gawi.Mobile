@@ -14,6 +14,7 @@ import {
   RefreshControl,
   Pressable,
   DeviceEventEmitter,
+  Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -43,6 +44,7 @@ import GymTrafficVisual from "../../components/HomeScreen/GymTrafficVisual";
 import AudienceSection from "../../components/HomeScreen/AudienceSection";
 import { useAppContext } from "../../context";
 import { useState } from "react";
+import { handleGetToken } from "../../helpers"; // 👈 shared token helper (same one SignalR hubs use)
 
 // 👇 Once the user has scrolled this many px, Header has scrolled off
 // screen, so the floating menu button fades in to keep the drawer reachable.
@@ -75,13 +77,16 @@ const NotesSection = ({
   loadingNotes,
   isRTL,
   theme,
+  onNoteDeleted,
 }: {
   notes: any[];
   loadingNotes: boolean;
   isRTL: boolean;
   theme: ReturnType<typeof getTheme>;
+  onNoteDeleted: (id: number | string) => void;
 }) => {
   const [selectedNote, setSelectedNote] = useState<any>(null);
+  const [deletingId, setDeletingId] = useState<number | string | null>(null);
   const navigation = useNavigation<any>();
 
   const tones = [
@@ -91,6 +96,53 @@ const NotesSection = ({
     { border: "#2E8B2E", accent: "#2E8B2E" },
     { border: "#7B2FD4", accent: "#7B2FD4" },
   ];
+
+  const deleteNote = async (id: number | string) => {
+    try {
+      setDeletingId(id);
+      const token = await handleGetToken();
+      const response = await fetch(`https://gawifit.com/api/Notes/${id}`, {
+        method: "DELETE",
+        headers: {
+          accept: "*/*",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        onNoteDeleted(id);
+        setSelectedNote(null);
+        DeviceEventEmitter.emit("homeRefresh");
+      } else {
+        Alert.alert(
+          i18n.t("error") || "Error",
+          i18n.t("note_delete_failed") || "Could not delete note.",
+        );
+      }
+    } catch (error) {
+      console.error("⚠️ Error deleting note:", error);
+      Alert.alert(
+        i18n.t("error") || "Error",
+        i18n.t("note_delete_failed") || "Could not delete note.",
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const confirmDelete = (id: number | string) => {
+    Alert.alert(
+      i18n.t("delete_note") || "Delete note?",
+      i18n.t("delete_note_confirm") || "This can't be undone.",
+      [
+        { text: i18n.t("cancel") || "Cancel", style: "cancel" },
+        {
+          text: i18n.t("delete") || "Delete",
+          style: "destructive",
+          onPress: () => deleteNote(id),
+        },
+      ],
+    );
+  };
 
   return (
     <View style={{ marginTop: 24, marginBottom: 8 }}>
@@ -234,30 +286,56 @@ const NotesSection = ({
               >
                 <View
                   style={{
-                    alignSelf: "flex-start",
-                    flexDirection: "row",
+                    flexDirection: isRTL ? "row-reverse" : "row",
                     alignItems: "center",
-                    gap: 4,
-                    paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: 999,
-                    backgroundColor: tone.accent + "20",
+                    justifyContent: "space-between",
                     marginBottom: 8,
                   }}
                 >
-                  <Ionicons name="pin" size={10} color={tone.accent} />
-                  <Text
+                  <View
                     style={{
-                      fontSize: 10,
-                      fontWeight: "700",
-                      letterSpacing: 0.4,
-                      textTransform: "uppercase",
-                      fontFamily: "SF-Medium",
-                      color: tone.accent,
+                      flexDirection: isRTL ? "row-reverse" : "row",
+                      alignItems: "center",
+                      gap: 4,
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 999,
+                      backgroundColor: tone.accent + "20",
                     }}
                   >
-                    {item.pin || "Note"}
-                  </Text>
+                    <Ionicons name="pin" size={10} color={tone.accent} />
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        fontWeight: "700",
+                        letterSpacing: 0.4,
+                        textTransform: "uppercase",
+                        fontFamily: "SF-Medium",
+                        color: tone.accent,
+                      }}
+                    >
+                      {item.pin || "Note"}
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation?.();
+                      confirmDelete(item.id);
+                    }}
+                    hitSlop={8}
+                    style={{ padding: 2 }}
+                  >
+                    {deletingId === item.id ? (
+                      <ActivityIndicator size="small" color={theme.muted} />
+                    ) : (
+                      <Ionicons
+                        name="trash-outline"
+                        size={14}
+                        color={theme.muted}
+                      />
+                    )}
+                  </Pressable>
                 </View>
                 <Text
                   style={{
@@ -308,34 +386,57 @@ const NotesSection = ({
           >
             <View
               style={{
-                alignSelf: isRTL ? "flex-end" : "flex-start",
-                flexDirection: "row",
+                flexDirection: isRTL ? "row-reverse" : "row",
                 alignItems: "center",
-                gap: 4,
-                paddingHorizontal: 8,
-                paddingVertical: 3,
-                borderRadius: 999,
-                backgroundColor: selectedNote?.tone?.accent + "20",
+                justifyContent: "space-between",
                 marginBottom: 12,
               }}
             >
-              <Ionicons
-                name="pin"
-                size={11}
-                color={selectedNote?.tone?.accent}
-              />
-              <Text
+              <View
                 style={{
-                  fontSize: 11,
-                  fontWeight: "700",
-                  letterSpacing: 0.4,
-                  textTransform: "uppercase",
-                  fontFamily: "SF-Medium",
-                  color: selectedNote?.tone?.accent,
+                  flexDirection: isRTL ? "row-reverse" : "row",
+                  alignItems: "center",
+                  gap: 4,
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 999,
+                  backgroundColor: selectedNote?.tone?.accent + "20",
                 }}
               >
-                {selectedNote?.pin || "Note"}
-              </Text>
+                <Ionicons
+                  name="pin"
+                  size={11}
+                  color={selectedNote?.tone?.accent}
+                />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "700",
+                    letterSpacing: 0.4,
+                    textTransform: "uppercase",
+                    fontFamily: "SF-Medium",
+                    color: selectedNote?.tone?.accent,
+                  }}
+                >
+                  {selectedNote?.pin || "Note"}
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={() => selectedNote && confirmDelete(selectedNote.id)}
+                hitSlop={8}
+                style={{ padding: 4 }}
+              >
+                {deletingId === selectedNote?.id ? (
+                  <ActivityIndicator size="small" color={theme.coralInk} />
+                ) : (
+                  <Ionicons
+                    name="trash-outline"
+                    size={18}
+                    color={theme.coralInk}
+                  />
+                )}
+              </Pressable>
             </View>
 
             <Text
@@ -462,6 +563,10 @@ const HomeScreen = () => {
     }
   };
 
+  const handleNoteDeleted = React.useCallback((id: number | string) => {
+    setNotes((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
   useFocusEffect(
     React.useCallback(() => {
       fetchNotes(true);
@@ -581,6 +686,7 @@ const HomeScreen = () => {
             loadingNotes={loadingNotes}
             isRTL={isRTL}
             theme={theme}
+            onNoteDeleted={handleNoteDeleted}
           />
           {!guestMode && isGuestMember && (
             <ClassesSection refreshTrigger={refreshTrigger} />

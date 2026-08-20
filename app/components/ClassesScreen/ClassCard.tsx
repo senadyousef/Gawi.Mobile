@@ -42,9 +42,35 @@ const ClassCard: React.FC<Props> = ({
 
   const isEnded = classDay < today;
   const isBooked = item.isBooked;
+  // 👇 full = capacity reached and the user hasn't already booked it
+  const isFull =
+    !isBooked &&
+    typeof item.capacity === "number" &&
+    typeof item.bookedCount === "number" &&
+    item.bookedCount >= item.capacity;
+
+  const badgeLabel = isEnded
+    ? i18n.t("ended")
+    : isBooked
+      ? i18n.t("booked")
+      : isFull
+        ? i18n.t("class_full_short")
+        : i18n.t("available");
+
+  const badgeColor = isEnded
+    ? "#9E9E9E" // Gray
+    : isBooked
+      ? "#FF9800" // Red
+      : isFull
+        ? "#FF5252" // Orange
+        : "#4CAF50"; // Green
 
   return (
-    <TouchableOpacity onPress={() => handleOpenEvent(item)}>
+    <TouchableOpacity
+      onPress={() => handleOpenEvent(item)}
+      // disabled={isFull}
+      // style={isFull && { opacity: 0.6 }}
+    >
       <View style={s.container}>
         <View>
           <Image
@@ -52,32 +78,15 @@ const ClassCard: React.FC<Props> = ({
             style={[s.image, imageStyle]}
             resizeMode="cover"
           />
-          <View
-            style={[
-              s.badge,
-              {
-                backgroundColor: isEnded
-                  ? "#9E9E9E" // Gray
-                  : isBooked
-                    ? "#FF5252" // Red
-                    : "#4CAF50", // Green
-              },
-            ]}
-          >
-            <Text style={s.badgeText}>
-              {isEnded
-                ? i18n.t("ended")
-                : isBooked
-                  ? i18n.t("booked")
-                  : i18n.t("available")}
-            </Text>
+          <View style={[s.badge, { backgroundColor: badgeColor }]}>
+            <Text style={s.badgeText}>{badgeLabel}</Text>
           </View>
         </View>
 
         <Text style={s.name}>{localizedName}</Text>
         <Text style={s.details}>{formattedDate}</Text>
         <Text style={s.details}>
-          {i18n.t("capacity")}: {item.capacity}
+          {i18n.t("capacity")}: {item.bookedCount ?? 0}/{item.capacity}
         </Text>
       </View>
     </TouchableOpacity>

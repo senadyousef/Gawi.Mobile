@@ -6,13 +6,7 @@ import { useI18n } from "../../hooks/useI18n";
 import { useNavigation, CommonActions } from "@react-navigation/native";
 import { useForm, Controller, SubmitHandler } from "react-hook-form";
 import { LinearGradient } from "expo-linear-gradient";
-import {
-  StyleSheet,
-  Image,
-  View as RNView,
-  Alert,
-  Platform,
-} from "react-native";
+import { StyleSheet, Image, View as RNView, Platform } from "react-native";
 import {
   Text,
   View,
@@ -29,6 +23,11 @@ import { useAppContext } from "../../context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { Dropdown } from "react-native-element-dropdown";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, {
+  SweetAlertButton,
+  SweetAlertType,
+} from "../../components/SweetAlert";
 
 interface ISignUpForm {
   nameAr: string;
@@ -53,6 +52,27 @@ const SignUpScreen = () => {
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const [isConfirmVisible, setIsConfirmVisible] = React.useState(false);
 
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = React.useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
+
   const {
     control,
     handleSubmit,
@@ -64,11 +84,23 @@ const SignUpScreen = () => {
 
   const getSignUpErrorMessage = (status: number, rawText: string) => {
     const lower = rawText.toLowerCase();
+    const isDuplicatePhone =
+      lower.includes("phone number already exists") ||
+      lower.includes("phonenumber already exists") ||
+      lower.includes("ix_users_phonenumber");
+
+    if (isDuplicatePhone) {
+      return i18n.t("errors.phone_taken", {
+        defaultValue:
+          "This phone number is already registered. Please sign in or use a different number.",
+      });
+    }
     const isDuplicateEmail =
       status === 409 ||
       lower.includes("ix_users_email") ||
       lower.includes("duplicate key") ||
-      lower.includes("duplicate key row");
+      lower.includes("duplicate key row") ||
+      lower.includes("email already exists.");
 
     if (isDuplicateEmail) {
       return i18n.t("errors.email_taken", {
@@ -114,9 +146,10 @@ const SignUpScreen = () => {
       });
 
       if (response.ok) {
-        Alert.alert("Success", "Account created successfully!", [
+        showAlert("success", "Success", "Account created successfully!", [
           {
             text: "OK",
+            style: "primary",
             onPress: () => navigation.navigate("Login" as never),
           },
         ]);
@@ -126,7 +159,8 @@ const SignUpScreen = () => {
 
         const message = getSignUpErrorMessage(response.status, rawText);
         setErrorMessage(message);
-        Alert.alert(
+        showAlert(
+          "error",
           i18n.t("errors.registration_failed", {
             defaultValue: "Registration Failed",
           }),
@@ -139,7 +173,7 @@ const SignUpScreen = () => {
           "Network error. Please check your connection and try again.",
       });
       setErrorMessage(message);
-      Alert.alert("Error", message);
+      showAlert("error", "Error", message);
     } finally {
       setIsLoading(false);
     }
@@ -168,10 +202,6 @@ const SignUpScreen = () => {
         colors={["transparent", Colors.backgroundBlue]}
       />
 
-      {/* 👇 the actual bug: this ScrollView was imported but never used before —
-          everything lived in a plain View with justifyContent:"flex-end" inside
-          a height-locked KeyboardAvoidingView, so on shorter screens the top of
-          the form (logo included) rendered off-screen with no way to reach it */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -451,6 +481,17 @@ const SignUpScreen = () => {
       </KeyboardAvoidingView>
 
       <StatusBar style="light" />
+
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={false}
+        isRTL={isArabic()}
+        onRequestClose={hideAlert}
+      />
     </View>
   );
 };

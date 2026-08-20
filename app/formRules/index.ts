@@ -12,7 +12,7 @@ export const loginFormRules: ILoginFormRules = {
   email: {
     validate: (email) => {
       if (!email?.trim()) return i18n.t("email_is_required");
-      else if (!emailRegex.test(email)) return i18n.t("email_is_not_valid");
+
       return true;
     },
   },

@@ -429,6 +429,7 @@ export default {
     note_empty_error: "Note cannot be empty",
     note_added: "Note added!",
     error: "Error",
+    delete: "Delete",
     load_error: "Could not load notes",
     success: "Note added successfully!",
     no_events: "No events scheduled for this date",
@@ -988,6 +989,8 @@ export default {
     invalid_phone: "Invalid phone number",
     invalid_email: "Invalid email address",
     password_length: "Password must be at least 6 characters",
+    phone_taken:
+      "This phone number is already registered. Please sign in or use a different number.",
 
     email_taken:
       "This email is already registered. Please sign in or use a different email.",
@@ -1091,4 +1094,8 @@ export default {
   confirm_cancel_booking: "Are you sure you want to cancel this booking?",
 
   complaint_admin_response: "Admin response",
+  delete_note: "Delete note?",
+  delete_note_confirm: "This can't be undone.",
+
+  note_delete_failed: "Could not delete note.",
 };

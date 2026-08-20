@@ -68,7 +68,7 @@ export default {
   gallery_title: "المعرض",
   off: "خصم",
   audience_title: "الجمهور",
-  gym_store_title: "متجر الصالة الرياضية",
+  gym_store_title: "المتجر",
 
   // Shop Screen
   search_in_shop: "البحث في المتجر",
@@ -418,6 +418,8 @@ export default {
     note_placeholder: "اكتب ملاحظتك...",
     no_notes: "لا توجد ملاحظات لهذا اليوم",
     save: "حفظ",
+    delete: "حذف",
+
     cancel: "إلغاء",
     note_empty_error: "لا يمكن أن تكون الملاحظة فارغة",
     note_added: "تمت إضافة الملاحظة",
@@ -968,6 +970,8 @@ export default {
     invalid_phone: "رقم الهاتف غير صالح",
     invalid_email: "البريد الإلكتروني غير صالح",
     password_length: "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل",
+    phone_taken:
+      "رقم الهاتف هذا مسجل مسبقًا بالفعل. الرجاء تسجيل الدخول أو استخدام رقم آخر.",
 
     email_taken:
       "هذا البريد الإلكتروني مسجل بالفعل. الرجاء تسجيل الدخول أو استخدام بريد إلكتروني آخر.",
@@ -1067,4 +1071,8 @@ export default {
   cancel_booking_title: "إلغاء الحجز",
   confirm_cancel_booking: "هل أنت متأكد أنك تريد إلغاء هذا الحجز؟",
   complaint_admin_response: "رد الإدارة",
+  delete_note: "حذف الملاحظة؟",
+  delete_note_confirm: "لا يمكن التراجع عن هذا الإجراء.",
+
+  note_delete_failed: "تعذر حذف الملاحظة.",
 };
