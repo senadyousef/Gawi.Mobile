@@ -9,7 +9,6 @@ import {
   Image,
   StyleSheet,
   SafeAreaView,
-  Alert,
   TouchableOpacity,
   Linking,
 } from "react-native";
@@ -79,8 +78,7 @@ function DrawerRow({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function CustomDrawerContent(props) {
-  const { handleLogout, userProfile, guestMode, setGuestMode, isDarkMode } =
-    useAppContext();
+  const { userProfile, guestMode, isDarkMode } = useAppContext();
 
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
   const isDrawerOpen = useDrawerStatus() === "open";
@@ -134,7 +132,6 @@ export default function CustomDrawerContent(props) {
       }
     };
 
-    // Re-fetch profile data whenever drawer opens
     if (isDrawerOpen) {
       fetchProfileNames();
     }
@@ -181,46 +178,6 @@ export default function CustomDrawerContent(props) {
     }
   };
 
-  const handleLogoutOrLogin = async () => {
-    const rootNavigation = navigation.getParent();
-
-    if (guestMode) {
-      setGuestMode(false);
-      props.navigation.closeDrawer();
-      rootNavigation?.dispatch(
-        CommonActions.reset({ index: 0, routes: [{ name: "Login" }] }),
-      );
-    } else {
-      Alert.alert(
-        i18n.t("logout_title") || "Logout",
-        i18n.t("logout_confirm_message") || "Are you sure you want to logout?",
-        [
-          { text: i18n.t("cancel") || "Cancel", style: "cancel" },
-          {
-            text: i18n.t("logout_button") || "Logout",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                await handleLogout();
-                await AsyncStorage.clear();
-                setGuestMode(true);
-                props.navigation.closeDrawer();
-                rootNavigation?.dispatch(
-                  CommonActions.reset({
-                    index: 0,
-                    routes: [{ name: "Login" }],
-                  }),
-                );
-              } catch (error) {
-                console.error("❌ Error clearing cache on logout:", error);
-              }
-            },
-          },
-        ],
-      );
-    }
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <LinearGradient
@@ -259,7 +216,7 @@ export default function CustomDrawerContent(props) {
           { backgroundColor: theme.scrollBg },
         ]}
       >
-        <DrawerRow
+        {/* <DrawerRow
           rtl={rtl}
           label={i18n.t("home_tab_title")}
           labelColor={theme.ink}
@@ -289,7 +246,7 @@ export default function CustomDrawerContent(props) {
             }
             onPress={() => props.navigation.navigate("MyProfileNavigator")}
           />
-        )}
+        )} */}
 
         {!guestMode && isGuestMember && (
           <DrawerRow
@@ -337,6 +294,57 @@ export default function CustomDrawerContent(props) {
           }
           onPress={() => props.navigation.navigate("Offers")}
         />
+
+        {!guestMode && isGuestMember && (
+          <DrawerRow
+            rtl={rtl}
+            label={i18n.t("orders")}
+            labelColor={theme.ink}
+            bgColor={theme.bg}
+            icon={
+              <Ionicons
+                name="bag-check-outline"
+                size={iconSize}
+                color={theme.ink}
+              />
+            }
+            onPress={() => props.navigation.navigate("Orders")}
+          />
+        )}
+
+        {!guestMode && isGuestMember && (
+          <DrawerRow
+            rtl={rtl}
+            label={i18n.t("wallet_history_title")}
+            labelColor={theme.ink}
+            bgColor={theme.bg}
+            icon={
+              <Ionicons
+                name="wallet-outline"
+                size={iconSize}
+                color={theme.ink}
+              />
+            }
+            onPress={() => props.navigation.navigate("WalletHistory")}
+          />
+        )}
+
+        {!guestMode && isGuestMember && (
+          <DrawerRow
+            rtl={rtl}
+            label={i18n.t("Complaints_History")}
+            labelColor={theme.ink}
+            bgColor={theme.bg}
+            icon={
+              <Ionicons
+                name="alert-circle-outline"
+                size={iconSize}
+                color={theme.ink}
+              />
+            }
+            onPress={() => props.navigation.navigate("ComplaintsHistory")}
+          />
+        )}
 
         {!guestMode && isGuestMember && (
           <DrawerRow
@@ -429,21 +437,6 @@ export default function CustomDrawerContent(props) {
             onPress={() => props.navigation.navigate("PTNavigator")}
           />
         )}
-
-        <DrawerRow
-          rtl={rtl}
-          label={guestMode ? i18n.t("login_button") : i18n.t("logout")}
-          labelColor={guestMode ? Colors.primary : "#f80303"}
-          bgColor={theme.bg}
-          icon={
-            <MaterialCommunityIcons
-              name={guestMode ? "login" : "logout"}
-              color={guestMode ? Colors.primary : "#f80303"}
-              size={iconSize}
-            />
-          }
-          onPress={handleLogoutOrLogin}
-        />
 
         <View style={[styles.footer, { borderTopColor: theme.border }]}>
           <TouchableOpacity

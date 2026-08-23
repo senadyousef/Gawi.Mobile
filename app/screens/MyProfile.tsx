@@ -382,7 +382,9 @@ export default function MyProfileScreen() {
 
   const openDatePicker = () => {
     setTempDob(
-      physicalData.dateOfBirth ? new Date(physicalData.dateOfBirth) : new Date(),
+      physicalData.dateOfBirth
+        ? new Date(physicalData.dateOfBirth)
+        : new Date(),
     );
     setShowDatePicker(true);
   };
@@ -1304,7 +1306,9 @@ export default function MyProfileScreen() {
             ) : (
               <>
                 <Ionicons name="trash-outline" size={16} color={theme.danger} />
-                <Text style={s.deleteButtonText}>Delete Account</Text>
+                <Text style={s.deleteButtonText}>
+                  {i18n.t("delete_account")}
+                </Text>
               </>
             )}
           </TouchableOpacity>
@@ -1370,8 +1374,7 @@ export default function MyProfileScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity onPress={confirmIosDate}>
                   <Text style={s.datePickerDoneText}>
-                    {i18n.t("profile.done") ||
-                      (rtl ? "تم" : "Done")}
+                    {i18n.t("profile.done") || (rtl ? "تم" : "Done")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1865,6 +1868,14 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       borderBottomColor: theme.border,
     },
     datePickerHeaderRTL: { flexDirection: "row-reverse" },
-    datePickerCancelText: { fontSize: 15, color: theme.muted, fontWeight: "600" },
-    datePickerDoneText: { fontSize: 15, color: theme.accent, fontWeight: "700" },
+    datePickerCancelText: {
+      fontSize: 15,
+      color: theme.muted,
+      fontWeight: "600",
+    },
+    datePickerDoneText: {
+      fontSize: 15,
+      color: theme.accent,
+      fontWeight: "700",
+    },
   });

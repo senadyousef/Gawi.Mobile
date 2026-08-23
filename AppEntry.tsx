@@ -11,6 +11,14 @@ import SplashScreen from "./app/screens/SplashScreen";
 import useColorScheme from "./app/hooks/useColorScheme";
 import useCachedResources from "./app/hooks/useCachedResources";
 
+// 🔔 Notification type groups — replace these with your actual backend "type" values
+const PT_CLASS_TYPES = ["PTClassBooked", "PTClassReminder", "PTClassCancelled"];
+const CLASS_TYPES = ["ClassBooked", "ClassReminder", "ClassCancelled"];
+const NUTRITION_TYPES = ["NutritionPlanUpdated"];
+const WORKOUT_TYPES = ["WorkoutPlanUpdated"];
+const SUBSCRIPTION_TYPES = ["SubscriptionExpiring", "SubscriptionRenewed"];
+const WALLET_TYPES = ["WalletCredited", "WalletDebited"];
+
 export default function AppEntry() {
   const colorScheme = useColorScheme();
   const { isFirstTime, isLoadingComplete } = useCachedResources();
@@ -84,42 +92,96 @@ export default function AppEntry() {
 
   function waitForNavigationReady() {
     return new Promise((resolve) => {
+      if (navigationRef.current?.isReady()) {
+        resolve(true);
+        return;
+      }
       const interval = setInterval(() => {
-        if (navReady) {
+        if (navReady && navigationRef.current?.isReady()) {
           clearInterval(interval);
           resolve(true);
         }
       }, 100);
     });
   }
+
   async function handleNotificationNavigation(data: any) {
     if (!data) return;
 
-    console.log("RAW NOTIFICATION DATA:", data);
-
-    let parsed = null;
+    let parsedUrl;
     try {
-      parsed =
+      parsedUrl =
         typeof data.route === "object" ? data.route : JSON.parse(data.route);
-    } catch (e) {
-      console.log("Failed to parse route", data.route);
+    } catch {
       return;
     }
 
-    if (!parsed) return;
+    if (!parsedUrl) return;
 
-    const ID = parsed.Id || parsed.classId || parsed.ptId;
-    const pageName = (parsed.pageName || "").toLowerCase();
+    try {
+      const ID = parsedUrl.Id;
+      const ptId = parsedUrl.ptId;
+      const ptClassId = parsedUrl.ptClassId;
+      const notificationType = parsedUrl.type || "";
 
-    await waitForNavigationReady();
+      await waitForNavigationReady();
 
-    if (pageName === "gymclass") {
-      navigationRef.current?.navigate("ClassDetails", { classId: ID });
-    } else if (pageName === "ptclass") {
-      await AsyncStorage.setItem("GPTID", ID.toString());
-      navigationRef.current?.navigate("PTList");
-    } else {
-      console.log("Unknown pageName:", pageName);
+      if (!navigationRef.current?.isReady()) return;
+
+      if (PT_CLASS_TYPES.includes(notificationType)) {
+        if (ptId) {
+          await AsyncStorage.setItem("GPTID", ptId.toString());
+        }
+        navigationRef.current?.navigate(
+          "Root" as never,
+          {
+            screen: "PTNavigator",
+            params: { screen: "PTList" },
+          } as never,
+        );
+      } else if (CLASS_TYPES.includes(notificationType)) {
+        navigationRef.current?.navigate(
+          "Root" as never,
+          {
+            screen: "BookClassDrawer",
+            params: { screen: "ClassDetails", params: { classId: ID } },
+          } as never,
+        );
+      } else if (NUTRITION_TYPES.includes(notificationType)) {
+        navigationRef.current?.navigate(
+          "Root" as never,
+          {
+            screen: "NutritionPlan",
+            params: { screen: "NutritionPlanMain" },
+          } as never,
+        );
+      } else if (WORKOUT_TYPES.includes(notificationType)) {
+        navigationRef.current?.navigate(
+          "Root" as never,
+          {
+            screen: "MonthlySchedule",
+            params: { screen: "MonthlyScheduleMain" },
+          } as never,
+        );
+      } else if (SUBSCRIPTION_TYPES.includes(notificationType)) {
+        navigationRef.current?.navigate(
+          "Root" as never,
+          {
+            screen: "MyProfileNavigator",
+            params: { screen: "MyProfileMain" },
+          } as never,
+        );
+      } else if (WALLET_TYPES.includes(notificationType)) {
+        navigationRef.current?.navigate("WalletHistory" as never);
+      } else if (notificationType === "ComplaintUpdated") {
+        navigationRef.current?.navigate("ComplaintsHistory" as never);
+      } else if (notificationType === "OrderPlaced") {
+        navigationRef.current?.navigate("Orders" as never);
+      } else if (notificationType === "ManualNotification") {
+        navigationRef.current?.navigate("Root" as never);
+      }
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Something went wrong");
     }
   }
 

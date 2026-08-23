@@ -11,9 +11,12 @@ import {
   Text,
 } from "../../components/overridedComponents";
 import { FlatList, Modal, Pressable, StyleSheet, Switch } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { CommonActions, useNavigation } from "@react-navigation/native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import SettingsItem, { IsettingsItemProps } from "./SettingsItem";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, { SweetAlertButton, SweetAlertType } from "../SweetAlert";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -31,8 +34,9 @@ interface ExtendedSettingsItemProps extends IsettingsItemProps {
 }
 
 const SettingsSection = () => {
-  const { navigate } = useNavigation();
-  const { handleLogout, guestMode, isDarkMode, toggleDarkMode } =
+  const navigation = useNavigation();
+  const { navigate } = navigation;
+  const { handleLogout, guestMode, setGuestMode, isDarkMode, toggleDarkMode } =
     useAppContext();
   const { setLanguage, getDirection, isArabic } = useI18n();
 
@@ -42,65 +46,95 @@ const SettingsSection = () => {
   const [isModalVisible, setIsModalVisible] = React.useState(false);
   const [selectedLang, setSelectedLang] = React.useState(i18n.locale);
 
+  // 👇 SweetAlert state — for logout confirmation
+  const [alertConfig, setAlertConfig] = React.useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
+
   const languageOptions = [
     { key: "en", label: "English", flag: "🇬🇧" },
     { key: "ar", label: "العربية", flag: "🇸🇦" },
   ];
 
+  const handleLogoutOrLogin = async () => {
+    const rootNavigation = navigation.getParent();
+
+    if (guestMode) {
+      setGuestMode(false);
+      rootNavigation?.dispatch(
+        CommonActions.reset({ index: 0, routes: [{ name: "Login" }] }),
+      );
+    } else {
+      showAlert(
+        "warning",
+        i18n.t("logout_title") || "Logout",
+        i18n.t("logout_confirm_message") || "Are you sure you want to logout?",
+        [
+          { text: i18n.t("cancel") || "Cancel", style: "cancel" },
+          {
+            text: i18n.t("logout_button") || "Logout",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await handleLogout();
+                await AsyncStorage.clear();
+                setGuestMode(true);
+                rootNavigation?.dispatch(
+                  CommonActions.reset({
+                    index: 0,
+                    routes: [{ name: "Login" }],
+                  }),
+                );
+              } catch (error) {
+                console.error("❌ Error clearing cache on logout:", error);
+              }
+            },
+          },
+        ],
+      );
+    }
+  };
+
   const settingsItems: ExtendedSettingsItemProps[] = [
     // {
-    //   AntDesignIconName: "calendar",
-    //   title: i18n.t("my_bookings"),
-    //   onPress: () => navigate("myBooking"),
-    //   hideForGuest: true,
-    // },
-    {
-      IoniconsIconName: "bag-check-outline",
-      title: i18n.t("orders"),
-      onPress: () => {
-        navigate("Orders");
-      },
-      hideForGuest: true,
-    },
-    {
-      IoniconsIconName: "wallet",
-      title: i18n.t("wallet_history_title"),
-      onPress: () => {
-        navigate("WalletHistory");
-      },
-      hideForGuest: true,
-    },
-    // {
-    //   IoniconsIconName: "alert-circle-outline",
-    //   title: i18n.t("Complaints"),
+    //   IoniconsIconName: "bag-check-outline",
+    //   title: i18n.t("orders"),
     //   onPress: () => {
-    //     navigate("Complaints");
+    //     navigate("Orders");
     //   },
     //   hideForGuest: true,
     // },
-    {
-      IoniconsIconName: "alert-circle",
-      title: i18n.t("Complaints_History"),
-      onPress: () => {
-        navigate("ComplaintsHistory");
-      },
-      hideForGuest: true,
-    },
     // {
-    //   AntDesignIconName: "user",
-    //   title: i18n.t("manage_my_account"),
-    //   onPress: () => navigate("manageMyAccount"),
+    //   IoniconsIconName: "wallet",
+    //   title: i18n.t("wallet_history_title"),
+    //   onPress: () => {
+    //     navigate("WalletHistory");
+    //   },
     //   hideForGuest: true,
     // },
     // {
-    //   AntDesignIconName: "lock",
-    //   title: i18n.t("privacy_and_safety"),
-    //   onPress: () => {},
-    // },
-    // {
-    //   IoniconsIconName: "notifications-outline",
-    //   title: i18n.t("notification"),
-    //   onPress: () => navigate("notifications"),
+    //   IoniconsIconName: "alert-circle",
+    //   title: i18n.t("Complaints_History"),
+    //   onPress: () => {
+    //     navigate("ComplaintsHistory");
+    //   },
+    //   hideForGuest: true,
     // },
     {
       AntDesignIconName: "edit",
@@ -117,16 +151,12 @@ const SettingsSection = () => {
       onPress: () => toggleDarkMode?.(),
       isDarkModeToggle: true,
     },
-    // {
-    //   AntDesignIconName: "customerservice",
-    //   title: i18n.t("customers_service"),
-    //   onPress: () => {},
-    // },
-    // {
-    //   AntDesignIconName: "creditcard",
-    //   title: i18n.t("payment_history"),
-    //   onPress: () => {},
-    // },
+    {
+      IoniconsIconName: guestMode ? "log-in-outline" : "log-out-outline",
+      title: guestMode ? i18n.t("login_button") : i18n.t("logout"),
+      color: guestMode ? Colors.primary : "#f80303",
+      onPress: handleLogoutOrLogin,
+    },
   ];
 
   const visibleItems = settingsItems.filter(
@@ -251,6 +281,17 @@ const SettingsSection = () => {
           </View>
         </View>
       </Modal>
+
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={!!isDarkMode}
+        isRTL={isArabic()}
+        onRequestClose={hideAlert}
+      />
     </CardWrapper>
   );
 };
@@ -274,7 +315,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       justifyContent: "flex-end",
     },
     modalBox: {
-      backgroundColor: theme.bg, // 👈
+      backgroundColor: theme.bg,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       paddingHorizontal: 20,
@@ -296,13 +337,13 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       paddingVertical: 12,
       paddingHorizontal: 15,
       borderRadius: 12,
-      backgroundColor: theme.surface, // 👈
+      backgroundColor: theme.surface,
       marginBottom: 8,
       flexDirection: "row",
       alignItems: "center",
     },
     optionSelected: {
-      backgroundColor: theme.optionSelected, // 👈
+      backgroundColor: theme.optionSelected,
     },
     flag: {
       fontSize: 20,
@@ -310,7 +351,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     },
     optionLabel: {
       fontSize: 15,
-      color: theme.ink, // 👈
+      color: theme.ink,
       fontFamily: "SF-Regular",
     },
     optionLabelSelected: {
@@ -324,7 +365,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     },
     cancelText: {
       fontSize: 15,
-      color: theme.muted, // 👈
+      color: theme.muted,
       fontFamily: "SF-Medium",
     },
   });

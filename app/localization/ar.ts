@@ -437,7 +437,7 @@ export default {
     gallery: "المعرض",
     cancel: "إلغاء",
     select_photo: "اختر صورة",
-
+    done: "تم",
     full_name: "الاسم الكامل",
     arabic_name: "الاسم بالعربية",
     bio: "نبذة",
@@ -1083,4 +1083,21 @@ export default {
   delete_note_confirm: "لا يمكن التراجع عن هذا الإجراء.",
 
   note_delete_failed: "تعذر حذف الملاحظة.",
+  delete_account: "حذف الحساب",
+  recurring_class: "متكررة",
+  paused: "متوقفة مؤقتًا",
+  recurring_until: "تتكرر حتى",
+  day_sunday: "الأحد",
+  day_monday: "الإثنين",
+  day_tuesday: "الثلاثاء",
+  day_wednesday: "الأربعاء",
+  day_thursday: "الخميس",
+  day_friday: "الجمعة",
+  day_saturday: "السبت",
+
+  book_as_recurring: "احجز كحصة متكررة",
+  start_date: "تاريخ البدء",
+  select_days: "اختر الأيام",
+  select_days_title: "اختر الأيام",
+  select_days_message: "الرجاء اختيار يوم واحد على الأقل للحجز المتكرر.",
 };

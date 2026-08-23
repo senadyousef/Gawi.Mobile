@@ -611,7 +611,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       width: 56,
       height: 56,
       borderRadius: 28,
-      backgroundColor: "#fea901",
+      backgroundColor: "#E8742A",
       alignItems: "center",
       justifyContent: "center",
       elevation: 6,

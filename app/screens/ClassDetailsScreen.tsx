@@ -8,10 +8,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   DeviceEventEmitter,
+  Modal,
+  Switch,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { handleGetToken } from "../helpers";
 import i18n from "../localization";
 import { useAppContext } from "../context";
@@ -33,12 +37,54 @@ const getTheme = (dark: boolean) => ({
 
 const isArabic = i18n.locale === "ar";
 
+// 👇 maps API day names to i18n keys — add "day_sunday", "day_monday", etc.
+// to your translation files; falls back to the raw English day name if a
+// key is missing so nothing breaks in the meantime.
+const DAY_TRANSLATION_KEYS: Record<string, string> = {
+  Sunday: "day_sunday",
+  Monday: "day_monday",
+  Tuesday: "day_tuesday",
+  Wednesday: "day_wednesday",
+  Thursday: "day_thursday",
+  Friday: "day_friday",
+  Saturday: "day_saturday",
+};
+
+// Sunday=0 ... Saturday=6, matching JS Date.getDay() — kept only as a
+// reference mapping; the API itself receives day NAME strings (see the
+// booking payload below), not these numeric indices.
+const DAY_NAMES_BY_INDEX = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+const formatRepeatDays = (days: string[] = [], ar: boolean) => {
+  if (!days?.length) return "";
+  const translated = days.map((day) => {
+    const key = DAY_TRANSLATION_KEYS[day];
+    const label = key ? i18n.t(key) : day;
+    return label || day;
+  });
+  return translated.join(ar ? "، " : ", ");
+};
+
+const translateDay = (day: string, ar: boolean) => {
+  const key = DAY_TRANSLATION_KEYS[day];
+  const label = key ? i18n.t(key) : day;
+  return label || day;
+};
+
 const fetchGymClassByUser = async () => {
   try {
     const MemberId = await AsyncStorage.getItem("MemberId");
     if (!MemberId) throw new Error("User not found");
     const response = await fetch(
-      `https://gawifit.com/api/GymClass/getAllGymClassByUser?userId=${MemberId}`,
+      `http://192.168.1.16/api/GymClass/getAllGymClassByUser?userId=${MemberId}`,
     );
     if (!response.ok) throw new Error("Failed to fetch gym classes");
     const data = await response.json();
@@ -58,6 +104,13 @@ export default function ClassDetailsScreen({ route }: any) {
 
   const [gymClass, setGymClass] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // 👇 Recurring booking config modal state
+  const [isBookingModalVisible, setIsBookingModalVisible] = useState(false);
+  const [isRecurringBooking, setIsRecurringBooking] = useState(true);
+  const [selectedClassDate, setSelectedClassDate] = useState<Date>(new Date());
+  const [selectedRepeatDays, setSelectedRepeatDays] = useState<string[]>([]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // 👇 SweetAlert state — replaces Alert.alert entirely
   const [alertConfig, setAlertConfig] = useState<{
@@ -160,7 +213,54 @@ export default function ClassDetailsScreen({ route }: any) {
     return () => subscription.remove();
   }, [loadClass]);
 
-  const handleBookClass = async () => {
+  const getLocalizedBookingError = (resultText: string): string => {
+    const normalized = resultText.trim().toLowerCase();
+
+    if (
+      normalized.includes("already started") ||
+      normalized.includes("no longer be booked")
+    ) {
+      return (
+        i18n.t("class_already_started") ||
+        "This class has already started and can no longer be booked."
+      );
+    }
+    if (normalized.includes("already booked")) {
+      return (
+        i18n.t("already_booked_message") ||
+        "You have already booked this class."
+      );
+    }
+    if (normalized.includes("full") || normalized.includes("capacity")) {
+      return (
+        i18n.t("class_full_message") || "Sorry, this class is fully booked."
+      );
+    }
+    if (
+      normalized.includes("insufficient") ||
+      normalized.includes("wallet") ||
+      normalized.includes("balance")
+    ) {
+      return (
+        i18n.t("insufficient_wallet_balance") ||
+        "Insufficient wallet balance to book this class."
+      );
+    }
+
+    return (
+      resultText ||
+      i18n.t("booking_failed_message") ||
+      "Unable to book this class."
+    );
+  };
+
+  // 👇 Core booking submission — shared by both the simple (non-recurring)
+  // confirm flow and the recurring booking config modal.
+  const submitBooking = async (
+    isRecurringBookingFlag: boolean,
+    classDate: Date,
+    repeatDays: string[],
+  ) => {
     try {
       const MemberId = await AsyncStorage.getItem("MemberId");
       if (!MemberId) {
@@ -213,9 +313,13 @@ export default function ClassDetailsScreen({ route }: any) {
       const payload = {
         userId: parseInt(MemberId),
         gymClassId: classToBook.id,
+        isRecurringBooking: isRecurringBookingFlag,
+        classDate: classDate.toISOString(),
+        selectedRepeatDays: isRecurringBookingFlag ? repeatDays : [],
       };
+
       const token = await handleGetToken();
-      const response = await fetch("https://gawifit.com/api/UserClass", {
+      const response = await fetch("http://192.168.1.16/api/UserClass", {
         method: "POST",
         headers: {
           Accept: "text/plain",
@@ -224,46 +328,7 @@ export default function ClassDetailsScreen({ route }: any) {
         },
         body: JSON.stringify(payload),
       });
-      const getLocalizedBookingError = (resultText: string): string => {
-        const normalized = resultText.trim().toLowerCase();
 
-        if (
-          normalized.includes("already started") ||
-          normalized.includes("no longer be booked")
-        ) {
-          return (
-            i18n.t("class_already_started") ||
-            "This class has already started and can no longer be booked."
-          );
-        }
-        if (normalized.includes("already booked")) {
-          return (
-            i18n.t("already_booked_message") ||
-            "You have already booked this class."
-          );
-        }
-        if (normalized.includes("full") || normalized.includes("capacity")) {
-          return (
-            i18n.t("class_full_message") || "Sorry, this class is fully booked."
-          );
-        }
-        if (
-          normalized.includes("insufficient") ||
-          normalized.includes("wallet") ||
-          normalized.includes("balance")
-        ) {
-          return (
-            i18n.t("insufficient_wallet_balance") ||
-            "Insufficient wallet balance to book this class."
-          );
-        }
-
-        return (
-          resultText ||
-          i18n.t("booking_failed_message") ||
-          "Unable to book this class."
-        );
-      };
       const resultText = await response.text();
       console.log(resultText);
       if (!response.ok) {
@@ -290,6 +355,42 @@ export default function ClassDetailsScreen({ route }: any) {
           "An unexpected error occurred while booking.",
       );
     }
+  };
+
+  // 👇 Simple one-off booking flow — used for NON-recurring classes only.
+  const handleBookClassSimple = () => {
+    submitBooking(false, new Date(gymClass.date), []);
+  };
+
+  // 👇 Opens the recurring booking config modal — used for RECURRING
+  // classes. Defaults: recurring ON, today's date, all repeat days
+  // pre-selected.
+  const openBookingModal = () => {
+    setIsRecurringBooking(true);
+    setSelectedClassDate(new Date());
+    setSelectedRepeatDays([]);
+    setIsBookingModalVisible(true);
+  };
+  const toggleRepeatDay = (day: string) => {
+    setSelectedRepeatDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+    );
+  };
+
+  const handleConfirmBookingModal = () => {
+    if (isRecurringBooking && selectedRepeatDays.length === 0) {
+      setIsBookingModalVisible(false);
+
+      showAlert(
+        "warning",
+        i18n.t("select_days_title") || "Select Days",
+        i18n.t("select_days_message") ||
+          "Please select at least one day for the recurring booking.",
+      );
+      return;
+    }
+    setIsBookingModalVisible(false);
+    submitBooking(isRecurringBooking, selectedClassDate, selectedRepeatDays);
   };
 
   const handleBookClassDelete = async (userClassId: string) => {
@@ -399,6 +500,15 @@ export default function ClassDetailsScreen({ route }: any) {
   }
 
   const isAr = i18n.locale === "ar";
+
+  // 👇 FIX: this was previously reversed — showing descriptionEn when
+  // isAr was true and descriptionAr otherwise. Now shows the matching
+  // language, falling back to the default text when the class has no
+  // description in that language at all.
+  const description =
+    (isAr ? gymClass.descriptionAr : gymClass.descriptionEn) ||
+    i18n.t("default_class_description");
+
   const formatDateDMY = (date: string | Date) => {
     const d = new Date(date);
     const day = String(d.getDate()).padStart(2, "0");
@@ -407,6 +517,7 @@ export default function ClassDetailsScreen({ route }: any) {
 
     return `${day}-${month}-${year}`;
   };
+
   return (
     <View style={s.container}>
       {/* Header Image */}
@@ -521,6 +632,51 @@ export default function ClassDetailsScreen({ route }: any) {
                 : i18n.t("not_booked")}
             </Text>
           </View>
+
+          {/* Recurring class info — only shown when the class repeats */}
+          {gymClass.isRecurring && (
+            <View
+              style={[
+                s.detailItem,
+                { flexDirection: isAr ? "row-reverse" : "row" },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="calendar-sync"
+                size={20}
+                color={gymClass.isRecurringActive ? "#8B5CF6" : theme.muted}
+              />
+              <Text style={s.detailText}>
+                {i18n.t("recurring_class") || "Recurring"}
+                {!gymClass.isRecurringActive
+                  ? ` (${i18n.t("paused") || "paused"})`
+                  : ""}
+                {gymClass.repeatDays?.length
+                  ? `: ${formatRepeatDays(gymClass.repeatDays, isAr)}`
+                  : ""}
+              </Text>
+            </View>
+          )}
+
+          {/* Recurring end date — only shown when the API sends one */}
+          {gymClass.isRecurring && gymClass.recurringEndDate && (
+            <View
+              style={[
+                s.detailItem,
+                { flexDirection: isAr ? "row-reverse" : "row" },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="calendar-clock"
+                size={20}
+                color="#8B5CF6"
+              />
+              <Text style={s.detailText}>
+                {i18n.t("recurring_until") || "Repeats until"}:{" "}
+                {formatDateDMY(gymClass.recurringEndDate)}
+              </Text>
+            </View>
+          )}
         </View>
 
         <Text
@@ -532,16 +688,20 @@ export default function ClassDetailsScreen({ route }: any) {
             },
           ]}
         >
-          {isAr
-            ? gymClass.descriptionEn
-            : gymClass.descriptionAr || i18n.t("default_class_description")}
+          {description}
         </Text>
       </ScrollView>
 
       {/* Book Button — only when upcoming, not already booked, and not full */}
       {!isPastClass && !gymClass.isBooked && !isClassFull && (
         <TouchableOpacity
-          onPress={() =>
+          onPress={() => {
+            if (gymClass.isRecurring) {
+              // Recurring classes go through the date + days config modal
+              openBookingModal();
+              return;
+            }
+            // Non-recurring classes keep the simple confirm-alert flow
             showAlert(
               "warning",
               i18n.t("book_this_class"),
@@ -559,11 +719,11 @@ export default function ClassDetailsScreen({ route }: any) {
                 {
                   text: i18n.t("yes") || "Yes",
                   style: "primary",
-                  onPress: handleBookClass,
+                  onPress: handleBookClassSimple,
                 },
               ],
-            )
-          }
+            );
+          }}
           activeOpacity={0.9}
         >
           <LinearGradient
@@ -628,6 +788,132 @@ export default function ClassDetailsScreen({ route }: any) {
           </Text>
         </View>
       )}
+
+      {/* Recurring booking config modal */}
+      <Modal
+        transparent
+        animationType="slide"
+        visible={isBookingModalVisible}
+        onRequestClose={() => setIsBookingModalVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalBox}>
+            <TouchableOpacity
+              style={s.modalCloseBtn}
+              onPress={() => setIsBookingModalVisible(false)}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={22}
+                color={theme.muted}
+              />
+            </TouchableOpacity>
+
+            <Text
+              style={[s.modalTitle, { textAlign: isAr ? "right" : "left" }]}
+            >
+              {i18n.t("book_this_class")}
+            </Text>
+
+            {/* Recurring toggle */}
+            <View
+              style={[
+                s.modalRow,
+                { flexDirection: isAr ? "row-reverse" : "row" },
+              ]}
+            >
+              <Text style={s.modalRowLabel}>
+                {i18n.t("book_as_recurring") || "Book as recurring"}
+              </Text>
+              <Switch
+                value={isRecurringBooking}
+                onValueChange={setIsRecurringBooking}
+                trackColor={{ false: "#ccc", true: "#FF7002" }}
+              />
+            </View>
+
+            {/* Start date picker — past dates disabled via minimumDate */}
+            <TouchableOpacity
+              style={[
+                s.modalRow,
+                { flexDirection: isAr ? "row-reverse" : "row" },
+              ]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text style={s.modalRowLabel}>
+                {i18n.t("start_date") || "Start date"}
+              </Text>
+              <Text style={s.modalDateValue}>
+                {formatDateDMY(selectedClassDate)}
+              </Text>
+            </TouchableOpacity>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={selectedClassDate}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                minimumDate={new Date()}
+                textColor={isDarkMode ? "#F0F0F0" : "#222222"}
+                themeVariant={isDarkMode ? "dark" : "light"}
+                onChange={(_event, date) => {
+                  setShowDatePicker(Platform.OS === "ios");
+                  if (date) setSelectedClassDate(date);
+                }}
+              />
+            )}
+
+            {/* Repeat day selector — only relevant when recurring */}
+            {isRecurringBooking && (
+              <View style={s.modalDaysSection}>
+                <Text
+                  style={[
+                    s.modalRowLabel,
+                    { marginBottom: 8, textAlign: isAr ? "right" : "left" },
+                  ]}
+                >
+                  {i18n.t("select_days") || "Select days"}
+                </Text>
+                <View style={s.dayChipRow}>
+                  {(gymClass.repeatDays || []).map((day: string) => {
+                    const selected = selectedRepeatDays.includes(day);
+                    return (
+                      <TouchableOpacity
+                        key={day}
+                        style={[s.dayChip, selected && s.dayChipSelected]}
+                        onPress={() => toggleRepeatDay(day)}
+                      >
+                        <Text
+                          style={[
+                            s.dayChipText,
+                            selected && s.dayChipTextSelected,
+                          ]}
+                        >
+                          {translateDay(day, isAr)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity onPress={handleConfirmBookingModal}>
+              <LinearGradient
+                colors={["#FF7002", "#FF7002"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.modalConfirmBtn}
+              >
+                <Text style={s.bookButtonText}>
+                  {i18n.t("confirm_booking") || "Confirm Booking"}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {alertNode}
     </View>
   );
@@ -717,5 +1003,69 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       fontSize: 16,
       fontWeight: "700",
       color: theme.muted,
+    },
+    // ── Booking modal ──────────────────────────────────────────────────
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.4)",
+      justifyContent: "flex-end",
+    },
+    modalBox: {
+      backgroundColor: theme.surface,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      padding: 20,
+      paddingBottom: 30,
+    },
+    modalCloseBtn: {
+      position: "absolute",
+      top: 12,
+      right: 12,
+      zIndex: 1,
+      padding: 4,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.ink,
+      marginBottom: 16,
+    },
+    modalRow: {
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+      borderBottomWidth: 0.5,
+      borderBottomColor: theme.border,
+    },
+    modalRowLabel: {
+      fontSize: 15,
+      color: theme.ink,
+      fontWeight: "600",
+    },
+    modalDateValue: {
+      fontSize: 15,
+      color: "#FF7002",
+      fontWeight: "700",
+    },
+    modalDaysSection: { marginTop: 12, marginBottom: 8 },
+    dayChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    dayChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: theme.border || "#DDD",
+      backgroundColor: theme.bg,
+    },
+    dayChipSelected: {
+      backgroundColor: "#FF7002",
+      borderColor: "#FF7002",
+    },
+    dayChipText: { fontSize: 13, color: theme.ink, fontWeight: "600" },
+    dayChipTextSelected: { color: "#FFFFFF" },
+    modalConfirmBtn: {
+      marginTop: 20,
+      paddingVertical: 14,
+      borderRadius: 12,
     },
   });

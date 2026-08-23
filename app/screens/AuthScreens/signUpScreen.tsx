@@ -269,10 +269,10 @@ const SignUpScreen = () => {
                 control={control}
                 rules={{
                   required: i18n.t("errors.phone_required"),
-                  pattern: {
-                    value: /^[0-9]{8,15}$/,
-                    message: i18n.t("errors.invalid_phone"),
-                  },
+                  // pattern: {
+                  //   value: /^[0-9]{8,15}$/,
+                  //   message: i18n.t("errors.invalid_phone"),
+                  // },
                 }}
                 render={({ field: { onChange, onBlur, value } }) => (
                   <AuthInput

@@ -5,6 +5,7 @@ import { useI18n } from "../../hooks/useI18n";
 import { useAppContext } from "../../context";
 import IconsContainer from "../IconsContainer";
 import AttendanceAndDepartureModal from "../AttendenceAndDeparture";
+import GuestGymJoinModal from "./GuestGymJoinModal";
 import { Text, View } from "../overridedComponents";
 import {
   useNavigation,
@@ -27,7 +28,7 @@ import {
 } from "../../constants";
 import i18n from "../../localization";
 
-const API_BASE_URL = "https://gym.useitsmart.com/api";
+const API_BASE_URL = "http://192.168.1.16/api";
 
 const Header: React.FC = () => {
   const { getDirection } = useI18n();
@@ -43,6 +44,7 @@ const Header: React.FC = () => {
   const [isGuest, setIsGuest] = React.useState(true);
   const [isAttendanceModalVisible, setIsAttendanceModalVisible] =
     React.useState(false);
+  const [isJoinModalVisible, setIsJoinModalVisible] = React.useState(false);
 
   // 👇 fetched directly from GetMyProfile, independent of context's userProfile
   const [profileNames, setProfileNames] = React.useState<{
@@ -171,6 +173,10 @@ const Header: React.FC = () => {
                 name: "qrcode-scan",
                 onPress: () => setIsAttendanceModalVisible(true),
               },
+            userProfile?.role === "Guest" && {
+              name: "key-outline",
+              onPress: () => setIsJoinModalVisible(true),
+            },
             {
               name: "cart-outline",
               badge: totalCartItems,
@@ -195,6 +201,12 @@ const Header: React.FC = () => {
       <AttendanceAndDepartureModal
         isVisible={isAttendanceModalVisible}
         handleClose={() => setIsAttendanceModalVisible(false)}
+      />
+
+      {/* Guest Gym Join Modal */}
+      <GuestGymJoinModal
+        visible={isJoinModalVisible}
+        onClose={() => setIsJoinModalVisible(false)}
       />
     </View>
   );
