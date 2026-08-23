@@ -154,7 +154,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
     };
   }, []);
 
-  const handleCheckInOut = async () => {
+const handleCheckInOut = async () => {
     console.log("🏃 [QRCodeScreen] handleCheckInOut triggered");
     if (actionLockRef.current) {
       console.log(
@@ -183,26 +183,6 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       const rawText = await response.text();
       console.log("📦 [QRCodeScreen] check-in raw response:", rawText);
 
-      const waitMessage = "Please wait 1 minutes before checking in/out again";
-
-      if (rawText.includes(waitMessage)) {
-        showAlert(
-          "warning",
-          i18n.t("error"),
-          i18n.t("wait_5_minutes") || waitMessage,
-        );
-        return;
-      }
-
-      if (!response.ok) {
-        showAlert(
-          "error",
-          i18n.t("error"),
-          rawText || i18n.t("an_error_occured"),
-        );
-        return;
-      }
-
       let result: any;
       try {
         result = JSON.parse(rawText);
@@ -211,10 +191,23 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
           "❌ [QRCodeScreen] failed to parse check-in JSON:",
           parseError,
         );
-        showAlert("error", i18n.t("error"), i18n.t("an_error_occured"));
+        showAlert(
+          "error",
+          i18n.t("error"),
+          rawText || i18n.t("an_error_occured"),
+        );
         return;
       }
       console.log("📦 [QRCodeScreen] check-in result:", result);
+
+      if (!response.ok || result?.success === false) {
+        showAlert(
+          "error",
+          i18n.t("error"),
+          result?.message || i18n.t("an_error_occured"),
+        );
+        return;
+      }
 
       const newStatus = result?.isInGym ?? !isCheckedIn;
       setIsCheckedIn(newStatus);
@@ -312,6 +305,7 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
       );
 
       const text = await response.text();
+
       console.log(
         "📦 [QRCodeScreen] purchase-open-ticket response body:",
         text,

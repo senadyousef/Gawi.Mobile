@@ -7,7 +7,6 @@ import {
   TextInput,
   TouchableOpacity,
   Text,
-  Alert,
   FlatList,
   Image,
   RefreshControl,
@@ -23,6 +22,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import { navigationRef } from "../../context/RootNavigation";
 import { useState } from "react";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, {
+  SweetAlertButton,
+  SweetAlertType,
+} from "../../components/SweetAlert";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -56,7 +60,7 @@ const CalendarScreen = () => {
     setGuestMode,
 
     setIsAuthenticated,
-  } = useAppContext(); // 👈 pull guestMode
+  } = useAppContext();
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
   const s = React.useMemo(() => createStyles(theme), [theme]);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -74,6 +78,28 @@ const CalendarScreen = () => {
   const navigation = useNavigation<any>();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekOffset, setWeekOffset] = useState(0);
+
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = React.useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([fetchGyms(), fetchNotes()]);
@@ -114,12 +140,14 @@ const CalendarScreen = () => {
         type: "Note",
         date: n.date ? n.date.split("T")[0] : format(new Date(), "yyyy-MM-dd"),
       }));
-      // 👇 used only for calendar dot-marking, NOT rendered in the FlatList
-      // (the gyms endpoint already returns notes as part of its payload)
       setNotes(formattedNotes);
     } catch (error: any) {
       console.error("❌ Error fetching notes:", error);
-      Alert.alert(i18n.t("calendar.error"), i18n.t("calendar.load_error"));
+      showAlert(
+        "error",
+        i18n.t("calendar.error"),
+        i18n.t("calendar.load_error"),
+      );
     }
   };
 
@@ -161,10 +189,12 @@ const CalendarScreen = () => {
 
   const handleSaveNote = async () => {
     if (!noteText.trim()) {
-      return Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("calendar.error"),
         i18n.t("calendar.note_empty_error"),
       );
+      return;
     }
     try {
       const token = await handleGetToken();
@@ -184,7 +214,11 @@ const CalendarScreen = () => {
       });
       console.log(res.status);
       if (res.ok) {
-        Alert.alert(i18n.t("calendar.success"), i18n.t("calendar.note_added"));
+        showAlert(
+          "success",
+          i18n.t("calendar.success"),
+          i18n.t("calendar.note_added"),
+        );
         const newNote: INote = {
           id: Date.now(),
           note: noteText,
@@ -194,11 +228,7 @@ const CalendarScreen = () => {
           type: "Note",
         };
 
-        // 👇 push into `gyms` (what the FlatList actually renders) so it shows
-        // instantly — do NOT also add to a separate array the list reads from,
-        // that's what caused the duplicate
         setGyms((prev) => [...prev, newNote]);
-        // keep `notes` in sync too, only used for calendar dot-marking
         setNotes((prev) => [...prev, newNote]);
 
         setNoteText("");
@@ -212,7 +242,6 @@ const CalendarScreen = () => {
     }
   };
 
-  // 👇 guest-mode gate for the add-note action
   const handleAddNotePress = () => {
     if (guestMode) {
       setGuestMode(false);
@@ -434,7 +463,7 @@ const CalendarScreen = () => {
                   console.log("Selected Date:", formattedDate);
 
                   setSelectedDate(date);
-                  setSelected(formattedDate); // triggers API call
+                  setSelected(formattedDate);
                 }}
               >
                 <Text style={[s.dayNumber, isSelected && s.selectedDayNumber]}>
@@ -529,6 +558,17 @@ const CalendarScreen = () => {
         </KeyboardAvoidingView>
       </Modal>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
+
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={!!isDarkMode}
+        isRTL={isRTL}
+        onRequestClose={hideAlert}
+      />
     </View>
   );
 };

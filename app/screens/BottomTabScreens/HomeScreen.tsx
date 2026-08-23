@@ -14,7 +14,6 @@ import {
   RefreshControl,
   Pressable,
   DeviceEventEmitter,
-  Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -33,7 +32,7 @@ import ClassesSection from "../../components/HomeScreen/ClassesSection";
 import GymStoreSection from "../../components/HomeScreen/GymStoreSection";
 import MyStatusSection from "../../components/HomeScreen/MyStatusSection";
 import LatestNewsSection from "../../components/HomeScreen/LatestNewsSection";
-import WalletSection from "../../components/HomeScreen/WalletSection"; // 👈
+import WalletSection from "../../components/HomeScreen/WalletSection";
 import {
   HOMESCREEN_HEADER_translateY,
   HOMESCREEN_HEADER_paddingHorizontal,
@@ -44,10 +43,13 @@ import GymTrafficVisual from "../../components/HomeScreen/GymTrafficVisual";
 import AudienceSection from "../../components/HomeScreen/AudienceSection";
 import { useAppContext } from "../../context";
 import { useState } from "react";
-import { handleGetToken } from "../../helpers"; // 👈 shared token helper (same one SignalR hubs use)
+import { handleGetToken } from "../../helpers";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, {
+  SweetAlertButton,
+  SweetAlertType,
+} from "../../components/SweetAlert";
 
-// 👇 Once the user has scrolled this many px, Header has scrolled off
-// screen, so the floating menu button fades in to keep the drawer reachable.
 const FLOATING_MENU_SCROLL_THRESHOLD = 120;
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
@@ -77,17 +79,40 @@ const NotesSection = ({
   loadingNotes,
   isRTL,
   theme,
+  isDarkMode,
   onNoteDeleted,
 }: {
   notes: any[];
   loadingNotes: boolean;
   isRTL: boolean;
   theme: ReturnType<typeof getTheme>;
+  isDarkMode: boolean;
   onNoteDeleted: (id: number | string) => void;
 }) => {
   const [selectedNote, setSelectedNote] = useState<any>(null);
   const [deletingId, setDeletingId] = useState<number | string | null>(null);
   const navigation = useNavigation<any>();
+
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
 
   const tones = [
     { border: "#C8A000", accent: "#C8A000" },
@@ -113,14 +138,16 @@ const NotesSection = ({
         setSelectedNote(null);
         DeviceEventEmitter.emit("homeRefresh");
       } else {
-        Alert.alert(
+        showAlert(
+          "error",
           i18n.t("error") || "Error",
           i18n.t("note_delete_failed") || "Could not delete note.",
         );
       }
     } catch (error) {
       console.error("⚠️ Error deleting note:", error);
-      Alert.alert(
+      showAlert(
+        "error",
         i18n.t("error") || "Error",
         i18n.t("note_delete_failed") || "Could not delete note.",
       );
@@ -130,7 +157,8 @@ const NotesSection = ({
   };
 
   const confirmDelete = (id: number | string) => {
-    Alert.alert(
+    showAlert(
+      "warning",
       i18n.t("delete_note") || "Delete note?",
       i18n.t("delete_note_confirm") || "This can't be undone.",
       [
@@ -489,6 +517,17 @@ const NotesSection = ({
           </Pressable>
         </Pressable>
       </Modal>
+
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={isDarkMode}
+        isRTL={isRTL}
+        onRequestClose={hideAlert}
+      />
     </View>
   );
 };
@@ -497,10 +536,10 @@ const NotesSection = ({
 const HomeScreen = () => {
   const ref = React.useRef(null);
   useScrollToTop(ref);
-  const navigation = useNavigation<any>(); // 👈 for the floating menu button
+  const navigation = useNavigation<any>();
 
-  const { guestMode, userProfile, isDarkMode } = useAppContext(); // 👈 pull isDarkMode
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
+  const { guestMode, userProfile, isDarkMode } = useAppContext();
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
 
   const [isGuest, setIsGuest] = React.useState(true);
   const [isChatOpen, setIsChatOpen] = React.useState(false);
@@ -513,7 +552,6 @@ const HomeScreen = () => {
   const [notes, setNotes] = React.useState<any[]>([]);
   const [loadingNotes, setLoadingNotes] = React.useState(false);
   const [initialLoading, setInitialLoading] = React.useState(true);
-  // 👇 Shows the floating menu button once Header has scrolled off screen
   const [showFloatingMenu, setShowFloatingMenu] = React.useState(false);
 
   const isGuestMember = !guestMode && userProfile?.role !== "Guest";
@@ -571,8 +609,6 @@ const HomeScreen = () => {
     React.useCallback(() => {
       fetchNotes(true);
       setRefreshTrigger((prev) => prev + 1);
-      // Lets any currently-mounted screen outside this tree (e.g.
-      // ClassDetailsScreen) know it's time to silently refetch too.
       DeviceEventEmitter.emit("homeRefresh");
     }, []),
   );
@@ -585,7 +621,6 @@ const HomeScreen = () => {
     setRefreshing(false);
   }, []);
 
-  // 👇 Toggles the floating menu button on/off as the user scrolls past Header
   const handleScroll = React.useCallback((event: any) => {
     const y = event.nativeEvent.contentOffset.y;
     const shouldShow = y > FLOATING_MENU_SCROLL_THRESHOLD;
@@ -621,13 +656,11 @@ const HomeScreen = () => {
 
   return (
     <>
-      {/* 👇 Status bar flips based on dark mode */}
       <StatusBar style={isDarkMode ? "light" : "dark"} />
 
       <ScrollView
         ref={ref}
         showsVerticalScrollIndicator={false}
-        // 👇 Screen background reacts to dark mode
         style={{ backgroundColor: theme.bg }}
         onScroll={handleScroll}
         scrollEventThrottle={16}
@@ -686,6 +719,7 @@ const HomeScreen = () => {
             loadingNotes={loadingNotes}
             isRTL={isRTL}
             theme={theme}
+            isDarkMode={!!isDarkMode}
             onNoteDeleted={handleNoteDeleted}
           />
           {!guestMode && isGuestMember && (
@@ -697,8 +731,6 @@ const HomeScreen = () => {
         </View>
       </ScrollView>
 
-      {/* 👇 Floating menu button — lives outside the ScrollView so it stays
-          fixed on screen; only shown once Header has scrolled out of view */}
       {showFloatingMenu && (
         <TouchableOpacity
           onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
@@ -752,10 +784,7 @@ const floatingMenuStyles = StyleSheet.create({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor: theme.bg,
-    },
+    safeArea: { flex: 1, backgroundColor: theme.bg },
     body: {
       paddingHorizontal: HOMESCREEN_HEADER_paddingHorizontal,
       transform: [{ translateY: -HOMESCREEN_HEADER_translateY }],
@@ -779,21 +808,14 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       backgroundColor: theme.bg,
       gap: 12,
     },
-    loadingText: {
-      fontSize: 16,
-      color: Colors.primary,
-      fontWeight: "500",
-    },
+    loadingText: { fontSize: 16, color: Colors.primary, fontWeight: "500" },
     sectionTitle: {
       fontSize: 18,
       fontWeight: "700",
       color: theme.ink,
       letterSpacing: -0.3,
     },
-    notesContainer: {
-      marginTop: 24,
-      marginBottom: 8,
-    },
+    notesContainer: { marginTop: 24, marginBottom: 8 },
     notesSectionHeader: {
       flexDirection: "row",
       alignItems: "center",
@@ -809,15 +831,8 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    notesCountText: {
-      fontSize: 11,
-      fontWeight: "700",
-      color: theme.ink,
-    },
-    notesListContent: {
-      paddingHorizontal: 10,
-      paddingBottom: 4,
-    },
+    notesCountText: { fontSize: 11, fontWeight: "700", color: theme.ink },
+    notesListContent: { paddingHorizontal: 10, paddingBottom: 4 },
     noteCard: {
       width: 200,
       height: 120,
@@ -852,16 +867,8 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       letterSpacing: 0.4,
       textTransform: "uppercase",
     },
-    noteContent: {
-      fontSize: 13,
-      lineHeight: 18,
-      color: theme.ink,
-    },
-    emptyNotes: {
-      alignItems: "center",
-      paddingVertical: 28,
-      gap: 6,
-    },
+    noteContent: { fontSize: 13, lineHeight: 18, color: theme.ink },
+    emptyNotes: { alignItems: "center", paddingVertical: 28, gap: 6 },
     emptyNotesIconWrap: {
       width: 56,
       height: 56,
@@ -873,16 +880,8 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       justifyContent: "center",
       marginBottom: 4,
     },
-    emptyNotesText: {
-      fontSize: 14,
-      color: theme.muted,
-      fontWeight: "600",
-    },
-    emptyNotesSub: {
-      fontSize: 12,
-      color: theme.muted,
-      opacity: 0.7,
-    },
+    emptyNotesText: { fontSize: 14, color: theme.muted, fontWeight: "600" },
+    emptyNotesSub: { fontSize: 12, color: theme.muted, opacity: 0.7 },
     inlineLoader: {
       flexDirection: "row",
       alignItems: "center",
@@ -890,10 +889,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       paddingVertical: 12,
       gap: 8,
     },
-    inlineLoaderText: {
-      fontSize: 13,
-      color: theme.muted,
-    },
+    inlineLoaderText: { fontSize: 13, color: theme.muted },
     chatFab: {
       position: "absolute",
       right: 18,
@@ -939,9 +935,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       alignItems: "center",
       gap: 4,
     },
-    navItemActive: {
-      backgroundColor: theme.accent,
-    },
+    navItemActive: { backgroundColor: theme.accent },
     navLabel: {
       fontSize: 10,
       fontWeight: "500",
@@ -970,11 +964,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
     },
-    chatHeaderLeft: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-    },
+    chatHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
     chatAvatarDot: {
       width: 36,
       height: 36,
@@ -997,10 +987,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    messagesContainer: {
-      padding: 16,
-      gap: 10,
-    },
+    messagesContainer: { padding: 16, gap: 10 },
     messageBubble: {
       maxWidth: "75%",
       padding: 12,

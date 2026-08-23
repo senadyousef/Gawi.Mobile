@@ -466,8 +466,16 @@ export default {
     unable_delete_account: "Unable to delete your account.",
     subscription_status: "Subscription Status",
     expiry_date: "Expiry Date",
-
-    select_date: "Select Date",
+    date_of_birth: "Date of Birth",
+    blood_type: "Blood Type",
+    select_date: "Select date",
+    select_blood_type: "Select blood type",
+    emergency_contact_name: "Emergency Contact Name",
+    emergency_contact_phone: "Emergency Contact Phone",
+    emergency_contact_relationship: "Relationship",
+    allergies: "Allergies",
+    injuries_limitations: "Injuries / Physical Limitations",
+    doctor_details: "Doctor / Physician Details",
     enter: "Enter {{field}}",
 
     edit: "Edit {{section}}",
@@ -801,6 +809,7 @@ export default {
   totalPlans: "Total Plans",
   activeClients: "Active Clients",
   totalCalories: "Total Calories",
+  total: "Total :",
 
   // Card
   plan: "PLAN",

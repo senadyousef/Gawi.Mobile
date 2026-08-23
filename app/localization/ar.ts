@@ -467,7 +467,15 @@ export default {
     account_deleted: "تم حذف حسابك بنجاح.",
     unable_delete_account: "تعذر حذف حسابك.",
     personal_updated: "تم تحديث المعلومات الشخصية بنجاح",
-
+    date_of_birth: "تاريخ الميلاد",
+    blood_type: "فصيلة الدم",
+    select_blood_type: "اختر فصيلة الدم",
+    emergency_contact_name: "اسم جهة الاتصال في حالات الطوارئ",
+    emergency_contact_phone: "رقم جهة الاتصال في حالات الطوارئ",
+    emergency_contact_relationship: "صلة القرابة",
+    allergies: "الحساسية",
+    injuries_limitations: "الإصابات / القيود الجسدية",
+    doctor_details: "بيانات الطبيب المعالج",
     load_error: "تعذر تحميل بيانات الملف الشخصي",
     permission_required: "إذن مطلوب",
     gallery_permission: "نحتاج إلى إذن للوصول إلى معرض الصور.",
@@ -787,7 +795,7 @@ export default {
   totalPlans: "إجمالي الخطط",
   activeClients: "العملاء النشطين",
   totalCalories: "إجمالي السعرات",
-
+  total: "اجمالي :",
   // Card
   plan: "خطة",
 

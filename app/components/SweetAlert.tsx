@@ -88,6 +88,8 @@ export default function SweetAlert({
       ? buttons
       : [{ text: "OK", style: "primary" }];
 
+  const isStacked = resolvedButtons.length > 2;
+
   const colors = {
     card: isDarkMode ? "#1E1E1E" : "#FFFFFF",
     ink: isDarkMode ? "#F0F0F0" : "#111111",
@@ -98,8 +100,13 @@ export default function SweetAlert({
   };
 
   const handlePress = (btn: SweetAlertButton) => {
-    btn.onPress?.();
     onRequestClose?.();
+    if (btn.onPress) {
+      // Delay allows the native Modal to unmount first, preventing iOS view controller presentation conflicts
+      setTimeout(() => {
+        btn.onPress!();
+      }, 350);
+    }
   };
 
   return (
@@ -156,9 +163,9 @@ export default function SweetAlert({
           <View
             style={[
               styles.buttonRow,
-              resolvedButtons.length > 2 && { flexDirection: "column" },
+              isStacked && { flexDirection: "column" },
               isRTL &&
-                resolvedButtons.length <= 2 && {
+                !isStacked && {
                   flexDirection: "row-reverse",
                 },
             ]}
@@ -173,15 +180,15 @@ export default function SweetAlert({
                   onPress={() => handlePress(btn)}
                   style={[
                     styles.button,
-                    resolvedButtons.length > 1 && { flex: 1 },
+                    isStacked ? { width: "100%" } : { flex: 1 },
                     isCancel && { backgroundColor: colors.cancelBg },
                     isDestructive && { backgroundColor: "#E5484D" },
                     !isCancel &&
                       !isDestructive && { backgroundColor: cfg.color },
                     idx > 0 &&
-                      resolvedButtons.length <= 2 &&
+                      !isStacked &&
                       (isRTL ? { marginRight: 10 } : { marginLeft: 10 }),
-                    resolvedButtons.length > 2 && idx > 0 && { marginTop: 10 },
+                    isStacked && idx > 0 && { marginTop: 10 },
                   ]}
                 >
                   <Text

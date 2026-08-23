@@ -11,6 +11,7 @@ import {
   I18nManager,
   Modal,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -43,6 +44,8 @@ const ACCENT = "#E8742A";
 const ACCENT_DEEP = "#8A3F13"; // gradient partner for the membership card
 const DANGER = "#FF5F5F";
 const SUCCESS = "#59D67C";
+
+const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
 const getTheme = (dark: boolean) => ({
   bg: dark ? "#0B0B0A" : "#F6F5F2",
@@ -81,6 +84,7 @@ export default function MyProfileScreen() {
     subscription: false,
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [tempDob, setTempDob] = useState<Date>(new Date());
   const [loading, setLoading] = useState(true);
   const [memberIdApi, setMemberIdApi] = useState<string | null>(null);
   const [planModalVisible, setPlanModalVisible] = useState(false);
@@ -146,6 +150,14 @@ export default function MyProfileScreen() {
     training_days_per_week: "",
     meals_per_day: "",
     notes: "",
+    dateOfBirth: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    emergencyContactRelationship: "",
+    allergies: "",
+    currentInjuriesOrPhysicalLimitations: "",
+    doctorPhysicianDetails: "",
+    bloodType: "",
   });
 
   const [subscriptionData, setSubscriptionData] = useState<{
@@ -188,6 +200,15 @@ export default function MyProfileScreen() {
         training_days_per_week: data.training_days_per_week || "",
         meals_per_day: data.meals_per_day || "",
         notes: data.notes || "",
+        dateOfBirth: data.dateOfBirth || "",
+        emergencyContactName: data.emergencyContactName || "",
+        emergencyContactPhone: data.emergencyContactPhone || "",
+        emergencyContactRelationship: data.emergencyContactRelationship || "",
+        allergies: data.allergies || "",
+        currentInjuriesOrPhysicalLimitations:
+          data.currentInjuriesOrPhysicalLimitations || "",
+        doctorPhysicianDetails: data.doctorPhysicianDetails || "",
+        bloodType: data.bloodType || "",
       });
       setSubscriptionData({
         subscriptionStatus: data.isActive ? "Active" : "Inactive",
@@ -342,23 +363,45 @@ export default function MyProfileScreen() {
     }
   };
 
+  // Android: native dialog fires once and should close immediately.
+  // iOS: spinner lives inside our own Modal, so just update the draft value —
+  // the Modal closes when the user taps Done/Cancel.
   const handleDateChange = (_event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      const formattedDate = selectedDate.toISOString().split("T")[0];
-      setPersonalData((prev) => ({ ...prev, dob: formattedDate }));
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+      if (_event?.type === "set" && selectedDate) {
+        const formattedDate = selectedDate.toISOString().split("T")[0];
+        setPhysicalData((prev) => ({ ...prev, dateOfBirth: formattedDate }));
+      }
+      return;
     }
+    if (selectedDate) {
+      setTempDob(selectedDate);
+    }
+  };
+
+  const openDatePicker = () => {
+    setTempDob(
+      physicalData.dateOfBirth ? new Date(physicalData.dateOfBirth) : new Date(),
+    );
+    setShowDatePicker(true);
+  };
+
+  const confirmIosDate = () => {
+    const formattedDate = tempDob.toISOString().split("T")[0];
+    setPhysicalData((prev) => ({ ...prev, dateOfBirth: formattedDate }));
+    setShowDatePicker(false);
   };
 
   // Just stages the picked image locally now — nothing is uploaded yet.
   const handleSelectPhoto = () => {
     showAlert(
       "info",
-      i18n.t("profile.select_photo") || "Select Photo",
+      i18n.t("profile.select_photo") || (rtl ? "اختر صورة" : "Select Photo"),
       undefined,
       [
         {
-          text: i18n.t("profile.camera") || "Camera",
+          text: i18n.t("profile.camera") || (rtl ? "الكاميرا" : "Camera"),
           style: "primary",
           onPress: async () => {
             const permission =
@@ -366,7 +409,7 @@ export default function MyProfileScreen() {
             if (permission.status !== "granted") {
               showAlert(
                 "warning",
-                i18n.t("profile.permission_required"),
+                i18n.t("profile.permission_required") || "Permission required",
                 i18n.t("profile.camera_permission") ||
                   "Camera permission is required",
               );
@@ -384,7 +427,7 @@ export default function MyProfileScreen() {
           },
         },
         {
-          text: i18n.t("profile.gallery") || "Gallery",
+          text: i18n.t("profile.gallery") || (rtl ? "المعرض" : "Gallery"),
           style: "primary",
           onPress: async () => {
             const permission =
@@ -392,8 +435,9 @@ export default function MyProfileScreen() {
             if (permission.status !== "granted") {
               showAlert(
                 "warning",
-                i18n.t("profile.permission_required"),
-                i18n.t("profile.gallery_permission"),
+                i18n.t("profile.permission_required") || "Permission required",
+                i18n.t("profile.gallery_permission") ||
+                  "Gallery permission is required",
               );
               return;
             }
@@ -410,7 +454,7 @@ export default function MyProfileScreen() {
           },
         },
         {
-          text: i18n.t("profile.cancel") || "Cancel",
+          text: i18n.t("profile.cancel") || (rtl ? "إلغاء" : "Cancel"),
           style: "cancel",
         },
       ],
@@ -566,6 +610,16 @@ export default function MyProfileScreen() {
           height_cm: Number(physicalData.height),
           gender: personalData.gender,
           target: physicalData.target,
+          dateOfBirth: physicalData.dateOfBirth,
+          emergencyContactName: physicalData.emergencyContactName,
+          emergencyContactPhone: physicalData.emergencyContactPhone,
+          emergencyContactRelationship:
+            physicalData.emergencyContactRelationship,
+          allergies: physicalData.allergies,
+          currentInjuriesOrPhysicalLimitations:
+            physicalData.currentInjuriesOrPhysicalLimitations,
+          doctorPhysicianDetails: physicalData.doctorPhysicianDetails,
+          bloodType: physicalData.bloodType,
           activity_level: physicalData.activity_level,
           moderately_active: "1",
           training_days_per_week: physicalData.training_days_per_week,
@@ -627,10 +681,33 @@ export default function MyProfileScreen() {
         return "restaurant-outline";
       case "notes":
         return "document-text-outline";
+      case "dateOfBirth":
+        return "today-outline";
+      case "bloodType":
+        return "water-outline";
+      case "emergencyContactName":
+        return "person-circle-outline";
+      case "emergencyContactPhone":
+        return "call-outline";
+      case "emergencyContactRelationship":
+        return "people-outline";
+      case "allergies":
+        return "alert-circle-outline";
+      case "currentInjuriesOrPhysicalLimitations":
+        return "bandage-outline";
+      case "doctorPhysicianDetails":
+        return "medkit-outline";
       default:
         return "ellipse-outline";
     }
   };
+
+  const MULTILINE_FIELDS = [
+    "allergies",
+    "currentInjuriesOrPhysicalLimitations",
+    "doctorPhysicianDetails",
+    "notes",
+  ];
 
   const renderField = (
     label: string,
@@ -700,6 +777,51 @@ export default function MyProfileScreen() {
                 />
               </Picker>
             </View>
+          ) : key === "bloodType" ? (
+            <View style={[s.pickerContainer, rtl && s.pickerContainerRTL]}>
+              <Picker
+                selectedValue={value}
+                style={[
+                  { color: theme.ink },
+                  rtl ? { textAlign: "right" } : undefined,
+                ]}
+                onValueChange={(itemValue) =>
+                  setPhysicalData((prev) => ({
+                    ...prev,
+                    bloodType: itemValue,
+                  }))
+                }
+              >
+                <Picker.Item
+                  label={i18n.t("profile.select_blood_type")}
+                  value=""
+                  color={isDarkMode ? "#fff" : "#000"}
+                />
+                {BLOOD_TYPES.map((bt) => (
+                  <Picker.Item
+                    key={bt}
+                    label={bt}
+                    value={bt}
+                    color={isDarkMode ? "#fff" : "#000"}
+                  />
+                ))}
+              </Picker>
+            </View>
+          ) : key === "dateOfBirth" ? (
+            <TouchableOpacity
+              style={[s.input, rtl && s.inputRTL]}
+              onPress={openDatePicker}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={{
+                  color: value ? theme.ink : theme.placeholder,
+                  textAlign: rtl ? "right" : "left",
+                }}
+              >
+                {value ? formatDate(value) : i18n.t("profile.select_date")}
+              </Text>
+            </TouchableOpacity>
           ) : key === "gender" ? (
             <View style={[s.radioContainer, rtl && s.radioContainerRTL]}>
               {[
@@ -734,11 +856,12 @@ export default function MyProfileScreen() {
               placeholderTextColor={theme.placeholder}
               color={theme.ink}
               textAlign={rtl ? "right" : "left"}
+              multiline={MULTILINE_FIELDS.includes(key)}
             />
           )
         ) : (
           <Text style={[s.listValue, rtl && s.listValueRTL]}>
-            {value || "—"}
+            {key === "dateOfBirth" && value ? formatDate(value) : value || "—"}
           </Text>
         )}
       </View>
@@ -758,9 +881,29 @@ export default function MyProfileScreen() {
     { label: i18n.t("profile.height"), key: "height" },
     { label: i18n.t("profile.weight"), key: "weight" },
     { label: i18n.t("profile.target"), key: "target" },
+    { label: i18n.t("profile.date_of_birth"), key: "dateOfBirth" },
+    { label: i18n.t("profile.blood_type"), key: "bloodType" },
     { label: i18n.t("profile.activity_level"), key: "activity_level" },
     { label: i18n.t("profile.training_days"), key: "training_days_per_week" },
     { label: i18n.t("profile.meals_per_day"), key: "meals_per_day" },
+    {
+      label: i18n.t("profile.emergency_contact_name"),
+      key: "emergencyContactName",
+    },
+    {
+      label: i18n.t("profile.emergency_contact_phone"),
+      key: "emergencyContactPhone",
+    },
+    {
+      label: i18n.t("profile.emergency_contact_relationship"),
+      key: "emergencyContactRelationship",
+    },
+    { label: i18n.t("profile.allergies"), key: "allergies" },
+    {
+      label: i18n.t("profile.injuries_limitations"),
+      key: "currentInjuriesOrPhysicalLimitations",
+    },
+    { label: i18n.t("profile.doctor_details"), key: "doctorPhysicianDetails" },
     { label: i18n.t("profile.notes"), key: "notes" },
   ];
 
@@ -1209,6 +1352,53 @@ export default function MyProfileScreen() {
         </View>
       </Modal>
 
+      {/* Date of Birth Picker */}
+      {Platform.OS === "ios" ? (
+        <Modal
+          visible={showDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowDatePicker(false)}
+        >
+          <View style={s.datePickerOverlay}>
+            <View style={s.datePickerBox}>
+              <View style={[s.datePickerHeader, rtl && s.datePickerHeaderRTL]}>
+                <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                  <Text style={s.datePickerCancelText}>
+                    {i18n.t("profile.cancel")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={confirmIosDate}>
+                  <Text style={s.datePickerDoneText}>
+                    {i18n.t("profile.done") ||
+                      (rtl ? "تم" : "Done")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={tempDob}
+                mode="date"
+                display="spinner"
+                maximumDate={new Date()}
+                onChange={handleDateChange}
+                style={{ backgroundColor: theme.modalBg }}
+                textColor={theme.ink}
+              />
+            </View>
+          </View>
+        </Modal>
+      ) : (
+        showDatePicker && (
+          <DateTimePicker
+            value={tempDob}
+            mode="date"
+            display="default"
+            maximumDate={new Date()}
+            onChange={handleDateChange}
+          />
+        )
+      )}
+
       <SweetAlert
         visible={alertConfig.visible}
         type={alertConfig.type}
@@ -1653,4 +1843,28 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       justifyContent: "center",
     },
     modalTitle: { fontSize: 19, fontWeight: "800", color: theme.ink },
+
+    datePickerOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      justifyContent: "flex-end",
+    },
+    datePickerBox: {
+      backgroundColor: theme.modalBg,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingBottom: 20,
+    },
+    datePickerHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    datePickerHeaderRTL: { flexDirection: "row-reverse" },
+    datePickerCancelText: { fontSize: 15, color: theme.muted, fontWeight: "600" },
+    datePickerDoneText: { fontSize: 15, color: theme.accent, fontWeight: "700" },
   });

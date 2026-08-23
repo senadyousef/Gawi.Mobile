@@ -16,7 +16,10 @@ import { handleGetToken } from "../helpers";
 import i18n from "../localization";
 import { useAppContext } from "../context";
 // 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
-import SweetAlert, { SweetAlertButton, SweetAlertType } from "../components/SweetAlert";
+import SweetAlert, {
+  SweetAlertButton,
+  SweetAlertType,
+} from "../components/SweetAlert";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -198,9 +201,7 @@ export default function ClassDetailsScreen({ route }: any) {
           classToBook.bookedCount >= classToBook.capacity);
 
       if (isClassFullFresh) {
-        setGymClass((prev: any) =>
-          prev ? { ...prev, isFull: true } : prev,
-        );
+        setGymClass((prev: any) => (prev ? { ...prev, isFull: true } : prev));
         showAlert(
           "info",
           i18n.t("class_full_title") || "Class Full",
@@ -320,7 +321,7 @@ export default function ClassDetailsScreen({ route }: any) {
       }
       showAlert(
         "success",
-        i18n.t("success_title") || "Success",
+        i18n.t("cancel_booking"),
         i18n.t("cancel_booking_success") || "Booking successfully cancelled",
       );
       setGymClass((prev: any) =>
@@ -531,7 +532,9 @@ export default function ClassDetailsScreen({ route }: any) {
             },
           ]}
         >
-          {gymClass.description || i18n.t("default_class_description")}
+          {isAr
+            ? gymClass.descriptionEn
+            : gymClass.descriptionAr || i18n.t("default_class_description")}
         </Text>
       </ScrollView>
 

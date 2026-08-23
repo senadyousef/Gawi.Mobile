@@ -9,7 +9,6 @@ import {
   Modal,
   TextInput,
   FlatList,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Image,
@@ -25,7 +24,12 @@ import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import i18n from "../localization";
 import { useI18n } from "../hooks/useI18n";
-import { useAppContext } from "../context"; // 👈 import context
+import { useAppContext } from "../context";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, {
+  SweetAlertButton,
+  SweetAlertType,
+} from "../components/SweetAlert";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -46,7 +50,7 @@ const getTheme = (dark: boolean) => ({
 
 export default function MyProgressScreen() {
   const { isArabic } = useI18n();
-  const { isDarkMode } = useAppContext(); // 👈 pull isDarkMode
+  const { isDarkMode } = useAppContext();
   const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
   const s = React.useMemo(() => createStyles(theme), [theme]);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +74,27 @@ export default function MyProgressScreen() {
   const [addingHistory, setAddingHistory] = useState(false);
 
   const { height } = Dimensions.get("window");
+
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = useState({
+    visible: false,
+    type: "info",
+    title: "",
+    message: undefined,
+    buttons: undefined,
+  });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
 
   useEffect(() => {
     fetchProgressData();
@@ -146,8 +171,10 @@ export default function MyProgressScreen() {
   };
 
   const handleSaveProgress = async () => {
-    if (!newProgressName)
-      return Alert.alert(i18n.t("error"), i18n.t("enter_progress_name"));
+    if (!newProgressName) {
+      showAlert("warning", i18n.t("error"), i18n.t("enter_progress_name"));
+      return;
+    }
     try {
       const MemberId = await AsyncStorage.getItem("MemberId");
       const token = await handleGetToken();
@@ -189,7 +216,7 @@ export default function MyProgressScreen() {
   };
 
   const handleDeletePress = (id) =>
-    Alert.alert(i18n.t("delete_progress_alert"), "", [
+    showAlert("warning", i18n.t("delete_progress_alert"), undefined, [
       { text: i18n.t("cancel"), style: "cancel" },
       {
         text: i18n.t("delete"),
@@ -256,8 +283,10 @@ export default function MyProgressScreen() {
   };
 
   const addOrEditProgressHistory = async () => {
-    if (!newHistoryValue)
-      return Alert.alert(i18n.t("error"), i18n.t("enter_history_value"));
+    if (!newHistoryValue) {
+      showAlert("warning", i18n.t("error"), i18n.t("enter_history_value"));
+      return;
+    }
     setAddingHistory(true);
     try {
       const token = await handleGetToken();
@@ -302,7 +331,7 @@ export default function MyProgressScreen() {
   };
 
   const handleDeleteHistory = (id) =>
-    Alert.alert(i18n.t("delete_history_alert"), "", [
+    showAlert("warning", i18n.t("delete_history_alert"), undefined, [
       { text: i18n.t("cancel"), style: "cancel" },
       {
         text: i18n.t("delete"),
@@ -310,13 +339,10 @@ export default function MyProgressScreen() {
         onPress: async () => {
           try {
             const token = await handleGetToken();
-            await fetch(
-              `https://gawifit.com/api/MyProgressHistory/${id}`,
-              {
-                method: "DELETE",
-                headers: { Accept: "*/*", Authorization: `Bearer ${token}` },
-              },
-            );
+            await fetch(`https://gawifit.com/api/MyProgressHistory/${id}`, {
+              method: "DELETE",
+              headers: { Accept: "*/*", Authorization: `Bearer ${token}` },
+            });
             handleCardPress(selectedProgress);
           } catch (e) {
             console.error(e);
@@ -340,8 +366,8 @@ export default function MyProgressScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[Colors.primary]} // Android
-            tintColor={Colors.primary} // iOS
+            colors={[Colors.primary]}
+            tintColor={Colors.primary}
           />
         }
       >
@@ -741,6 +767,17 @@ export default function MyProgressScreen() {
           </KeyboardAvoidingView>
         </Modal>
       </ScrollView>
+
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={!!isDarkMode}
+        isRTL={isArabic()}
+        onRequestClose={hideAlert}
+      />
     </LinearGradient>
   );
 }
@@ -765,7 +802,6 @@ const createStyles = (theme) =>
     scrollContent: { padding: 20, alignItems: "center" },
     center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
-    // ─── RTL utility styles ───────────────────────────────────────────────────
     textRTL: {
       textAlign: "right",
       writingDirection: "rtl",
@@ -791,7 +827,6 @@ const createStyles = (theme) =>
     addButtonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
     cardContainer: { width: "100%" },
 
-    // Base card — no border or direction set here; set inline per item
     card: {
       alignItems: "center",
       backgroundColor: theme.surface,
@@ -803,12 +838,10 @@ const createStyles = (theme) =>
       shadowRadius: 6,
       elevation: 4,
     },
-    // LTR card: icon left, border left
     cardLTR: {
       flexDirection: "row",
       borderLeftWidth: 6,
     },
-    // RTL card: icon right, border right
     cardRTL: {
       flexDirection: "row-reverse",
       borderRightWidth: 6,

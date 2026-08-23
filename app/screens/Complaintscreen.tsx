@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  Alert,
   ActivityIndicator,
   Image,
   ScrollView,
@@ -17,6 +16,11 @@ import { Ionicons } from "@expo/vector-icons";
 import i18n from "../localization";
 import { useAppContext } from "../context";
 import { handleGetToken } from "../helpers";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, {
+  SweetAlertButton,
+  SweetAlertType,
+} from "../components/SweetAlert";
 
 const API_URL = "https://gawifit.com/api/Complaints";
 
@@ -42,21 +46,50 @@ export default function ComplaintScreen() {
   const [description, setDescription] = React.useState("");
   const [isVisibleName, setIsVisibleName] = React.useState(false);
 
-  const [image, setImage] = React.useState<ImagePicker.ImagePickerAsset | null>(null);
-  const [video, setVideo] = React.useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [image, setImage] = React.useState<ImagePicker.ImagePickerAsset | null>(
+    null,
+  );
+  const [video, setVideo] = React.useState<ImagePicker.ImagePickerAsset | null>(
+    null,
+  );
 
-  const [recording, setRecording] = React.useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = React.useState<Audio.Recording | null>(
+    null,
+  );
   const [isRecording, setIsRecording] = React.useState(false);
   const [voiceUri, setVoiceUri] = React.useState<string | null>(null);
 
   const [submitting, setSubmitting] = React.useState(false);
 
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = React.useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
+
   const pickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("error") || "Error",
-        i18n.t("media_permission_required") || "Media library permission is required.",
+        i18n.t("media_permission_required") ||
+          "Media library permission is required.",
       );
       return;
     }
@@ -71,9 +104,11 @@ export default function ComplaintScreen() {
   const pickVideo = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("error") || "Error",
-        i18n.t("media_permission_required") || "Media library permission is required.",
+        i18n.t("media_permission_required") ||
+          "Media library permission is required.",
       );
       return;
     }
@@ -88,7 +123,8 @@ export default function ComplaintScreen() {
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
+        showAlert(
+          "warning",
           i18n.t("error") || "Error",
           i18n.t("mic_permission_required") ||
             "Microphone permission is required to record a voice note.",
@@ -106,7 +142,7 @@ export default function ComplaintScreen() {
       setIsRecording(true);
     } catch (error) {
       console.error("❌ [ComplaintScreen] startRecording error:", error);
-      Alert.alert(i18n.t("error") || "Error");
+      showAlert("error", i18n.t("error") || "Error");
     }
   };
 
@@ -134,16 +170,19 @@ export default function ComplaintScreen() {
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("error") || "Error",
         i18n.t("complaint_missing_title") || "Please enter a title.",
       );
       return;
     }
     if (!description.trim()) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("error") || "Error",
-        i18n.t("complaint_missing_description") || "Please enter a description.",
+        i18n.t("complaint_missing_description") ||
+          "Please enter a description.",
       );
       return;
     }
@@ -153,7 +192,7 @@ export default function ComplaintScreen() {
       const token = await handleGetToken();
       if (!token) {
         console.log("⚠️ [ComplaintScreen] no auth token, aborting submit");
-        Alert.alert(i18n.t("error") || "Error");
+        showAlert("error", i18n.t("error") || "Error");
         return;
       }
 
@@ -198,16 +237,19 @@ export default function ComplaintScreen() {
         throw new Error(`Request failed with status ${response.status}`);
       }
 
-      Alert.alert(
+      showAlert(
+        "success",
         i18n.t("complaint_title") || "Submit a Complaint",
         i18n.t("complaint_success") || "Your complaint has been submitted.",
       );
       resetForm();
     } catch (error) {
       console.error("❌ [ComplaintScreen] handleSubmit error:", error);
-      Alert.alert(
+      showAlert(
+        "error",
         i18n.t("error") || "Error",
-        i18n.t("complaint_generic_error") || "Something went wrong. Please try again.",
+        i18n.t("complaint_generic_error") ||
+          "Something went wrong. Please try again.",
       );
     } finally {
       setSubmitting(false);
@@ -215,155 +257,180 @@ export default function ComplaintScreen() {
   };
 
   return (
-    <ScrollView
-      style={s.container}
-      contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-    >
-      <Text style={[s.label, { textAlign: isRTL ? "right" : "left" }]}>
-        {i18n.t("complaint_title_label") || "Title"}
-      </Text>
-      <TextInput
-        style={[s.input, { textAlign: isRTL ? "right" : "left" }]}
-        value={title}
-        onChangeText={setTitle}
-        placeholder={i18n.t("complaint_title_placeholder") || "Brief summary of your complaint"}
-        placeholderTextColor={theme.muted}
-      />
-
-      <Text style={[s.label, { textAlign: isRTL ? "right" : "left" }]}>
-        {i18n.t("complaint_description_label") || "Description"}
-      </Text>
-      <TextInput
-        style={[s.input, s.textArea, { textAlign: isRTL ? "right" : "left" }]}
-        value={description}
-        onChangeText={setDescription}
-        placeholder={i18n.t("complaint_description_placeholder") || "Describe the issue in detail"}
-        placeholderTextColor={theme.muted}
-        multiline
-        numberOfLines={5}
-      />
-
-      <View
-        style={[
-          s.attachRow,
-          { flexDirection: isRTL ? "row-reverse" : "row" },
-        ]}
+    <>
+      <ScrollView
+        style={s.container}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
       >
-        <TouchableOpacity style={s.attachButton} onPress={pickImage}>
-          <View style={s.iconWrap}>
-            <Ionicons name="image-outline" size={18} color={theme.accent} />
-          </View>
-          <Text style={s.attachButtonText}>
-            {i18n.t("complaint_add_image") || "Add Photo"}
-          </Text>
-        </TouchableOpacity>
+        <Text style={[s.label, { textAlign: isRTL ? "right" : "left" }]}>
+          {i18n.t("complaint_title_label") || "Title"}
+        </Text>
+        <TextInput
+          style={[s.input, { textAlign: isRTL ? "right" : "left" }]}
+          value={title}
+          onChangeText={setTitle}
+          placeholder={
+            i18n.t("complaint_title_placeholder") ||
+            "Brief summary of your complaint"
+          }
+          placeholderTextColor={theme.muted}
+        />
 
-        <TouchableOpacity style={s.attachButton} onPress={pickVideo}>
-          <View style={s.iconWrap}>
-            <Ionicons name="videocam-outline" size={18} color={theme.accent} />
+        <Text style={[s.label, { textAlign: isRTL ? "right" : "left" }]}>
+          {i18n.t("complaint_description_label") || "Description"}
+        </Text>
+        <TextInput
+          style={[s.input, s.textArea, { textAlign: isRTL ? "right" : "left" }]}
+          value={description}
+          onChangeText={setDescription}
+          placeholder={
+            i18n.t("complaint_description_placeholder") ||
+            "Describe the issue in detail"
+          }
+          placeholderTextColor={theme.muted}
+          multiline
+          numberOfLines={5}
+        />
+
+        <View
+          style={[
+            s.attachRow,
+            { flexDirection: isRTL ? "row-reverse" : "row" },
+          ]}
+        >
+          <TouchableOpacity style={s.attachButton} onPress={pickImage}>
+            <View style={s.iconWrap}>
+              <Ionicons name="image-outline" size={18} color={theme.accent} />
+            </View>
+            <Text style={s.attachButtonText}>
+              {i18n.t("complaint_add_image") || "Add Photo"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={s.attachButton} onPress={pickVideo}>
+            <View style={s.iconWrap}>
+              <Ionicons
+                name="videocam-outline"
+                size={18}
+                color={theme.accent}
+              />
+            </View>
+            <Text style={s.attachButtonText}>
+              {i18n.t("complaint_add_video") || "Add Video"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.attachButton}
+            onPress={isRecording ? stopRecording : startRecording}
+          >
+            <View style={s.iconWrap}>
+              <Ionicons
+                name={isRecording ? "stop-circle-outline" : "mic-outline"}
+                size={18}
+                color={isRecording ? "#E24C4C" : theme.accent}
+              />
+            </View>
+            <Text style={s.attachButtonText}>
+              {isRecording
+                ? i18n.t("complaint_stop_recording") || "Stop Recording"
+                : i18n.t("complaint_record_voice") || "Record Voice Note"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {image && (
+          <View
+            style={[s.row, { flexDirection: isRTL ? "row-reverse" : "row" }]}
+          >
+            <Image source={{ uri: image.uri }} style={s.imagePreview} />
+            <Text style={s.previewFileName} numberOfLines={1}>
+              {getFileName(image.uri, "image")}
+            </Text>
+            <TouchableOpacity onPress={() => setImage(null)}>
+              <Text style={s.removeText}>{i18n.t("remove") || "Remove"}</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={s.attachButtonText}>
-            {i18n.t("complaint_add_video") || "Add Video"}
+        )}
+
+        {video && (
+          <View
+            style={[s.row, { flexDirection: isRTL ? "row-reverse" : "row" }]}
+          >
+            <View style={s.iconWrap}>
+              <Ionicons name="film-outline" size={18} color={theme.accent} />
+            </View>
+            <Text style={s.previewFileName} numberOfLines={1}>
+              {getFileName(video.uri, "video")}
+            </Text>
+            <TouchableOpacity onPress={() => setVideo(null)}>
+              <Text style={s.removeText}>{i18n.t("remove") || "Remove"}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {voiceUri && (
+          <View
+            style={[s.row, { flexDirection: isRTL ? "row-reverse" : "row" }]}
+          >
+            <View style={s.iconWrap}>
+              <Ionicons name="mic" size={18} color={theme.accent} />
+            </View>
+            <Text style={s.previewFileName}>
+              {i18n.t("complaint_voice_attached") || "Voice note attached"}
+            </Text>
+            <TouchableOpacity onPress={() => setVoiceUri(null)}>
+              <Text style={s.removeText}>{i18n.t("remove") || "Remove"}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View
+          style={[
+            s.row,
+            s.switchRow,
+            { flexDirection: isRTL ? "row-reverse" : "row" },
+          ]}
+        >
+          <Text
+            style={[s.switchLabel, { textAlign: isRTL ? "right" : "left" }]}
+          >
+            {i18n.t("complaint_show_name") || "Show my name to gym staff"}
           </Text>
-        </TouchableOpacity>
+          <Switch
+            value={isVisibleName}
+            onValueChange={setIsVisibleName}
+            trackColor={{ false: theme.border, true: theme.accent }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
 
         <TouchableOpacity
-          style={s.attachButton}
-          onPress={isRecording ? stopRecording : startRecording}
+          style={[s.submitButton, submitting && s.submitButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={submitting}
         >
-          <View style={s.iconWrap}>
-            <Ionicons
-              name={isRecording ? "stop-circle-outline" : "mic-outline"}
-              size={18}
-              color={isRecording ? "#E24C4C" : theme.accent}
-            />
-          </View>
-          <Text style={s.attachButtonText}>
-            {isRecording
-              ? i18n.t("complaint_stop_recording") || "Stop Recording"
-              : i18n.t("complaint_record_voice") || "Record Voice Note"}
-          </Text>
+          {submitting ? (
+            <ActivityIndicator color={theme.bg} />
+          ) : (
+            <Text style={s.submitButtonText}>
+              {i18n.t("complaint_submit") || "Submit Complaint"}
+            </Text>
+          )}
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
-      {image && (
-        <View
-          style={[s.row, { flexDirection: isRTL ? "row-reverse" : "row" }]}
-        >
-          <Image source={{ uri: image.uri }} style={s.imagePreview} />
-          <Text style={s.previewFileName} numberOfLines={1}>
-            {getFileName(image.uri, "image")}
-          </Text>
-          <TouchableOpacity onPress={() => setImage(null)}>
-            <Text style={s.removeText}>{i18n.t("remove") || "Remove"}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {video && (
-        <View
-          style={[s.row, { flexDirection: isRTL ? "row-reverse" : "row" }]}
-        >
-          <View style={s.iconWrap}>
-            <Ionicons name="film-outline" size={18} color={theme.accent} />
-          </View>
-          <Text style={s.previewFileName} numberOfLines={1}>
-            {getFileName(video.uri, "video")}
-          </Text>
-          <TouchableOpacity onPress={() => setVideo(null)}>
-            <Text style={s.removeText}>{i18n.t("remove") || "Remove"}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {voiceUri && (
-        <View
-          style={[s.row, { flexDirection: isRTL ? "row-reverse" : "row" }]}
-        >
-          <View style={s.iconWrap}>
-            <Ionicons name="mic" size={18} color={theme.accent} />
-          </View>
-          <Text style={s.previewFileName}>
-            {i18n.t("complaint_voice_attached") || "Voice note attached"}
-          </Text>
-          <TouchableOpacity onPress={() => setVoiceUri(null)}>
-            <Text style={s.removeText}>{i18n.t("remove") || "Remove"}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <View
-        style={[
-          s.row,
-          s.switchRow,
-          { flexDirection: isRTL ? "row-reverse" : "row" },
-        ]}
-      >
-        <Text style={[s.switchLabel, { textAlign: isRTL ? "right" : "left" }]}>
-          {i18n.t("complaint_show_name") || "Show my name to gym staff"}
-        </Text>
-        <Switch
-          value={isVisibleName}
-          onValueChange={setIsVisibleName}
-          trackColor={{ false: theme.border, true: theme.accent }}
-          thumbColor="#FFFFFF"
-        />
-      </View>
-
-      <TouchableOpacity
-        style={[s.submitButton, submitting && s.submitButtonDisabled]}
-        onPress={handleSubmit}
-        disabled={submitting}
-      >
-        {submitting ? (
-          <ActivityIndicator color={theme.bg} />
-        ) : (
-          <Text style={s.submitButtonText}>
-            {i18n.t("complaint_submit") || "Submit Complaint"}
-          </Text>
-        )}
-      </TouchableOpacity>
-    </ScrollView>
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={!!isDarkMode}
+        isRTL={isRTL}
+        onRequestClose={hideAlert}
+      />
+    </>
   );
 }
 

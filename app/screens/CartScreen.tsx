@@ -15,7 +15,6 @@ import {
   View as RNView,
   Modal,
   TextInput,
-  Alert,
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
@@ -23,6 +22,11 @@ import {
 } from "react-native";
 import { ListEmptyComponent } from "../components/ListEmptyComponent";
 import { Text, TouchableOpacity } from "../components/overridedComponents";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, {
+  SweetAlertButton,
+  SweetAlertType,
+} from "../components/SweetAlert";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -62,6 +66,27 @@ const CartScreen: React.FC = () => {
   // Profile defaults, fetched once so checkout can prefill from them
   const [profileDefaults, setProfileDefaults] =
     React.useState<IProfileDefaults | null>(null);
+
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = React.useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
 
   const fetchCartItems = async (isRefresh: boolean = false) => {
     try {
@@ -106,8 +131,6 @@ const CartScreen: React.FC = () => {
     }
   };
 
-  // Same membership endpoint MyProfileScreen uses — just pulled for
-  // name/email/phone so the checkout form doesn't start blank.
   const fetchProfileDefaults = async () => {
     try {
       const MemberId = await AsyncStorage.getItem("MemberId");
@@ -127,7 +150,6 @@ const CartScreen: React.FC = () => {
         phoneNumber: data.phoneNumber || "",
       });
     } catch (err) {
-      // Silent — checkout form just falls back to empty fields
       console.log("Failed to fetch profile defaults for checkout:", err);
     }
   };
@@ -147,7 +169,6 @@ const CartScreen: React.FC = () => {
   const handleCheckout = () => {
     if (cartItems.length === 0) return;
 
-    // Prefill from profile, but only fields the user hasn't already typed into
     if (profileDefaults) {
       setFullName((prev) =>
         prev.trim()
@@ -162,21 +183,19 @@ const CartScreen: React.FC = () => {
   };
 
   const handleSubmitOrder = async () => {
-    // Validate form
     if (
       !fullName.trim() ||
       !email.trim() ||
       !phone.trim() ||
       !location.trim()
     ) {
-      Alert.alert(i18n.t("error"), i18n.t("please_fill_all_fields"));
+      showAlert("warning", i18n.t("error"), i18n.t("please_fill_all_fields"));
       return;
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      Alert.alert(i18n.t("error"), i18n.t("invalid_email_format"));
+      showAlert("warning", i18n.t("error"), i18n.t("invalid_email_format"));
       return;
     }
 
@@ -216,34 +235,35 @@ const CartScreen: React.FC = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Check if response has content
       const responseText = await response.text();
       let result;
       try {
         result = responseText ? JSON.parse(responseText) : null;
       } catch (e) {
-        // If response is empty or not JSON, treat as success
         result = { message: "Order placed successfully" };
       }
 
       console.log("Order submitted successfully:", result);
 
-      // Close modal and show success message
       setIsModalVisible(false);
-      Alert.alert(i18n.t("success"), i18n.t("order_placed_successfully"), [
-        {
-          text: i18n.t("ok"),
-          onPress: () => {
-            // Clear locally — do NOT refetch here, the backend
-            // still returns the old items under the same cartId
-            setCartItems([]);
-            setTotalCartItems(0);
-            if (result?.cartId) {
-              setCartId(result.cartId);
-            }
+      showAlert(
+        "success",
+        i18n.t("success"),
+        i18n.t("order_placed_successfully"),
+        [
+          {
+            text: i18n.t("ok"),
+            style: "primary",
+            onPress: () => {
+              setCartItems([]);
+              setTotalCartItems(0);
+              if (result?.cartId) {
+                setCartId(result.cartId);
+              }
+            },
           },
-        },
-      ]);
+        ],
+      );
     } catch (err) {
       console.error("Error submitting order:", err);
       defaultErrorToast();
@@ -255,8 +275,6 @@ const CartScreen: React.FC = () => {
   const handleCloseModal = () => {
     if (!isSubmitting) {
       setIsModalVisible(false);
-      // Reset form back to profile defaults (not blank) so reopening
-      // the modal still shows the prefilled values
       setFullName(profileDefaults?.nameEn || profileDefaults?.nameAr || "");
       setEmail(profileDefaults?.email || "");
       setPhone(profileDefaults?.phoneNumber || "");
@@ -431,6 +449,17 @@ const CartScreen: React.FC = () => {
       </Modal>
 
       <StatusBar style={isDarkMode ? "light" : "dark"} />
+
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={!!isDarkMode}
+        isRTL={i18n.locale === "ar"}
+        onRequestClose={hideAlert}
+      />
     </RNView>
   );
 };

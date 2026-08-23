@@ -66,7 +66,10 @@ const OrdersScreen = () => {
       <Text style={styles.orderTitle}>
         Order #{item.id} - {item.totalAmount} JOD
       </Text>
-      <Image source={{ uri: `https://gawifit.com/${item.photoUrl}` }} />
+      <Image
+        source={{ uri: `https://gawifit.com/${item.photoUrl}` }}
+        style={{ width: 100, height: 100, resizeMode: "cover" }}
+      />
       <Text style={styles.itemName}>Status: {item.Status}</Text>
       <Text style={styles.itemName}>Name: {item.fullName}</Text>
       <Text style={styles.itemName}>Phone: {item.phone}</Text>

@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  Alert,
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
@@ -20,6 +19,11 @@ import { Ionicons } from "@expo/vector-icons";
 import i18n from "../localization";
 import { useAppContext } from "../context";
 import { handleGetToken } from "../helpers";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, {
+  SweetAlertButton,
+  SweetAlertType,
+} from "../components/SweetAlert";
 
 const API_URL = "https://gawifit.com/api/Complaints";
 
@@ -70,10 +74,32 @@ export default function AddComplaintModal({
 
   const [submitting, setSubmitting] = React.useState(false);
 
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = React.useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
+
   const pickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("error") || "Error",
         i18n.t("media_permission_required") ||
           "Media library permission is required.",
@@ -90,7 +116,8 @@ export default function AddComplaintModal({
   const pickVideo = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("error") || "Error",
         i18n.t("media_permission_required") ||
           "Media library permission is required.",
@@ -108,7 +135,8 @@ export default function AddComplaintModal({
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
+        showAlert(
+          "warning",
           i18n.t("error") || "Error",
           i18n.t("mic_permission_required") ||
             "Microphone permission is required to record a voice note.",
@@ -126,7 +154,7 @@ export default function AddComplaintModal({
       setIsRecording(true);
     } catch (error) {
       console.error("❌ [AddComplaintModal] startRecording error:", error);
-      Alert.alert(i18n.t("error") || "Error");
+      showAlert("error", i18n.t("error") || "Error");
     }
   };
 
@@ -163,14 +191,16 @@ export default function AddComplaintModal({
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("error") || "Error",
         i18n.t("complaint_missing_title") || "Please enter a title.",
       );
       return;
     }
     if (!description.trim()) {
-      Alert.alert(
+      showAlert(
+        "warning",
         i18n.t("error") || "Error",
         i18n.t("complaint_missing_description") ||
           "Please enter a description.",
@@ -183,7 +213,7 @@ export default function AddComplaintModal({
       const token = await handleGetToken();
       if (!token) {
         console.log("⚠️ [AddComplaintModal] no auth token, aborting submit");
-        Alert.alert(i18n.t("error") || "Error");
+        showAlert("error", i18n.t("error") || "Error");
         return;
       }
 
@@ -231,13 +261,15 @@ export default function AddComplaintModal({
       resetForm();
       onSuccess?.();
       onClose();
-      Alert.alert(
+      showAlert(
+        "success",
         i18n.t("complaint_title") || "Submit a Complaint",
         i18n.t("complaint_success") || "Your complaint has been submitted.",
       );
     } catch (error) {
       console.error("❌ [AddComplaintModal] handleSubmit error:", error);
-      Alert.alert(
+      showAlert(
+        "error",
         i18n.t("error") || "Error",
         i18n.t("complaint_generic_error") ||
           "Something went wrong. Please try again.",
@@ -435,6 +467,17 @@ export default function AddComplaintModal({
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={!!isDarkMode}
+        isRTL={isRTL}
+        onRequestClose={hideAlert}
+      />
     </Modal>
   );
 }

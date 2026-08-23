@@ -6,10 +6,13 @@ import {
   View as RNView,
   TouchableOpacity,
   Text,
-  Alert,
   Modal,
   View,
   TextInput,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Platform,
+  Keyboard,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -29,6 +32,11 @@ import {
   handleGetLocalizedField,
   handleGetToken,
 } from "../helpers";
+// 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
+import SweetAlert, {
+  SweetAlertButton,
+  SweetAlertType,
+} from "../components/SweetAlert";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -59,11 +67,12 @@ const ProductDetailsScreen: React.FC<
     setGuestMode,
     setIsAuthenticated,
     setShouldShowSignUp,
-    isDarkMode, // 👈 pull isDarkMode
+    isDarkMode,
   } = useAppContext();
 
-  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]); // 👈 reactive theme
-  const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
+  const theme = React.useMemo(() => getTheme(!!isDarkMode), [isDarkMode]);
+  const s = React.useMemo(() => createStyles(theme), [theme]);
+  const isRTL = i18n.locale === "ar";
 
   const [quantity, setQuantity] = React.useState(1);
   const [productDetails, setProductDetails] = React.useState<IshopItem>();
@@ -71,6 +80,28 @@ const ProductDetailsScreen: React.FC<
   const [isAddToCartLoading, setIsAddToCartLoading] = React.useState(false);
   const [showCartModal, setShowCartModal] = React.useState(false);
   const [cartNote, setCartNote] = React.useState("");
+
+  // 👇 SweetAlert state — replaces Alert.alert entirely
+  const [alertConfig, setAlertConfig] = React.useState<{
+    visible: boolean;
+    type: SweetAlertType;
+    title: string;
+    message?: string;
+    buttons?: SweetAlertButton[];
+  }>({ visible: false, type: "info", title: "" });
+
+  const showAlert = (
+    type: SweetAlertType,
+    title: string,
+    message?: string,
+    buttons?: SweetAlertButton[],
+  ) => {
+    setAlertConfig({ visible: true, type, title, message, buttons });
+  };
+
+  const hideAlert = () =>
+    setAlertConfig((prev) => ({ ...prev, visible: false }));
+
   React.useEffect(() => {
     if (!productId) return;
     (async () => {
@@ -122,7 +153,6 @@ const ProductDetailsScreen: React.FC<
 
       const qty = quantity || 1;
 
-      // Get note from your state or TextInput
       const note = cartNote?.trim() ?? "";
 
       const url =
@@ -147,9 +177,13 @@ const ProductDetailsScreen: React.FC<
       setCartNote("");
 
       fetchCartItems(userProfile.id);
-      Alert.alert(i18n.t("success"), i18n.t("added_to_cart"));
+      showAlert("success", i18n.t("success"), i18n.t("added_to_cart"));
     } catch (err: any) {
-      Alert.alert(i18n.t("error"), err.message || "An unknown error occurred");
+      showAlert(
+        "error",
+        i18n.t("error"),
+        err.message || "An unknown error occurred",
+      );
     } finally {
       setIsAddToCartLoading(false);
     }
@@ -229,7 +263,7 @@ const ProductDetailsScreen: React.FC<
                   <MaterialCommunityIcons
                     size={15}
                     name="minus"
-                    color={theme.iconColor} // 👈
+                    color={theme.iconColor}
                   />
                 </TouchableOpacity>
                 <Text style={s.quantityText}>{quantity}</Text>
@@ -240,7 +274,7 @@ const ProductDetailsScreen: React.FC<
                   <MaterialCommunityIcons
                     size={15}
                     name="plus"
-                    color={theme.iconColor} // 👈
+                    color={theme.iconColor}
                   />
                 </TouchableOpacity>
               </RNView>
@@ -274,67 +308,91 @@ const ProductDetailsScreen: React.FC<
           </RNView>
         </RNView>
       </ScrollView>
-      <StatusBar style={isDarkMode ? "light" : "dark"} /> {/* 👈 */}
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
       <Modal
         visible={showCartModal}
         transparent
         animationType="slide"
         onRequestClose={() => setShowCartModal(false)}
       >
-        <View style={s.overlay}>
-          <View style={s.modalContainer}>
-            <Text style={s.title}>Add to Cart</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={s.overlay}>
+              <View style={s.modalContainer}>
+                <Text style={s.title}>{i18n.t("add_to_cart")}</Text>
 
-            <Image
-              source={{ uri: `https://gawifit.com/${imageUrl}` }}
-              style={s.productImage}
-            />
+                <Image
+                  source={{ uri: `https://gawifit.com/${imageUrl}` }}
+                  style={s.productImage}
+                />
 
-            <Text style={s.productName}>
-              {handleGetLocalizedField("nameEn", "nameAr", productDetails)}
-            </Text>
+                <Text style={s.productName}>
+                  {handleGetLocalizedField("nameEn", "nameAr", productDetails)}
+                </Text>
 
-            <Text style={s.price}>{productDetails.price} JOD</Text>
+                <Text style={s.price}>{productDetails.price} JOD</Text>
 
-            <View style={s.quantityRow}>
-              <TouchableOpacity onPress={handleDecreaseQuantity}>
-                <MaterialCommunityIcons name="minus" size={22} />
-              </TouchableOpacity>
+                <View style={s.quantityRow}>
+                  <TouchableOpacity onPress={handleDecreaseQuantity}>
+                    <MaterialCommunityIcons name="minus" size={22} />
+                  </TouchableOpacity>
 
-              <Text>{quantity}</Text>
+                  <Text>{quantity}</Text>
 
-              <TouchableOpacity onPress={handleIncreaseQuantity}>
-                <MaterialCommunityIcons name="plus" size={22} />
-              </TouchableOpacity>
+                  <TouchableOpacity onPress={handleIncreaseQuantity}>
+                    <MaterialCommunityIcons name="plus" size={22} />
+                  </TouchableOpacity>
+                </View>
+
+                <TextInput
+                  placeholder="Add a note..."
+                  value={cartNote}
+                  onChangeText={setCartNote}
+                  multiline
+                  returnKeyType="done"
+                  blurOnSubmit
+                  onSubmitEditing={Keyboard.dismiss}
+                  style={s.noteInput}
+                />
+
+                <Text style={s.total}>
+                  {i18n.t("total")}{" "}
+                  {(productDetails.price * quantity).toFixed(2)} JOD
+                </Text>
+
+                <View style={s.buttons}>
+                  <TouchableOpacity
+                    onPress={() => setShowCartModal(false)}
+                    style={s.cancelBtn}
+                  >
+                    <Text>{i18n.t("cancel")}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={s.addBtn} onPress={handleAddToCart}>
+                    <Text style={{ color: "#fff" }}>
+                      {i18n.t("add_to_cart")}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-
-            <TextInput
-              placeholder="Add a note..."
-              value={cartNote}
-              onChangeText={setCartNote}
-              multiline
-              style={s.noteInput}
-            />
-
-            <Text style={s.total}>
-              Total: {(productDetails.price * quantity).toFixed(2)} JOD
-            </Text>
-
-            <View style={s.buttons}>
-              <TouchableOpacity
-                onPress={() => setShowCartModal(false)}
-                style={s.cancelBtn}
-              >
-                <Text>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={s.addBtn} onPress={handleAddToCart}>
-                <Text style={{ color: "#fff" }}>Add to Cart</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
+
+      <SweetAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        isDarkMode={!!isDarkMode}
+        isRTL={isRTL}
+        onRequestClose={hideAlert}
+      />
     </RNView>
   );
 };
@@ -480,7 +538,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       margin: 16,
       marginBottom: 32,
       borderRadius: 10,
-      backgroundColor: theme.bg, // 👈
+      backgroundColor: theme.bg,
       justifyContent: "space-between",
       ...shadowStyle,
     },
@@ -492,7 +550,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     title: {
       fontSize: 16,
       fontFamily: "SF-Semibold",
-      color: theme.ink, // 👈
+      color: theme.ink,
     },
     priceText: {
       color: Colors.primary,
@@ -500,7 +558,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     },
     description: {
       fontSize: 12,
-      color: theme.muted, // 👈
+      color: theme.muted,
       textAlign: "justify",
       fontFamily: "SF-Medium",
     },
@@ -512,7 +570,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     quantityText: {
       fontSize: 14,
       fontFamily: "SF-Medium",
-      color: theme.ink, // 👈
+      color: theme.ink,
     },
     iconWrapper: {
       width: 30,
@@ -520,7 +578,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       borderRadius: 15,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: theme.iconBg, // 👈
+      backgroundColor: theme.iconBg,
     },
     infoWrapper: {
       gap: 10,
@@ -533,13 +591,13 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       borderRadius: 10,
       color: Colors.white,
       textAlign: "center",
-      backgroundColor: Colors.primary, // stays same
+      backgroundColor: Colors.primary,
     },
     cartButtonText: {
       padding: 16,
       borderRadius: 10,
       textAlign: "center",
-      color: theme.cartBtnText, // 👈
-      backgroundColor: theme.cartBtnBg, // 👈
+      color: theme.cartBtnText,
+      backgroundColor: theme.cartBtnBg,
     },
   });
