@@ -516,7 +516,7 @@ function PTDashboardNavigator() {
 const Tab = createBottomTabNavigator();
 
 function PTDashboardTabs() {
-  const { isArabic, getDirection } = useI18n();
+  const { isArabic } = useI18n();
   const isAr = isArabic();
 
   const labels = isAr
@@ -535,38 +535,45 @@ function PTDashboardTabs() {
         Menu: "Menu",
       };
 
+  const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
+    PTDashboard: "people",
+    AddPlan: "nutrition",
+    PlanPtList: "list",
+    MuselsePlan: "barbell",
+    Menu: "menu",
+  };
+
+  const tabs = [
+    { name: "PTDashboard", component: PTDashboardScreen },
+    { name: "AddPlan", component: NutritionPlanScreenAdmin },
+    { name: "PlanPtList", component: NutritionPlanScreenPt },
+    { name: "MuselsePlan", component: MuselsePlanPtList },
+    { name: "Menu", component: MenuPtScreen },
+  ];
+
+  // Physically reverse tab order for Arabic instead of relying on flexDirection,
+  // since the tab bar's internal layout can override CSS-level direction.
+  const orderedTabs = isAr ? [...tabs].reverse() : tabs;
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap = "home";
-
-          if (route.name === "PTDashboard") {
-            iconName = focused ? "people" : "people-outline";
-          } else if (route.name === "AddPlan") {
-            iconName = focused ? "nutrition" : "nutrition-outline";
-          } else if (route.name === "PlanPtList") {
-            iconName = focused ? "list" : "list-outline";
-          } else if (route.name === "MuselsePlan") {
-            iconName = focused ? "barbell" : "barbell-outline";
-          } else if (route.name === "Menu") {
-            iconName = focused ? "menu" : "menu-outline";
-          }
-
+          const base = icons[route.name] ?? "home";
+          const iconName = (
+            focused ? base : `${base}-outline`
+          ) as keyof typeof Ionicons.glyphMap;
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-
         tabBarLabel: labels[route.name as keyof typeof labels] ?? route.name,
         tabBarActiveTintColor: "#3B82F6",
         tabBarInactiveTintColor: "gray",
         headerShown: false,
       })}
     >
-      <Tab.Screen name="PTDashboard" component={PTDashboardScreen} />
-      <Tab.Screen name="AddPlan" component={NutritionPlanScreenAdmin} />
-      <Tab.Screen name="PlanPtList" component={NutritionPlanScreenPt} />
-      <Tab.Screen name="MuselsePlan" component={MuselsePlanPtList} />
-      <Tab.Screen name="Menu" component={MenuPtScreen} />
+      {orderedTabs.map((tab) => (
+        <Tab.Screen key={tab.name} name={tab.name} component={tab.component} />
+      ))}
     </Tab.Navigator>
   );
 }
@@ -905,7 +912,7 @@ function RootNavigator({ isFirstTime }: { isFirstTime: boolean }) {
       return "Login";
     }
 
-    return userType === "PT" ? "PTRoot" : "Root";
+    return userType === "pt" ? "PTRoot" : "Root";
   };
 
   return (

@@ -72,14 +72,27 @@ const SettingsSection = () => {
     { key: "ar", label: "العربية", flag: "🇸🇦" },
   ];
 
-  const handleLogoutOrLogin = async () => {
-    const rootNavigation = navigation.getParent();
-
-    if (guestMode) {
-      setGuestMode(false);
+  // 👇 Navigates to the Login screen. RootNavigator (Navigation.tsx) only
+  // registers a "Login" route when !isAuthenticated && !guestMode — so
+  // guestMode must already be false by the time this runs, or the reset
+  // silently does nothing and you stay on whatever screen is active.
+  // Two levels of getParent() because this screen sits inside
+  // Tab -> Drawer -> root Stack (same depth Header.tsx uses for its own
+  // SignUp redirect). The setTimeout gives the Stack.Navigator one render
+  // cycle to pick up "Login" in its screen list before we navigate to it.
+  const goToLoginScreen = () => {
+    setTimeout(() => {
+      const rootNavigation = navigation.getParent();
       rootNavigation?.dispatch(
         CommonActions.reset({ index: 0, routes: [{ name: "Login" }] }),
       );
+    }, 200);
+  };
+
+  const handleLogoutOrLogin = async () => {
+    if (guestMode) {
+      setGuestMode(false);
+      goToLoginScreen();
     } else {
       showAlert(
         "warning",
@@ -94,13 +107,12 @@ const SettingsSection = () => {
               try {
                 await handleLogout();
                 await AsyncStorage.clear();
-                setGuestMode(true);
-                rootNavigation?.dispatch(
-                  CommonActions.reset({
-                    index: 0,
-                    routes: [{ name: "Login" }],
-                  }),
-                );
+                // 👇 FIX: was setGuestMode(true) — that keeps the
+                // guest-enabled branch active in RootNavigator, where
+                // "Login" isn't registered at all, which is why logout
+                // was landing on the guest homepage instead of Login.
+                setGuestMode(false);
+                goToLoginScreen();
               } catch (error) {
                 console.error("❌ Error clearing cache on logout:", error);
               }

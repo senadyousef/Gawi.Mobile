@@ -421,7 +421,7 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
               {estimateLoading ? "..." : i18n.t("hourly_estimate_title")}
             </Text>
             <Text style={s.cardTitle}>
-              {estimate?.estimatedTotalVisits ?? 0} {i18n.t("visits")}
+              {estimate?.estimatedTotalVisits.toFixed() ?? 0} {i18n.t("visits")}
             </Text>
             {estimate?.date && (
               <Text style={s.dateText}>{formatDate(estimate.date)}</Text>

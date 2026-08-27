@@ -601,7 +601,7 @@ export default {
   invalid_time_message: "'To' time must be after 'From' time.",
   unavailable: "Unavailable",
   trainer_not_working: "Trainer does not work on this day.",
-  outside_working_hours: "Trainer works only from {from} to {to}",
+  outside_working_hours: "The trainer is not available during this time.",
   time_conflict: "Time Conflict",
   time_conflict_message:
     "You cannot book at this time. There is already a class scheduled.",
@@ -1125,4 +1125,26 @@ export default {
   select_days_title: "Select Days",
   select_days_message:
     "Please select at least one day for the recurring booking.",
+
+  cancellation_reason_required_title: "Reason Required",
+  cancellation_reason_required_message:
+    "Please enter a reason for cancelling this class.",
+  cancellation_reason_label: "Please tell us why you're cancelling",
+  cancellation_reason_placeholder: "Type your reason here...",
+  submit_cancellation: "Submit",
+  cancel_request_submitted_message:
+    "Your cancellation request has been submitted.",
+  booking_blocked_title: "Booking Blocked",
+  booking_blocked_message: "You can't book this class because you are blocked.",
+  class_blocked_short: "Blocked",
+  subscription_not_started_message: "Your subscription hasn't started yet.",
+  recurring_end_date: "Repeat until",
+  no_end_date: "No end date",
+  cancellation_pending: "Cancellation pending",
+  cancellation_approved: "Cancelled",
+  cancellation_rejected: "Cancellation rejected",
+  attended: "Attended",
+  not_attended: "Not attended",
+  no_recurring_dates_found:
+    "No dates were found for the days and end date you selected. Please choose different days or a later end date.",
 };

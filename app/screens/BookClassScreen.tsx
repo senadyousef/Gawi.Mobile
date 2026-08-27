@@ -16,6 +16,7 @@ import Colors from "../constants/Colors";
 import i18n from "../localization";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAppContext } from "../context"; // 👈
+import { handleGetToken } from "../helpers";
 
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
@@ -27,6 +28,17 @@ const getTheme = (dark: boolean) => ({
   underline: dark ? "#475569" : "#CBD5E1",
   emptyText: dark ? "#F0F0F0" : "#000000",
 });
+
+interface GymClassBooking {
+  userClassId: number;
+  classDate: string;
+  day: string;
+  isRecurringBooking: boolean;
+  paidAmount: number;
+  isAttended: boolean;
+  cancellationStatus: string;
+  requiresCancellationApproval: boolean;
+}
 
 interface GymClass {
   id: number;
@@ -42,6 +54,18 @@ interface GymClass {
   bookedCount?: number;
   isFull?: boolean;
   availableSeats?: number;
+  // 👇 new fields from /GymClass/mobile
+  canBook?: boolean;
+  isClassBookingBlocked?: boolean;
+  requiresCancellationApproval?: boolean;
+  nextOccurrenceDate?: string;
+  bookings?: GymClassBooking[];
+  gender?: string;
+  isPaid?: boolean;
+  price?: number;
+  isRecurring?: boolean;
+  recurringMode?: string;
+  repeatDays?: string[];
 }
 
 export default function BookClassScreen() {
@@ -63,11 +87,16 @@ export default function BookClassScreen() {
         setLoading(true);
       }
 
-      const MemberId = await AsyncStorage.getItem("MemberId");
+      const token = await handleGetToken(); // 👈 was MemberId — now JWT
 
       const response = await fetch(
-        `https://gawifit.com/api/GymClass/getAllGymClassByUser?userId=${MemberId}`,
-        { headers: { accept: "text/plain" } },
+        `https://gawifit.com/api/GymClass/mobile`, // 👈 new endpoint
+        {
+          headers: {
+            accept: "text/plain",
+            Authorization: `Bearer ${token}`, // 👈 auth via JWT instead of userId query param
+          },
+        },
       );
 
       if (!response.ok) {
@@ -154,6 +183,7 @@ export default function BookClassScreen() {
   }
 
   if (error) {
+    console.log("error",error);
     return (
       <View style={[s.center, { backgroundColor: theme.bg }]}>
         <Text style={{ color: "red" }}>{i18n.t("error_loading")}</Text>
@@ -162,8 +192,10 @@ export default function BookClassScreen() {
   }
   const now = new Date();
   const todayStr = now.toISOString().split("T")[0]; // 👈 today's date, YYYY-MM-DD
-
-  // 👇 Same "is full" check used on the class details screen
+  const isGymClassBlocked = (item: GymClass) =>
+    item.isClassBookingBlocked === true;
+  // 👇 Same "is full" check used on the class details screen, now also trusts
+  // the API's own canBook/isClassBookingBlocked flags when present
   const isGymClassFull = (item: GymClass) =>
     item.isFull === true ||
     item.availableSeats === 0 ||
@@ -288,28 +320,36 @@ export default function BookClassScreen() {
             />
           }
           renderItem={({ item }) => {
-            const itemDateStr = item.date.split("T")[0]; // 👈
-            const isEnded = itemDateStr < todayStr; // 👈 class date before today
-            const isFull = !isEnded && !item.isBooked && isGymClassFull(item); // 👈 full only matters if upcoming & not already booked by this user
+            const itemDateStr = item.date.split("T")[0];
+            const isEnded = itemDateStr < todayStr;
+            const isBlocked =
+              !isEnded && !item.isBooked && isGymClassBlocked(item); // 👈 new
+            const isFull =
+              !isEnded && !item.isBooked && !isBlocked && isGymClassFull(item); // 👈 blocked takes priority over full
 
-            const statusColor = isEnded // 👈
+            const statusColor = isEnded
               ? "#9CA3AF"
               : item.isBooked
                 ? "#3B82F6"
-                : isFull
-                  ? "#EF4444" // 👈 red for full/unavailable
-                  : "#FF7002";
+                : isBlocked
+                  ? "#6B7280" // 👈 gray for blocked, distinct from red "full"
+                  : isFull
+                    ? "#EF4444"
+                    : "#FF7002";
 
-            const statusLabelText = isEnded // 👈
+            const statusLabelText = isEnded
               ? isArabic
                 ? "منتهية"
                 : "Ended"
               : item.isBooked
                 ? i18n.t("already_booked")
-                : isFull
-                  ? i18n.t("class_full_short") ||
-                    (isArabic ? "ممتلئ - غير متاح" : "Full - Not Available") // 👈
-                  : i18n.t("available");
+                : isBlocked
+                  ? i18n.t("class_blocked_short") ||
+                    (isArabic ? "محظور" : "Blocked") // 👈 new
+                  : isFull
+                    ? i18n.t("class_full_short") ||
+                      (isArabic ? "ممتلئ - غير متاح" : "Full - Not Available")
+                    : i18n.t("available");
 
             return (
               <TouchableOpacity

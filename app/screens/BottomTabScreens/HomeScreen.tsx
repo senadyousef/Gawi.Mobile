@@ -531,7 +531,81 @@ const NotesSection = ({
     </View>
   );
 };
-
+// ─── Decorative background circles (light mode only) ──────────────────────────
+const BackgroundCircles = ({
+  theme,
+}: {
+  theme: ReturnType<typeof getTheme>;
+}) => (
+  <View
+    pointerEvents="none"
+    style={{
+      ...StyleSheet.absoluteFillObject,
+      overflow: "hidden",
+    }}
+  >
+    <View
+      style={{
+        position: "absolute",
+        top: -80,
+        right: -60,
+        width: 260,
+        height: 260,
+        borderRadius: 130,
+        backgroundColor: theme.accent,
+        opacity: 0.18,
+      }}
+    />
+    <View
+      style={{
+        position: "absolute",
+        top: 180,
+        left: -100,
+        width: 220,
+        height: 220,
+        borderRadius: 110,
+        backgroundColor: theme.blue,
+        opacity: 0.12,
+      }}
+    />
+    <View
+      style={{
+        position: "absolute",
+        top: 520,
+        right: -70,
+        width: 180,
+        height: 180,
+        borderRadius: 90,
+        backgroundColor: theme.orange,
+        opacity: 0.14,
+      }}
+    />
+    <View
+      style={{
+        position: "absolute",
+        top: 900,
+        left: -60,
+        width: 200,
+        height: 200,
+        borderRadius: 100,
+        backgroundColor: theme.orange,
+        opacity: 0.1,
+      }}
+    />
+    <View
+      style={{
+        position: "absolute",
+        top: 1300,
+        right: -50,
+        width: 160,
+        height: 160,
+        borderRadius: 80,
+        backgroundColor: theme.accent,
+        opacity: 0.12,
+      }}
+    />
+  </View>
+);
 // ─── HomeScreen ───────────────────────────────────────────────────────────────
 const HomeScreen = () => {
   const ref = React.useRef(null);
@@ -556,6 +630,13 @@ const HomeScreen = () => {
 
   const isGuestMember = !guestMode && userProfile?.role !== "Guest";
   const isRTL = i18n.locale === "ar";
+  const [currentRole, setCurrentRole] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    AsyncStorage.getItem("UserRole").then((role) => {
+      console.log("currentRole", role);
+      setCurrentRole(role);
+    });
+  }, []);
   React.useEffect(() => {
     const subscription = DeviceEventEmitter.addListener(
       "homeRefresh",
@@ -658,78 +739,84 @@ const HomeScreen = () => {
     <>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
 
-      <ScrollView
-        ref={ref}
-        showsVerticalScrollIndicator={false}
-        style={{ backgroundColor: theme.bg }}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[theme.ink]}
-            tintColor={theme.ink}
-          />
-        }
-      >
-        {(initialLoading || refreshing) && (
+      {/* 👇 wrapping View holds the page background + circles;
+          ScrollView itself becomes transparent so circles show through */}
+      <View style={{ flex: 1, backgroundColor: theme.bg }}>
+        {!isDarkMode && <BackgroundCircles theme={theme} />}
+
+        <ScrollView
+          ref={ref}
+          showsVerticalScrollIndicator={false}
+          style={{ backgroundColor: "transparent" }} // 👈 was theme.bg
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.ink]}
+              tintColor={theme.ink}
+            />
+          }
+        >
+          {(initialLoading || refreshing) && (
+            <View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                zIndex: 999,
+                paddingVertical: 6,
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "row",
+                gap: 8,
+              }}
+            >
+              <ActivityIndicator size="small" color={theme.ink} />
+            </View>
+          )}
+
+          <Header />
+
           <View
             style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              zIndex: 999,
-              paddingVertical: 6,
-              alignItems: "center",
-              justifyContent: "center",
-              flexDirection: "row",
-              gap: 8,
+              paddingHorizontal: HOMESCREEN_HEADER_paddingHorizontal,
+              transform: [{ translateY: -HOMESCREEN_HEADER_translateY }],
             }}
           >
-            <ActivityIndicator size="small" color={theme.ink} />
-          </View>
-        )}
+            <CouponsCarousel refreshTrigger={refreshTrigger} />
+            {!guestMode && isGuestMember && (
+              <WalletSection
+                refreshTrigger={refreshTrigger}
+                theme={theme}
+                isRTL={isRTL}
+              />
+            )}
+            {/* <AudienceSection /> */}
+            {!guestMode && isGuestMember && (
+              <GymTrafficVisual refreshTrigger={refreshTrigger} />
+            )}
+            <MyStatusSection refreshTrigger={refreshTrigger} />
 
-        <Header />
-
-        <View
-          style={{
-            paddingHorizontal: HOMESCREEN_HEADER_paddingHorizontal,
-            transform: [{ translateY: -HOMESCREEN_HEADER_translateY }],
-          }}
-        >
-          <CouponsCarousel refreshTrigger={refreshTrigger} />
-          {!guestMode && isGuestMember && (
-            <WalletSection
-              refreshTrigger={refreshTrigger}
-              theme={theme}
+            <NotesSection
+              notes={notes}
+              loadingNotes={loadingNotes}
               isRTL={isRTL}
+              theme={theme}
+              isDarkMode={!!isDarkMode}
+              onNoteDeleted={handleNoteDeleted}
             />
-          )}
-          {/* <AudienceSection /> */}
-          {!guestMode && isGuestMember && (
-            <GymTrafficVisual refreshTrigger={refreshTrigger} />
-          )}
-          <MyStatusSection refreshTrigger={refreshTrigger} />
-
-          <NotesSection
-            notes={notes}
-            loadingNotes={loadingNotes}
-            isRTL={isRTL}
-            theme={theme}
-            isDarkMode={!!isDarkMode}
-            onNoteDeleted={handleNoteDeleted}
-          />
-          {!guestMode && isGuestMember && (
-            <ClassesSection refreshTrigger={refreshTrigger} />
-          )}
-          <GymStoreSection refreshTrigger={refreshTrigger} />
-          <GallerySection refreshTrigger={refreshTrigger} />
-          <LatestNewsSection refreshTrigger={refreshTrigger} />
-        </View>
-      </ScrollView>
+            {!guestMode && isGuestMember && (
+              <ClassesSection refreshTrigger={refreshTrigger} />
+            )}
+            <GymStoreSection refreshTrigger={refreshTrigger} />
+            <GallerySection refreshTrigger={refreshTrigger} />
+            <LatestNewsSection refreshTrigger={refreshTrigger} />
+          </View>
+        </ScrollView>
+      </View>
 
       {showFloatingMenu && (
         <TouchableOpacity

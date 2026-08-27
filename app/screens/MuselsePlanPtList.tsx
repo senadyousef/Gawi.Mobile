@@ -1,2383 +1,3401 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+} from "@react-native-community/datetimepicker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Modal,
-  ScrollView,
-  TextInput,
+  FlatList,
   Image,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
 import { handleGetToken } from "../helpers";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
 import { useI18n } from "../hooks/useI18n";
 import { useAppContext } from "../context";
 
-const translations = {
+// ═══════════════════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════════════════
+
+interface ExerciseItem {
+  id: number;
+  muscleId: number;
+  nameEn: string;
+  nameAr: string;
+}
+
+interface MuscleItem {
+  id: number;
+  gymId: number;
+  nameEn: string;
+  nameAr: string;
+  exercises: ExerciseItem[];
+}
+
+interface DayExercise {
+  exerciseId: number;
+  displayOrder: number;
+}
+
+interface DayMuscle {
+  muscleId: number;
+  displayOrder: number;
+  exercises: DayExercise[];
+}
+
+// dayOfWeek follows JS Date.getDay() convention: 0 = Sunday ... 6 = Saturday
+interface PlanDay {
+  dayOfWeek: number;
+  isRestDay: boolean;
+  displayOrder: number;
+  note: string;
+  muscles: DayMuscle[];
+}
+
+interface WorkoutTemplate {
+  id?: number;
+  gymId?: number;
+  nameEn: string;
+  nameAr: string;
+  note: string;
+  days: PlanDay[];
+}
+
+interface PTMember {
+  memberShipId: number;
+  membershipName: string;
+  photoUrl?: string;
+  // Not confirmed to exist on GetAllUserForPT — read opportunistically if
+  // present. The history endpoint proved a member's real gym can differ
+  // from the GYM_ID constant (member 81 → gymId 10, while templates live
+  // under gymId 3), so any per-member gymId we can get beats the constant.
+  gymId?: number;
+}
+
+// Real shape confirmed from GET
+// /workout-plans/member-schedules/member/{id}/history?gymId=...
+interface MemberScheduleHistoryItem {
+  id: number;
+  gymId: number;
+  memberShipId: number;
+  memberUserId: number;
+  memberNameEn: string;
+  memberNameAr: string;
+  planType: string;
+  sourceTemplateId?: number;
+  sourceTemplateNameEn?: string;
+  nameEn: string;
+  nameAr: string;
+  note: string;
+  startDate: string;
+  endDate: string;
+  assignedByUserId: number;
+  assignedByName: string;
+  createdOn: string;
+  isCurrent: boolean;
+  isCancelled: boolean;
+  scheduleStatus: string; // seen: "Current", "Next" — likely also "Past"/"Completed"
+}
+
+// GUESS — extends the confirmed history shape with a day-by-day breakdown,
+// on the assumption that GET member-schedules/{id} returns the same `days`
+// shape used to create the schedule (PlanDay[]). Optional because we haven't
+// confirmed it's actually present; ScheduleDetailsModal falls back to just
+// the meta info if `days` is missing.
+interface MemberScheduleDetails extends MemberScheduleHistoryItem {
+  days?: PlanDay[];
+}
+
+interface FromTemplatePayload {
+  memberShipId: number;
+  templateId: number;
+  startDate: string; // "YYYY-MM-DD"
+  endDate: string;
+  note: string;
+  replaceOverlappingSchedule: boolean;
+}
+
+interface CustomSchedulePayload {
+  memberShipId: number;
+  nameEn: string;
+  nameAr: string;
+  note: string;
+  startDate: string;
+  endDate: string;
+  replaceOverlappingSchedule: boolean;
+  days: PlanDay[];
+}
+
+const DAY_NAMES_EN = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+const DAY_NAMES_AR = [
+  "الأحد",
+  "الاثنين",
+  "الثلاثاء",
+  "الأربعاء",
+  "الخميس",
+  "الجمعة",
+  "السبت",
+];
+
+const buildEmptyDays = (): PlanDay[] =>
+  Array.from({ length: 7 }, (_, i) => ({
+    dayOfWeek: i,
+    isRestDay: true,
+    displayOrder: i + 1,
+    note: "",
+    muscles: [],
+  }));
+
+// Strips muscles from any day flagged as rest before sending to the API,
+// so stale muscle picks left over from toggling the switch never leak out.
+const sanitizeDaysForSubmit = (days: PlanDay[]): PlanDay[] =>
+  days.map((d) => ({
+    ...d,
+    muscles: d.isRestDay
+      ? []
+      : d.muscles
+          .filter((m) => m.muscleId && m.exercises.length > 0)
+          .map((m, mi) => ({
+            ...m,
+            displayOrder: mi + 1,
+            exercises: m.exercises.map((e, ei) => ({
+              ...e,
+              displayOrder: ei + 1,
+            })),
+          })),
+  }));
+
+// A training (non-rest) day must have at least one muscle with one exercise.
+const validateDays = (
+  days: PlanDay[],
+): { valid: boolean; invalidDayOfWeek?: number } => {
+  for (const d of days) {
+    if (d.isRestDay) continue;
+    const hasExercise = d.muscles.some(
+      (m) => m.muscleId && m.exercises.length > 0,
+    );
+    if (!hasExercise) return { valid: false, invalidDayOfWeek: d.dayOfWeek };
+  }
+  return { valid: true };
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// API HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+
+const BASE_URL = "https://gawifit.com/api";
+
+const getCleanToken = async (): Promise<string | null> => {
+  const token = await handleGetToken();
+  if (!token) return null;
+  return token.startsWith("Bearer ") ? token.replace("Bearer ", "") : token;
+};
+
+// This app build serves one specific gym, matching the existing pattern in
+// your codebase (e.g. the old `getallMuscles?gymsId=3` call was a hardcoded
+// literal too, not fetched at runtime). Confirmed via your working
+// `/workout-plans/templates/20?gymId=3` call — this is the real gym id.
+const GYM_ID = 3;
+
+async function authFetch(url: string, options: RequestInit = {}) {
+  const token = await getCleanToken();
+  if (!token) throw new Error("NO_TOKEN");
+  return fetch(url, {
+    ...options,
+    headers: {
+      accept: "text/plain",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(options.headers || {}),
+    },
+  });
+}
+
+async function throwIfNotOk(res: Response) {
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = await res.text();
+    } catch {
+      // ignore
+    }
+    throw new Error(detail || `HTTP ${res.status}`);
+  }
+}
+
+const fetchWorkoutLibrary = async (gymId: number): Promise<MuscleItem[]> => {
+  const res = await authFetch(`${BASE_URL}/workout-library?gymId=${gymId}`);
+  await throwIfNotOk(res);
+  const data = await res.json();
+  return Array.isArray(data?.muscles) ? data.muscles : [];
+};
+
+const fetchTemplates = async (gymId: number): Promise<WorkoutTemplate[]> => {
+  const res = await authFetch(
+    `${BASE_URL}/workout-plans/templates?gymId=${gymId}`,
+  );
+  await throwIfNotOk(res);
+  const data = await res.json();
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.result)) return data.result;
+  return [];
+};
+
+const fetchTemplateById = async (
+  gymId: number,
+  templateId: number,
+): Promise<WorkoutTemplate> => {
+  const res = await authFetch(
+    `${BASE_URL}/workout-plans/templates/${templateId}?gymId=${gymId}`,
+  );
+  await throwIfNotOk(res);
+  return res.json();
+};
+
+// Confirmed response shape: array of MemberScheduleHistoryItem (see above).
+const fetchMemberScheduleHistory = async (
+  gymId: number,
+  memberShipId: number,
+): Promise<MemberScheduleHistoryItem[]> => {
+  const res = await authFetch(
+    `${BASE_URL}/workout-plans/member-schedules/member/${memberShipId}/history?gymId=${gymId}`,
+  );
+  await throwIfNotOk(res);
+  const data = await res.json();
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.result)) return data.result;
+  return [];
+};
+
+// GUESS — no curl/sample was given for this one. Mirrors the confirmed
+// `templates/{id}?gymId=` pattern, and each history item already carries
+// its own gymId, so the caller just passes that straight through. Logs the
+// raw response so you can verify the field names (especially whether it
+// really includes a `days` breakdown) and adjust MemberScheduleDetails /
+// ScheduleDetailsModal below if the real shape differs.
+const fetchMemberScheduleById = async (
+  gymId: number,
+  scheduleId: number,
+): Promise<MemberScheduleDetails> => {
+  const res = await authFetch(
+    `${BASE_URL}/workout-plans/member-schedules/${scheduleId}?gymId=${gymId}`,
+  );
+  await throwIfNotOk(res);
+  const data = await res.json();
+  console.log("[ScheduleDetails] raw response:", JSON.stringify(data));
+  return data;
+};
+
+// Endpoint verified for reads only (GET). Create assumed to be a POST to the
+// same resource — flip the method below if the backend expects a different
+// route once you confirm it.
+const createTemplate = async (gymId: number, payload: WorkoutTemplate) => {
+  const res = await authFetch(
+    `${BASE_URL}/workout-plans/templates?gymId=${gymId}`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+  await throwIfNotOk(res);
+  return res.json().catch(() => ({}));
+};
+
+const createScheduleFromTemplate = async (
+  gymId: number,
+  payload: FromTemplatePayload,
+) => {
+  const res = await authFetch(
+    `${BASE_URL}/workout-plans/member-schedules/from-template?gymId=${gymId}`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+  await throwIfNotOk(res);
+  return res.json().catch(() => ({}));
+};
+
+const createCustomSchedule = async (
+  gymId: number,
+  payload: CustomSchedulePayload,
+) => {
+  const res = await authFetch(
+    `${BASE_URL}/workout-plans/member-schedules/custom?gymId=${gymId}`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+  await throwIfNotOk(res);
+  return res.json().catch(() => ({}));
+};
+
+const fetchPTMembers = async (ptUserId: string): Promise<PTMember[]> => {
+  const res = await authFetch(
+    `${BASE_URL}/PT/GetAllUserForPT?userId=${ptUserId}`,
+  );
+  await throwIfNotOk(res);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+};
+
+const toApiDate = (d: Date) => d.toISOString().split("T")[0];
+
+// Adds one calendar month (30/9 → 30/10), not a fixed 30-day offset.
+// Guards against short-month rollover (e.g. Jan 31 + 1 month would
+// otherwise land on Mar 3) by clamping to the last day of the target month.
+const addOneMonth = (date: Date): Date => {
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + 1);
+  if (d.getDate() !== day) d.setDate(0);
+  return d;
+};
+
+// Android's native date dialog doesn't nest cleanly inside another RN
+// <Modal>, which is a well-known source of crashes (including "Cannot
+// convert undefined value to object") when the picker is rendered inline.
+// The fix is to open it imperatively on Android and only render it inline
+// (spinner) on iOS, where that problem doesn't occur.
+const openAndroidDatePicker = (current: Date, onPicked: (d: Date) => void) => {
+  DateTimePickerAndroid.open({
+    value: current,
+    mode: "date",
+    onChange: (event, selected) => {
+      if (event.type === "set" && selected) onPicked(selected);
+    },
+  });
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// SelectModal — generic searchable picker (muscles / exercises / templates)
+// ═══════════════════════════════════════════════════════════════════════
+
+interface SelectItem {
+  id: number | string;
+  label: string;
+  sublabel?: string;
+}
+
+interface SelectModalProps {
+  visible: boolean;
+  title: string;
+  items: SelectItem[];
+  selectedId?: number | string | null;
+  onSelect: (item: SelectItem) => void;
+  onClose: () => void;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  dark: boolean;
+  isRTL: boolean;
+}
+
+const SelectModal: React.FC<SelectModalProps> = ({
+  visible,
+  title,
+  items,
+  selectedId,
+  onSelect,
+  onClose,
+  searchPlaceholder = "Search...",
+  emptyText = "No results",
+  dark,
+  isRTL,
+}) => {
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter(
+      (i) =>
+        i.label.toLowerCase().includes(q) ||
+        (i.sublabel || "").toLowerCase().includes(q),
+    );
+  }, [search, items]);
+
+  const c = {
+    overlay: "rgba(0,0,0,0.5)",
+    bg: dark ? "#111111" : "#FFFFFF",
+    border: dark ? "#222222" : "#EEEEEE",
+    text: dark ? "#EEEEEE" : "#333333",
+    sub: dark ? "#888888" : "#666666",
+    inputBg: dark ? "#000000" : "#F1F1F1",
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity
+        style={[S_SELECT.overlay, { backgroundColor: c.overlay }]}
+        activeOpacity={1}
+        onPress={() => {
+          setSearch("");
+          onClose();
+        }}
+      >
+        <View style={[S_SELECT.container, { backgroundColor: c.bg }]}>
+          <Text
+            style={[
+              S_SELECT.title,
+              { color: c.text, textAlign: isRTL ? "right" : "left" },
+            ]}
+          >
+            {title}
+          </Text>
+          <View style={[S_SELECT.searchWrap, { borderBottomColor: c.border }]}>
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={c.sub}
+              style={[
+                S_SELECT.searchInput,
+                {
+                  backgroundColor: c.inputBg,
+                  color: c.text,
+                  textAlign: isRTL ? "right" : "left",
+                },
+              ]}
+            />
+          </View>
+          <ScrollView
+            style={S_SELECT.scroll}
+            keyboardShouldPersistTaps="handled"
+          >
+            {filtered.length > 0 ? (
+              filtered.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[
+                    S_SELECT.item,
+                    { borderBottomColor: c.border },
+                    isRTL && { flexDirection: "row-reverse" },
+                  ]}
+                  onPress={() => {
+                    setSearch("");
+                    onSelect(item);
+                    onClose();
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        S_SELECT.itemText,
+                        { color: c.text, textAlign: isRTL ? "right" : "left" },
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                    {!!item.sublabel && (
+                      <Text
+                        style={[
+                          S_SELECT.itemSub,
+                          {
+                            color: c.sub,
+                            textAlign: isRTL ? "right" : "left",
+                          },
+                        ]}
+                      >
+                        {item.sublabel}
+                      </Text>
+                    )}
+                  </View>
+                  {selectedId === item.id && (
+                    <Text style={S_SELECT.check}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={[S_SELECT.empty, { color: c.sub }]}>
+                {emptyText}
+              </Text>
+            )}
+          </ScrollView>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
+const S_SELECT = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  container: {
+    width: "90%",
+    maxHeight: 420,
+    borderRadius: 14,
+    paddingTop: 14,
+    overflow: "hidden",
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: "700",
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  searchWrap: {
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+  },
+  searchInput: {
+    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 15,
+  },
+  scroll: { maxHeight: 340 },
+  item: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+  },
+  itemText: { fontSize: 15, fontWeight: "500" },
+  itemSub: { fontSize: 12, marginTop: 2 },
+  check: { fontSize: 16, color: "#007AFF", fontWeight: "bold", marginLeft: 8 },
+  empty: { textAlign: "center", padding: 20, fontSize: 14 },
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// DaySchedulePlanner — shared 7-day (Sun–Sat) builder with rest-day switches
+// ═══════════════════════════════════════════════════════════════════════
+
+interface DaySchedulePlannerProps {
+  days: PlanDay[];
+  onChange: (days: PlanDay[]) => void;
+  muscleLibrary: MuscleItem[];
+  dark: boolean;
+  isAr: boolean;
+  isRTL: boolean;
+}
+
+const T_PLANNER = {
   en: {
-    title: "Exercise Schedules",
-    subtitle: "Manage workout exercises",
-    totalExercises: "Total Exercises",
-    clients: "Clients",
-    noClients: "No Clients",
-    noExercises: "No exercises for this client",
-    loading: "Loading exercise schedules...",
-    createSchedule: "Create Schedule",
-    editExercise: "Edit Exercise",
-    selectClient: "Select Client",
-    tapToSelect: "Tap to select client",
-    addExercise: "Add Exercise to Schedule",
-    trainingDay: "Training Day",
-    muscleGroup: "Select Muscle Group",
-    tapToSelectMuscle: "Tap to select muscle",
-    selectExercise: "Select Exercise",
-    tapToSelectExer: "Tap to select exercise",
-    selectMuscleFirst: "Please select a muscle group first",
-    noExercisesForMuscle: "No exercises found for this muscle group",
-    rounds: "Rounds (Sets)",
-    reps: "Reps per Round",
-    setsPlaceholder: "Sets",
-    repsPlaceholder: "Reps",
-    addToDraft: "Add to Schedule Draft",
-    updateDraft: "Update in Draft",
-    saveSchedule: "Save Schedule",
-    cancel: "Cancel",
-    update: "Update Exercise",
-    draft: "Draft",
-    exercises: "exercises",
-    editingExercise: "Editing Exercise",
-    cancelEdit: "Cancel Edit",
-    clearAll: "Clear All",
-    editingMode:
-      "⚠️ Editing mode: Make changes below and click 'Update in Draft'",
-    editing: "Editing...",
-    sets: "sets",
-    repsLabel: "reps",
-    addToMuscle: "Add to muscle and exercise for this client",
-    changeMuscle: "Change Muscle Group",
-    changeExercise: "Change Exercise",
-    changeDay: "Change Training Day",
-    selectDay: "Select a day",
-    updatePreview: "Update Preview",
-    currentExercise: "Exercise",
-    currentClient: "Client",
-    currentMuscle: "Current Muscle",
-    currentDay: "Current Day",
-    roundsLabel: "Rounds",
-    repsPreview: "Reps",
-    muscleLabel: "Muscle",
-    dayLabel: "Day",
-    from: "From",
-    to: "To",
-    roundsDetail: "Rounds",
-    repsDetail: "Reps per round",
-    dayDetail: "Day",
-    selected: "Selected",
-    errors: {
-      fillAll:
-        "Please fill all fields: Muscle, Exercise, Day, Rounds, and Reps",
-      alreadyAdded: "This exercise is already added for this day and muscle.",
-      noSchedule: "Please add at least one exercise to the schedule",
-      authNotFound: "Authentication token not found. Please login again.",
-      userNotFound: "User ID not found. Please login again.",
-      deleteFailed: "Failed to delete exercise.",
-      updateFailed: "Failed to update exercise. Please try again.",
-      saveFailed: "Failed to save schedule",
-    },
-    success: {
-      added: "Exercise added to draft! Add more or save the schedule.",
-      updated: "Exercise updated in draft!",
-      removed: "Exercise removed from draft.",
-      cleared: "All draft items have been removed.",
-      saved: "Schedule saved successfully!",
-      deleted: "Exercise deleted successfully!",
-      editUpdated: "Exercise updated successfully!",
-      cancelledEdit: "Edit mode cancelled.",
-    },
-    confirm: {
-      delete: "Delete Exercise",
-      sure: "Are you sure you want to delete",
-      cancel: "Cancel",
-      delete2: "Delete",
-    },
+    restDay: "Rest day",
+    trainingDay: "Training day",
+    dayNote: "Note for this day (optional)",
+    addMuscle: "+ Add muscle",
+    selectMuscle: "Select a muscle",
+    selectMuscleTitle: "Select Muscle Group",
+    selectExerciseTitle: "Select Exercise",
+    addExercise: "+ Add exercise",
+    noExercisesForMuscle: "No exercises found for this muscle",
   },
   ar: {
-    title: "جداول التمارين",
-    subtitle: "إدارة تمارين التدريب",
-    totalExercises: "إجمالي التمارين",
-    clients: "العملاء",
-    noClients: "لا يوجد عملاء",
-    noExercises: "لا توجد تمارين لهذا اللاعب",
-    loading: "جاري تحميل جداول التمارين...",
-    createSchedule: "إنشاء جدول",
-    editExercise: "تعديل التمرين",
-    selectClient: "اختيار اللاعب",
-    tapToSelect: "اضغط لاختيار اللاعب",
-    addExercise: "إضافة تمرين للجدول",
-    trainingDay: "يوم التدريب",
-    muscleGroup: "اختر مجموعة العضلات",
-    tapToSelectMuscle: "اضغط لاختيار العضلة",
-    selectExercise: "اختر التمرين",
-    tapToSelectExer: "اضغط لاختيار التمرين",
-    selectMuscleFirst: "يرجى اختيار مجموعة العضلات أولاً",
-    noExercisesForMuscle: "لا توجد تمارين لهذه المجموعة العضلية",
-    rounds: "الجولات (المجموعات)",
-    reps: "التكرارات لكل جولة",
-    setsPlaceholder: "المجموعات",
-    repsPlaceholder: "التكرارات",
-    addToDraft: "إضافة لمسودة الجدول",
-    updateDraft: "تحديث في المسودة",
-    saveSchedule: "حفظ الجدول",
-    cancel: "إلغاء",
-    update: "تحديث التمرين",
-    draft: "المسودة",
-    exercises: "تمارين",
-    editingExercise: "تعديل التمرين",
-    cancelEdit: "إلغاء التعديل",
-    clearAll: "مسح الكل",
-    editingMode: "⚠️ وضع التعديل: قم بالتغييرات ثم اضغط 'تحديث في المسودة'",
-    editing: "جاري التعديل...",
-    sets: "مجموعات",
-    repsLabel: "تكرار",
-    addToMuscle: "إضافة عضلة وتمرين لهذا اللاعب ",
-    changeMuscle: "تغيير مجموعة العضلات",
-    changeExercise: "تغيير التمرين",
-    changeDay: "تغيير يوم التدريب",
-    selectDay: "اختر يوماً",
-    updatePreview: "معاينة التحديث",
-    currentExercise: "التمرين",
-    currentClient: "العميل",
-    currentMuscle: "العضلة الحالية",
-    currentDay: "اليوم الحالي",
-    roundsLabel: "الجولات",
-    repsPreview: "التكرارات",
-    muscleLabel: "العضلة",
-    dayLabel: "اليوم",
-    from: "من",
-    to: "إلى",
-    roundsDetail: "الجولات",
-    repsDetail: "التكرارات لكل جولة",
-    dayDetail: "اليوم",
-    selected: "المختار",
-    errors: {
-      fillAll:
-        "يرجى ملء جميع الحقول: العضلة، التمرين، اليوم، الجولات، والتكرارات",
-      alreadyAdded: "هذا التمرين مضاف بالفعل لهذا اليوم وهذه العضلة.",
-      noSchedule: "يرجى إضافة تمرين واحد على الأقل للجدول",
-      authNotFound: "رمز المصادقة غير موجود. يرجى تسجيل الدخول مجدداً.",
-      userNotFound: "معرف المستخدم غير موجود. يرجى تسجيل الدخول مجدداً.",
-      deleteFailed: "فشل حذف التمرين.",
-      updateFailed: "فشل تحديث التمرين. يرجى المحاولة مرة أخرى.",
-      saveFailed: "فشل حفظ الجدول",
-    },
-    success: {
-      added: "تمت إضافة التمرين للمسودة! أضف المزيد أو احفظ الجدول.",
-      updated: "تم تحديث التمرين في المسودة!",
-      removed: "تم إزالة التمرين من المسودة.",
-      cleared: "تمت إزالة جميع عناصر المسودة.",
-      saved: "تم حفظ الجدول بنجاح!",
-      deleted: "تم حذف التمرين بنجاح!",
-      editUpdated: "تم تحديث التمرين بنجاح!",
-      cancelledEdit: "تم إلغاء وضع التعديل.",
-    },
-    confirm: {
-      delete: "حذف التمرين",
-      sure: "هل أنت متأكد من حذف",
-      cancel: "إلغاء",
-      delete2: "حذف",
-    },
+    restDay: "يوم راحة",
+    trainingDay: "يوم تدريب",
+    dayNote: "ملاحظة لهذا اليوم (اختياري)",
+    addMuscle: "+ إضافة عضلة",
+    selectMuscle: "اختر عضلة",
+    selectMuscleTitle: "اختر مجموعة العضلات",
+    selectExerciseTitle: "اختر التمرين",
+    addExercise: "+ إضافة تمرين",
+    noExercisesForMuscle: "لا توجد تمارين لهذه العضلة",
   },
 };
 
-const MuselsePlanPtList = () => {
-  const navigation = useNavigation();
+const DaySchedulePlanner: React.FC<DaySchedulePlannerProps> = ({
+  days,
+  onChange,
+  muscleLibrary,
+  dark,
+  isAr,
+  isRTL,
+}) => {
+  const t = isAr ? T_PLANNER.ar : T_PLANNER.en;
+  const dayNames = isAr ? DAY_NAMES_AR : DAY_NAMES_EN;
+
+  const [muscleModal, setMuscleModal] = useState<{
+    dayIndex: number;
+    muscleIndex: number;
+  } | null>(null);
+  const [exerciseModal, setExerciseModal] = useState<{
+    dayIndex: number;
+    muscleIndex: number;
+  } | null>(null);
+
+  const c = {
+    card: dark ? "#111111" : "#FFFFFF",
+    border: dark ? "#222222" : "#EEEEEE",
+    text: dark ? "#EEEEEE" : "#333333",
+    sub: dark ? "#888888" : "#666666",
+    muted: dark ? "#555555" : "#999999",
+    inputBg: dark ? "#000000" : "#F9F9F9",
+    chipBg: dark ? "#1E293B" : "#E3F2FD",
+    chipText: dark ? "#93C5FD" : "#1565C0",
+    dashedBg: dark ? "#0A0A0A" : "#F8F9FA",
+    danger: "#FF5252",
+  };
+
+  const updateDay = (dayIndex: number, patch: Partial<PlanDay>) => {
+    if (!days[dayIndex]) return;
+    const next = [...days];
+    next[dayIndex] = { ...next[dayIndex], ...patch };
+    onChange(next);
+  };
+
+  const toggleRestDay = (dayIndex: number, isRest: boolean) => {
+    updateDay(dayIndex, { isRestDay: isRest });
+  };
+
+  const addMuscleBlock = (dayIndex: number) => {
+    const day = days[dayIndex];
+    if (!day) return;
+    const next = [...days];
+    next[dayIndex] = {
+      ...day,
+      muscles: [
+        ...day.muscles,
+        { muscleId: 0, displayOrder: day.muscles.length + 1, exercises: [] },
+      ],
+    };
+    onChange(next);
+  };
+
+  const removeMuscleBlock = (dayIndex: number, muscleIndex: number) => {
+    if (!days[dayIndex]) return;
+    const next = [...days];
+    next[dayIndex] = {
+      ...next[dayIndex],
+      muscles: next[dayIndex].muscles.filter((_, i) => i !== muscleIndex),
+    };
+    onChange(next);
+  };
+
+  const setMuscleForBlock = (
+    dayIndex: number,
+    muscleIndex: number,
+    muscleId: number,
+  ) => {
+    if (!days[dayIndex] || !days[dayIndex].muscles[muscleIndex]) return;
+    const next = [...days];
+    const muscles = [...next[dayIndex].muscles];
+    muscles[muscleIndex] = { ...muscles[muscleIndex], muscleId, exercises: [] };
+    next[dayIndex] = { ...next[dayIndex], muscles };
+    onChange(next);
+  };
+
+  const addExercise = (
+    dayIndex: number,
+    muscleIndex: number,
+    exerciseId: number,
+  ) => {
+    if (!days[dayIndex] || !days[dayIndex].muscles[muscleIndex]) return;
+    const next = [...days];
+    const muscles = [...next[dayIndex].muscles];
+    const block = muscles[muscleIndex];
+    if (block.exercises.some((e) => e.exerciseId === exerciseId)) return;
+    muscles[muscleIndex] = {
+      ...block,
+      exercises: [
+        ...block.exercises,
+        { exerciseId, displayOrder: block.exercises.length + 1 },
+      ],
+    };
+    next[dayIndex] = { ...next[dayIndex], muscles };
+    onChange(next);
+  };
+
+  const removeExercise = (
+    dayIndex: number,
+    muscleIndex: number,
+    exerciseId: number,
+  ) => {
+    if (!days[dayIndex] || !days[dayIndex].muscles[muscleIndex]) return;
+    const next = [...days];
+    const muscles = [...next[dayIndex].muscles];
+    muscles[muscleIndex] = {
+      ...muscles[muscleIndex],
+      exercises: muscles[muscleIndex].exercises.filter(
+        (e) => e.exerciseId !== exerciseId,
+      ),
+    };
+    next[dayIndex] = { ...next[dayIndex], muscles };
+    onChange(next);
+  };
+
+  const muscleName = (id: number) =>
+    muscleLibrary.find((m) => m.id === id)?.[isAr ? "nameAr" : "nameEn"] || "";
+
+  const exerciseName = (muscleId: number, exId: number) =>
+    (muscleLibrary.find((m) => m.id === muscleId)?.exercises || []).find(
+      (e) => e.id === exId,
+    )?.[isAr ? "nameAr" : "nameEn"] || "";
+
+  const muscleItems: SelectItem[] = muscleLibrary.map((m) => ({
+    id: m.id,
+    label: isAr ? m.nameAr : m.nameEn,
+  }));
+
+  const activeMuscleForExerciseModal =
+    exerciseModal !== null
+      ? days[exerciseModal.dayIndex]?.muscles[exerciseModal.muscleIndex]
+          ?.muscleId
+      : null;
+
+  const exerciseItems: SelectItem[] =
+    activeMuscleForExerciseModal != null
+      ? (
+          muscleLibrary.find((m) => m.id === activeMuscleForExerciseModal)
+            ?.exercises || ([] as ExerciseItem[])
+        )
+          .filter((e) => {
+            if (exerciseModal === null) return true;
+            const block =
+              days[exerciseModal.dayIndex]?.muscles[exerciseModal.muscleIndex];
+            return !block?.exercises.some((ex) => ex.exerciseId === e.id);
+          })
+          .map((e) => ({ id: e.id, label: isAr ? e.nameAr : e.nameEn }))
+      : [];
+
+  return (
+    <View>
+      {[...days]
+        .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+        .map((day) => {
+          const dayIndex = days.findIndex((d) => d.dayOfWeek === day.dayOfWeek);
+          return (
+            <View
+              key={day.dayOfWeek}
+              style={[
+                S_PLANNER.dayCard,
+                { backgroundColor: c.card, borderColor: c.border },
+              ]}
+            >
+              <View
+                style={[
+                  S_PLANNER.dayHeader,
+                  isRTL && { flexDirection: "row-reverse" },
+                ]}
+              >
+                <Text
+                  style={[
+                    S_PLANNER.dayTitle,
+                    { color: c.text, textAlign: isRTL ? "right" : "left" },
+                  ]}
+                >
+                  {dayNames[day.dayOfWeek]}
+                </Text>
+                <View
+                  style={[
+                    S_PLANNER.switchRow,
+                    isRTL && { flexDirection: "row-reverse" },
+                  ]}
+                >
+                  <Text style={{ color: c.sub, fontSize: 12 }}>
+                    {day.isRestDay ? t.restDay : t.trainingDay}
+                  </Text>
+                  <Switch
+                    value={day.isRestDay}
+                    onValueChange={(v) => toggleRestDay(dayIndex, v)}
+                    trackColor={{ false: "#4CAF50", true: c.muted }}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+              </View>
+
+              {!day.isRestDay && (
+                <>
+                  <TextInput
+                    value={day.note}
+                    onChangeText={(text) => updateDay(dayIndex, { note: text })}
+                    placeholder={t.dayNote}
+                    placeholderTextColor={c.muted}
+                    style={[
+                      S_PLANNER.noteInput,
+                      {
+                        backgroundColor: c.inputBg,
+                        borderColor: c.border,
+                        color: c.text,
+                        textAlign: isRTL ? "right" : "left",
+                      },
+                    ]}
+                  />
+
+                  {day.muscles.map((block, muscleIndex) => (
+                    <View
+                      key={muscleIndex}
+                      style={[
+                        S_PLANNER.muscleBlock,
+                        { backgroundColor: c.dashedBg, borderColor: c.border },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          S_PLANNER.muscleBlockHeader,
+                          isRTL && { flexDirection: "row-reverse" },
+                        ]}
+                      >
+                        <TouchableOpacity
+                          style={[
+                            S_PLANNER.pickerBtn,
+                            { borderColor: c.border, backgroundColor: c.card },
+                          ]}
+                          onPress={() =>
+                            setMuscleModal({ dayIndex, muscleIndex })
+                          }
+                        >
+                          <Text
+                            style={{
+                              color: block.muscleId ? c.text : c.muted,
+                              textAlign: isRTL ? "right" : "left",
+                            }}
+                          >
+                            {block.muscleId
+                              ? muscleName(block.muscleId)
+                              : t.selectMuscle}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() =>
+                            removeMuscleBlock(dayIndex, muscleIndex)
+                          }
+                        >
+                          <Text style={{ color: c.danger, fontWeight: "700" }}>
+                            ✕
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {!!block.muscleId && (
+                        <>
+                          <View style={S_PLANNER.chipsWrap}>
+                            {block.exercises.map((ex) => (
+                              <View
+                                key={ex.exerciseId}
+                                style={[
+                                  S_PLANNER.chip,
+                                  { backgroundColor: c.chipBg },
+                                  isRTL && { flexDirection: "row-reverse" },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    S_PLANNER.chipText,
+                                    { color: c.chipText },
+                                  ]}
+                                >
+                                  {exerciseName(block.muscleId, ex.exerciseId)}
+                                </Text>
+                                <TouchableOpacity
+                                  onPress={() =>
+                                    removeExercise(
+                                      dayIndex,
+                                      muscleIndex,
+                                      ex.exerciseId,
+                                    )
+                                  }
+                                >
+                                  <Text
+                                    style={[
+                                      S_PLANNER.chipRemove,
+                                      { color: c.chipText },
+                                    ]}
+                                  >
+                                    {" "}
+                                    ✕
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            ))}
+                          </View>
+                          <TouchableOpacity
+                            style={S_PLANNER.addExerciseBtn}
+                            onPress={() =>
+                              setExerciseModal({ dayIndex, muscleIndex })
+                            }
+                          >
+                            <Text style={S_PLANNER.addExerciseText}>
+                              {t.addExercise}
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </View>
+                  ))}
+
+                  <TouchableOpacity
+                    style={S_PLANNER.addMuscleBtn}
+                    onPress={() => addMuscleBlock(dayIndex)}
+                  >
+                    <Text style={S_PLANNER.addMuscleText}>{t.addMuscle}</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          );
+        })}
+
+      <SelectModal
+        visible={muscleModal !== null}
+        title={t.selectMuscleTitle}
+        items={muscleItems}
+        selectedId={
+          muscleModal !== null
+            ? days[muscleModal.dayIndex]?.muscles[muscleModal.muscleIndex]
+                ?.muscleId
+            : null
+        }
+        onSelect={(item) => {
+          if (muscleModal !== null) {
+            setMuscleForBlock(
+              muscleModal.dayIndex,
+              muscleModal.muscleIndex,
+              Number(item.id),
+            );
+          }
+        }}
+        onClose={() => setMuscleModal(null)}
+        dark={dark}
+        isRTL={isRTL}
+      />
+
+      <SelectModal
+        visible={exerciseModal !== null}
+        title={t.selectExerciseTitle}
+        items={exerciseItems}
+        onSelect={(item) => {
+          if (exerciseModal !== null) {
+            addExercise(
+              exerciseModal.dayIndex,
+              exerciseModal.muscleIndex,
+              Number(item.id),
+            );
+          }
+        }}
+        onClose={() => setExerciseModal(null)}
+        emptyText={t.noExercisesForMuscle}
+        dark={dark}
+        isRTL={isRTL}
+      />
+    </View>
+  );
+};
+
+const S_PLANNER = StyleSheet.create({
+  dayCard: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12 },
+  dayHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  dayTitle: { fontSize: 16, fontWeight: "700" },
+  switchRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  noteInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  muscleBlock: {
+    borderWidth: 1,
+    borderRadius: 10,
+    borderStyle: "dashed",
+    padding: 10,
+    marginBottom: 10,
+  },
+  muscleBlockHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  pickerBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  chipText: { fontSize: 12, fontWeight: "600" },
+  chipRemove: { fontSize: 12, fontWeight: "700" },
+  addExerciseBtn: { marginTop: 8, alignSelf: "flex-start" },
+  addExerciseText: { color: "#2196F3", fontSize: 13, fontWeight: "600" },
+  addMuscleBtn: { alignSelf: "flex-start", marginTop: 2 },
+  addMuscleText: { color: "#007AFF", fontSize: 14, fontWeight: "700" },
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// CreateTemplateModal
+// ═══════════════════════════════════════════════════════════════════════
+
+interface CreateTemplateModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  dark: boolean;
+  isAr: boolean;
+  isRTL: boolean;
+}
+
+const T_TEMPLATE = {
+  en: {
+    title: "Create Template",
+    nameEn: "Template name (English)",
+    nameAr: "Template name (Arabic)",
+    note: "Note",
+    save: "Save Template",
+    cancel: "Cancel",
+    loadingLibrary: "Loading exercises...",
+    validationTitle: "Missing exercises",
+    validationBody: (day: string) =>
+      `${day} is set as a training day but has no exercises. Add at least one exercise or switch it to a rest day.`,
+    nameRequired: "Please enter the template name in English and Arabic.",
+    saved: "Template created successfully!",
+    saveFailed: "Failed to create template",
+  },
+  ar: {
+    title: "إنشاء قالب",
+    nameEn: "اسم القالب (إنجليزي)",
+    nameAr: "اسم القالب (عربي)",
+    note: "ملاحظة",
+    save: "حفظ القالب",
+    cancel: "إلغاء",
+    loadingLibrary: "جاري تحميل التمارين...",
+    validationTitle: "تمارين ناقصة",
+    validationBody: (day: string) =>
+      `${day} محدد كيوم تدريب لكن بدون تمارين. أضف تمريناً واحداً على الأقل أو حوّله ليوم راحة.`,
+    nameRequired: "يرجى إدخال اسم القالب بالإنجليزية والعربية.",
+    saved: "تم إنشاء القالب بنجاح!",
+    saveFailed: "فشل إنشاء القالب",
+  },
+};
+
+const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
+  visible,
+  onClose,
+  onCreated,
+  dark,
+  isAr,
+  isRTL,
+}) => {
+  const t = isAr ? T_TEMPLATE.ar : T_TEMPLATE.en;
+
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [note, setNote] = useState("");
+  const [days, setDays] = useState(buildEmptyDays());
+  const [muscleLibrary, setMuscleLibrary] = useState<MuscleItem[]>([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    (async () => {
+      try {
+        setLoadingLibrary(true);
+        const gymId = GYM_ID;
+        const muscles = await fetchWorkoutLibrary(gymId);
+        setMuscleLibrary(muscles);
+      } catch (err: any) {
+        Alert.alert("Error", err?.message || "Failed to load exercises");
+      } finally {
+        setLoadingLibrary(false);
+      }
+    })();
+  }, [visible]);
+
+  const resetForm = () => {
+    setNameEn("");
+    setNameAr("");
+    setNote("");
+    setDays(buildEmptyDays());
+  };
+
+  const handleSave = async () => {
+    if (!nameEn.trim() || !nameAr.trim()) {
+      Alert.alert("Error", t.nameRequired);
+      return;
+    }
+    const { valid, invalidDayOfWeek } = validateDays(days);
+    if (!valid && invalidDayOfWeek !== undefined) {
+      const dayName = (isAr ? DAY_NAMES_AR : DAY_NAMES_EN)[invalidDayOfWeek];
+      Alert.alert(t.validationTitle, t.validationBody(dayName));
+      return;
+    }
+    try {
+      setSaving(true);
+      const gymId = GYM_ID;
+      await createTemplate(gymId, {
+        nameEn: nameEn.trim(),
+        nameAr: nameAr.trim(),
+        note,
+        days: sanitizeDaysForSubmit(days),
+      });
+      Alert.alert("Success", t.saved);
+      resetForm();
+      onCreated();
+      onClose();
+    } catch (err: any) {
+      Alert.alert("Error", `${t.saveFailed}: ${err?.message || ""}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const c = {
+    modalBg: dark ? "#111111" : "#FFFFFF",
+    border: dark ? "#222222" : "#EEEEEE",
+    text: dark ? "#EEEEEE" : "#333333",
+    sub: dark ? "#888888" : "#666666",
+    inputBg: dark ? "#000000" : "#F9F9F9",
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={S_TEMPLATE.overlay}>
+        <View style={[S_TEMPLATE.content, { backgroundColor: c.modalBg }]}>
+          <View style={[S_TEMPLATE.header, { borderBottomColor: c.border }]}>
+            <Text
+              style={[
+                S_TEMPLATE.headerTitle,
+                { color: c.text, textAlign: isRTL ? "right" : "left" },
+              ]}
+            >
+              {t.title}
+            </Text>
+            <TouchableOpacity onPress={onClose}>
+              <Text style={{ fontSize: 22, color: c.sub }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={S_TEMPLATE.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <TextInput
+              value={nameEn}
+              onChangeText={setNameEn}
+              placeholder={t.nameEn}
+              placeholderTextColor={c.sub}
+              style={[
+                S_TEMPLATE.input,
+                {
+                  backgroundColor: c.inputBg,
+                  borderColor: c.border,
+                  color: c.text,
+                  textAlign: isRTL ? "right" : "left",
+                },
+              ]}
+            />
+            <TextInput
+              value={nameAr}
+              onChangeText={setNameAr}
+              placeholder={t.nameAr}
+              placeholderTextColor={c.sub}
+              style={[
+                S_TEMPLATE.input,
+                {
+                  backgroundColor: c.inputBg,
+                  borderColor: c.border,
+                  color: c.text,
+                  textAlign: isRTL ? "right" : "left",
+                },
+              ]}
+            />
+            <TextInput
+              value={note}
+              onChangeText={setNote}
+              placeholder={t.note}
+              placeholderTextColor={c.sub}
+              style={[
+                S_TEMPLATE.input,
+                {
+                  backgroundColor: c.inputBg,
+                  borderColor: c.border,
+                  color: c.text,
+                  textAlign: isRTL ? "right" : "left",
+                },
+              ]}
+            />
+
+            {loadingLibrary ? (
+              <View style={S_TEMPLATE.loadingRow}>
+                <ActivityIndicator />
+                <Text style={{ color: c.sub, marginTop: 6 }}>
+                  {t.loadingLibrary}
+                </Text>
+              </View>
+            ) : (
+              <DaySchedulePlanner
+                days={days}
+                onChange={setDays}
+                muscleLibrary={muscleLibrary}
+                dark={dark}
+                isAr={isAr}
+                isRTL={isRTL}
+              />
+            )}
+          </ScrollView>
+
+          <View style={[S_TEMPLATE.actions, { borderTopColor: c.border }]}>
+            <TouchableOpacity
+              style={[
+                S_TEMPLATE.btn,
+                S_TEMPLATE.cancelBtn,
+                { backgroundColor: dark ? "#1E293B" : "#F0F0F0" },
+              ]}
+              onPress={onClose}
+            >
+              <Text style={{ color: c.sub, fontWeight: "600" }}>
+                {t.cancel}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                S_TEMPLATE.btn,
+                S_TEMPLATE.saveBtn,
+                saving && S_TEMPLATE.disabled,
+              ]}
+              onPress={handleSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={S_TEMPLATE.saveBtnText}>{t.save}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const S_TEMPLATE = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  content: { width: "92%", maxHeight: "88%", borderRadius: 18 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 18,
+    borderBottomWidth: 1,
+  },
+  headerTitle: { fontSize: 19, fontWeight: "700", flex: 1 },
+  scrollContent: { padding: 18, paddingBottom: 10 },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    marginBottom: 12,
+  },
+  loadingRow: { alignItems: "center", paddingVertical: 30 },
+  actions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 16,
+    borderTopWidth: 1,
+    gap: 10,
+  },
+  btn: { flex: 1, padding: 14, borderRadius: 10, alignItems: "center" },
+  cancelBtn: {},
+  saveBtn: { backgroundColor: "#4CAF50" },
+  saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  disabled: { opacity: 0.6 },
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// TemplateDetailsModal — read-only view fetched from GET
+// /workout-plans/templates/{id}?gymId=... when a template card is tapped
+// ═══════════════════════════════════════════════════════════════════════
+
+interface TemplateDetailsModalProps {
+  visible: boolean;
+  templateId: number | null;
+  onClose: () => void;
+  dark: boolean;
+  isAr: boolean;
+  isRTL: boolean;
+}
+
+const T_DETAILS = {
+  en: {
+    title: "Template Details",
+    loading: "Loading template...",
+    loadFailed: "Failed to load template",
+    restDay: "Rest day",
+    noExercises: "No exercises",
+    close: "Close",
+  },
+  ar: {
+    title: "تفاصيل القالب",
+    loading: "جاري تحميل القالب...",
+    loadFailed: "فشل تحميل القالب",
+    restDay: "يوم راحة",
+    noExercises: "لا توجد تمارين",
+    close: "إغلاق",
+  },
+};
+
+const TemplateDetailsModal: React.FC<TemplateDetailsModalProps> = ({
+  visible,
+  templateId,
+  onClose,
+  dark,
+  isAr,
+  isRTL,
+}) => {
+  const t = isAr ? T_DETAILS.ar : T_DETAILS.en;
+  const dayNames = isAr ? DAY_NAMES_AR : DAY_NAMES_EN;
+
+  const [loading, setLoading] = useState(false);
+  const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
+  const [muscleLibrary, setMuscleLibrary] = useState<MuscleItem[]>([]);
+
+  useEffect(() => {
+    if (!visible || templateId == null) return;
+    (async () => {
+      try {
+        setLoading(true);
+        setTemplate(null);
+        const [tpl, muscles] = await Promise.all([
+          fetchTemplateById(GYM_ID, templateId),
+          fetchWorkoutLibrary(GYM_ID),
+        ]);
+        setTemplate(tpl);
+        setMuscleLibrary(muscles);
+      } catch (err: any) {
+        Alert.alert("Error", `${t.loadFailed}: ${err?.message || ""}`);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [visible, templateId]);
+
+  const muscleName = (id: number) =>
+    muscleLibrary.find((m) => m.id === id)?.[isAr ? "nameAr" : "nameEn"] ||
+    `#${id}`;
+
+  const exerciseName = (muscleId: number, exId: number) =>
+    (muscleLibrary.find((m) => m.id === muscleId)?.exercises || []).find(
+      (e) => e.id === exId,
+    )?.[isAr ? "nameAr" : "nameEn"] || `#${exId}`;
+
+  const c = {
+    modalBg: dark ? "#111111" : "#FFFFFF",
+    border: dark ? "#222222" : "#EEEEEE",
+    text: dark ? "#EEEEEE" : "#333333",
+    sub: dark ? "#888888" : "#666666",
+    card: dark ? "#0A0A0A" : "#F8F9FA",
+    chipBg: dark ? "#1E293B" : "#E3F2FD",
+    chipText: dark ? "#93C5FD" : "#1565C0",
+    chipRest: dark ? "#221100" : "#FFF3CD",
+    chipRestText: dark ? "#FFCC44" : "#856404",
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={S_DETAILS.overlay}>
+        <View style={[S_DETAILS.content, { backgroundColor: c.modalBg }]}>
+          <View style={[S_DETAILS.header, { borderBottomColor: c.border }]}>
+            <Text
+              style={[
+                S_DETAILS.headerTitle,
+                { color: c.text, textAlign: isRTL ? "right" : "left" },
+              ]}
+            >
+              {template ? (isAr ? template.nameAr : template.nameEn) : t.title}
+            </Text>
+            <TouchableOpacity onPress={onClose}>
+              <Text style={{ fontSize: 22, color: c.sub }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loading ? (
+            <View style={S_DETAILS.loadingRow}>
+              <ActivityIndicator />
+              <Text style={{ color: c.sub, marginTop: 6 }}>{t.loading}</Text>
+            </View>
+          ) : !template ? (
+            <View style={S_DETAILS.loadingRow}>
+              <Text style={{ color: c.sub }}>{t.loadFailed}</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={S_DETAILS.scrollContent}>
+              {!!template.note && (
+                <Text
+                  style={{
+                    color: c.sub,
+                    marginBottom: 14,
+                    textAlign: isRTL ? "right" : "left",
+                  }}
+                >
+                  {template.note}
+                </Text>
+              )}
+
+              {[...template.days]
+                .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+                .map((day) => (
+                  <View
+                    key={day.dayOfWeek}
+                    style={[
+                      S_DETAILS.dayCard,
+                      { backgroundColor: c.card, borderColor: c.border },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        S_DETAILS.dayHeader,
+                        isRTL && { flexDirection: "row-reverse" },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          S_DETAILS.dayTitle,
+                          {
+                            color: c.text,
+                            textAlign: isRTL ? "right" : "left",
+                          },
+                        ]}
+                      >
+                        {dayNames[day.dayOfWeek]}
+                      </Text>
+                      {day.isRestDay && (
+                        <View
+                          style={[
+                            S_DETAILS.restPill,
+                            { backgroundColor: c.chipRest },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: "700",
+                              color: c.chipRestText,
+                            }}
+                          >
+                            {t.restDay}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {!day.isRestDay && (
+                      <>
+                        {!!day.note && (
+                          <Text
+                            style={{
+                              color: c.sub,
+                              fontSize: 13,
+                              marginBottom: 8,
+                              textAlign: isRTL ? "right" : "left",
+                            }}
+                          >
+                            {day.note}
+                          </Text>
+                        )}
+                        {day.muscles.length === 0 ? (
+                          <Text style={{ color: c.sub, fontStyle: "italic" }}>
+                            {t.noExercises}
+                          </Text>
+                        ) : (
+                          day.muscles.map((block, i) => (
+                            <View key={i} style={{ marginBottom: 8 }}>
+                              <Text
+                                style={{
+                                  color: c.text,
+                                  fontWeight: "600",
+                                  marginBottom: 6,
+                                  textAlign: isRTL ? "right" : "left",
+                                }}
+                              >
+                                {muscleName(block.muscleId)}
+                              </Text>
+                              <View
+                                style={[
+                                  S_DETAILS.chipsWrap,
+                                  isRTL && { flexDirection: "row-reverse" },
+                                ]}
+                              >
+                                {block.exercises.map((ex) => (
+                                  <View
+                                    key={ex.exerciseId}
+                                    style={[
+                                      S_DETAILS.chip,
+                                      { backgroundColor: c.chipBg },
+                                    ]}
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 12,
+                                        fontWeight: "600",
+                                        color: c.chipText,
+                                      }}
+                                    >
+                                      {exerciseName(
+                                        block.muscleId,
+                                        ex.exerciseId,
+                                      )}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            </View>
+                          ))
+                        )}
+                      </>
+                    )}
+                  </View>
+                ))}
+            </ScrollView>
+          )}
+
+          <View style={[S_DETAILS.actions, { borderTopColor: c.border }]}>
+            <TouchableOpacity
+              style={[
+                S_DETAILS.closeBtn,
+                { backgroundColor: dark ? "#1E293B" : "#F0F0F0" },
+              ]}
+              onPress={onClose}
+            >
+              <Text style={{ color: c.sub, fontWeight: "600" }}>{t.close}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const S_DETAILS = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  content: { width: "92%", maxHeight: "85%", borderRadius: 18 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 18,
+    borderBottomWidth: 1,
+  },
+  headerTitle: { fontSize: 19, fontWeight: "700", flex: 1 },
+  scrollContent: { padding: 18 },
+  loadingRow: { alignItems: "center", paddingVertical: 40 },
+  dayCard: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12 },
+  dayHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  dayTitle: { fontSize: 15, fontWeight: "700" },
+  restPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14 },
+  actions: { padding: 16, borderTopWidth: 1 },
+  closeBtn: { padding: 14, borderRadius: 10, alignItems: "center" },
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// MemberHistoryModal — GET /member-schedules/member/{id}/history?gymId=...
+// ═══════════════════════════════════════════════════════════════════════
+
+interface MemberHistoryModalProps {
+  visible: boolean;
+  member: PTMember | null;
+  onClose: () => void;
+  dark: boolean;
+  isAr: boolean;
+  isRTL: boolean;
+}
+
+const T_HISTORY = {
+  en: {
+    title: "Schedule History",
+    loading: "Loading history...",
+    loadFailed: "Failed to load history",
+    empty: "No schedule history yet.",
+    fromTemplate: "From template",
+    custom: "Custom",
+    cancelled: "Cancelled",
+    assignedBy: "Assigned by",
+    close: "Close",
+  },
+  ar: {
+    title: "سجل الجداول",
+    loading: "جاري تحميل السجل...",
+    loadFailed: "فشل تحميل السجل",
+    empty: "لا يوجد سجل جداول بعد.",
+    fromTemplate: "من قالب",
+    custom: "مخصص",
+    cancelled: "ملغى",
+    assignedBy: "بواسطة",
+    close: "إغلاق",
+  },
+};
+
+// scheduleStatus seen so far: "Current", "Next". Unknown values fall back to
+// the neutral "default" color pair below instead of crashing on a missing key.
+const STATUS_LABELS: Record<string, { en: string; ar: string }> = {
+  Current: { en: "Current", ar: "الحالي" },
+  Next: { en: "Upcoming", ar: "قادم" },
+  Past: { en: "Past", ar: "سابق" },
+  Completed: { en: "Completed", ar: "مكتمل" },
+};
+
+const formatDateOnly = (value: string): string =>
+  typeof value === "string" ? value.slice(0, 10) : String(value);
+
+const MemberHistoryModal: React.FC<MemberHistoryModalProps> = ({
+  visible,
+  member,
+  onClose,
+  dark,
+  isAr,
+  isRTL,
+}) => {
+  const t = isAr ? T_HISTORY.ar : T_HISTORY.en;
+
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<MemberScheduleHistoryItem[]>([]);
+  const [detailsFor, setDetailsFor] = useState<{
+    scheduleId: number;
+    gymId: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!visible || !member) return;
+    (async () => {
+      try {
+        setLoading(true);
+        setHistory([]);
+        // Prefer the member's own gymId when we have it — history has shown
+        // a member's real gym can differ from the GYM_ID constant.
+        const gymId = member.gymId ?? GYM_ID;
+        const items = await fetchMemberScheduleHistory(
+          gymId,
+          member.memberShipId,
+        );
+        setHistory(items);
+      } catch (err: any) {
+        Alert.alert("Error", `${t.loadFailed}: ${err?.message || ""}`);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [visible, member]);
+
+  const c = {
+    modalBg: dark ? "#111111" : "#FFFFFF",
+    border: dark ? "#222222" : "#EEEEEE",
+    text: dark ? "#EEEEEE" : "#333333",
+    sub: dark ? "#888888" : "#666666",
+    card: dark ? "#0A0A0A" : "#F8F9FA",
+    templateBadgeBg: dark ? "#1E293B" : "#E3F2FD",
+    templateBadgeText: dark ? "#93C5FD" : "#1565C0",
+    currentBg: dark ? "#001100" : "#E8F5E9",
+    currentText: dark ? "#66FF88" : "#2E7D32",
+    nextBg: dark ? "#001133" : "#E3F2FD",
+    nextText: dark ? "#66BBFF" : "#1565C0",
+    defaultBg: dark ? "#1A1A1A" : "#EEEEEE",
+    defaultText: dark ? "#AAAAAA" : "#555555",
+    cancelledBg: dark ? "#220000" : "#FFEBEE",
+    cancelledText: dark ? "#FF8888" : "#C62828",
+  };
+
+  const statusColors = (item: MemberScheduleHistoryItem) => {
+    if (item.isCancelled) return { bg: c.cancelledBg, text: c.cancelledText };
+    if (item.scheduleStatus === "Current")
+      return { bg: c.currentBg, text: c.currentText };
+    if (item.scheduleStatus === "Next")
+      return { bg: c.nextBg, text: c.nextText };
+    return { bg: c.defaultBg, text: c.defaultText };
+  };
+
+  const statusLabel = (item: MemberScheduleHistoryItem) => {
+    if (item.isCancelled) return t.cancelled;
+    const known = STATUS_LABELS[item.scheduleStatus];
+    return known ? known[isAr ? "ar" : "en"] : item.scheduleStatus;
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={S_HISTORY.overlay}>
+        <View style={[S_HISTORY.content, { backgroundColor: c.modalBg }]}>
+          <View style={[S_HISTORY.header, { borderBottomColor: c.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[
+                  S_HISTORY.headerTitle,
+                  { color: c.text, textAlign: isRTL ? "right" : "left" },
+                ]}
+              >
+                {t.title}
+              </Text>
+              {!!member && (
+                <Text
+                  style={{
+                    color: c.sub,
+                    fontSize: 13,
+                    textAlign: isRTL ? "right" : "left",
+                  }}
+                >
+                  {member.membershipName}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity onPress={onClose}>
+              <Text style={{ fontSize: 22, color: c.sub }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loading ? (
+            <View style={S_HISTORY.loadingRow}>
+              <ActivityIndicator />
+              <Text style={{ color: c.sub, marginTop: 6 }}>{t.loading}</Text>
+            </View>
+          ) : history.length === 0 ? (
+            <View style={S_HISTORY.loadingRow}>
+              <Text style={{ color: c.sub }}>{t.empty}</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={S_HISTORY.scrollContent}>
+              {[...history]
+                .sort(
+                  (a, b) =>
+                    new Date(b.startDate).getTime() -
+                    new Date(a.startDate).getTime(),
+                )
+                .map((item) => {
+                  const status = statusColors(item);
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      activeOpacity={0.7}
+                      onPress={() =>
+                        setDetailsFor({
+                          scheduleId: item.id,
+                          gymId: item.gymId,
+                        })
+                      }
+                      style={[
+                        S_HISTORY.card,
+                        { backgroundColor: c.card, borderColor: c.border },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          S_HISTORY.cardHeader,
+                          isRTL && { flexDirection: "row-reverse" },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            S_HISTORY.cardTitle,
+                            {
+                              color: c.text,
+                              textAlign: isRTL ? "right" : "left",
+                            },
+                          ]}
+                        >
+                          {isAr ? item.nameAr : item.nameEn}
+                        </Text>
+                        <View
+                          style={[
+                            S_HISTORY.badge,
+                            { backgroundColor: status.bg },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 10,
+                              fontWeight: "700",
+                              color: status.text,
+                            }}
+                          >
+                            {statusLabel(item)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text
+                        style={{
+                          color: c.sub,
+                          fontSize: 13,
+                          marginTop: 4,
+                          textAlign: isRTL ? "right" : "left",
+                        }}
+                      >
+                        {formatDateOnly(item.startDate)} →{" "}
+                        {formatDateOnly(item.endDate)}
+                      </Text>
+
+                      <View
+                        style={[
+                          S_HISTORY.metaRow,
+                          isRTL && { flexDirection: "row-reverse" },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            S_HISTORY.sourceBadge,
+                            { backgroundColor: c.templateBadgeBg },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: "600",
+                              color: c.templateBadgeText,
+                            }}
+                          >
+                            {item.sourceTemplateId != null
+                              ? `${t.fromTemplate}: ${item.sourceTemplateNameEn}`
+                              : t.custom}
+                          </Text>
+                        </View>
+                        <Text style={{ color: c.sub, fontSize: 11 }}>
+                          {t.assignedBy}: {item.assignedByName}
+                        </Text>
+                      </View>
+
+                      {!!item.note && (
+                        <Text
+                          style={{
+                            color: c.sub,
+                            fontSize: 13,
+                            marginTop: 6,
+                            textAlign: isRTL ? "right" : "left",
+                          }}
+                        >
+                          {item.note}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+            </ScrollView>
+          )}
+
+          <View style={[S_HISTORY.actions, { borderTopColor: c.border }]}>
+            <TouchableOpacity
+              style={[
+                S_HISTORY.closeBtn,
+                { backgroundColor: dark ? "#1E293B" : "#F0F0F0" },
+              ]}
+              onPress={onClose}
+            >
+              <Text style={{ color: c.sub, fontWeight: "600" }}>{t.close}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      <ScheduleDetailsModal
+        visible={detailsFor !== null}
+        scheduleId={detailsFor?.scheduleId ?? null}
+        gymId={detailsFor?.gymId ?? null}
+        onClose={() => setDetailsFor(null)}
+        dark={dark}
+        isAr={isAr}
+        isRTL={isRTL}
+      />
+    </Modal>
+  );
+};
+
+const S_HISTORY = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  content: { width: "92%", maxHeight: "85%", borderRadius: 18 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    padding: 18,
+    borderBottomWidth: 1,
+  },
+  headerTitle: { fontSize: 19, fontWeight: "700" },
+  scrollContent: { padding: 18 },
+  loadingRow: { alignItems: "center", paddingVertical: 40 },
+  card: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12 },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  cardTitle: { fontSize: 15, fontWeight: "700", flex: 1 },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  sourceBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  actions: { padding: 16, borderTopWidth: 1 },
+  closeBtn: { padding: 14, borderRadius: 10, alignItems: "center" },
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// ScheduleDetailsModal — details for one history entry, including a
+// day-by-day breakdown when the (unconfirmed) `days` field is present.
+// Opened by tapping a card inside MemberHistoryModal.
+// ═══════════════════════════════════════════════════════════════════════
+
+interface ScheduleDetailsModalProps {
+  visible: boolean;
+  scheduleId: number | null;
+  gymId: number | null;
+  dark: boolean;
+  isAr: boolean;
+  isRTL: boolean;
+  onClose: () => void;
+}
+
+const T_SCHED_DETAILS = {
+  en: {
+    title: "Schedule Details",
+    loading: "Loading schedule...",
+    loadFailed: "Failed to load schedule",
+    restDay: "Rest day",
+    noExercises: "No exercises",
+    noBreakdown: "No day-by-day breakdown available for this schedule.",
+    fromTemplate: "From template",
+    custom: "Custom",
+    assignedBy: "Assigned by",
+    cancelled: "Cancelled",
+    close: "Close",
+  },
+  ar: {
+    title: "تفاصيل الجدول",
+    loading: "جاري تحميل الجدول...",
+    loadFailed: "فشل تحميل الجدول",
+    restDay: "يوم راحة",
+    noExercises: "لا توجد تمارين",
+    noBreakdown: "لا يتوفر تفصيل الأيام لهذا الجدول.",
+    fromTemplate: "من قالب",
+    custom: "مخصص",
+    assignedBy: "بواسطة",
+    cancelled: "ملغى",
+    close: "إغلاق",
+  },
+};
+
+const ScheduleDetailsModal: React.FC<ScheduleDetailsModalProps> = ({
+  visible,
+  scheduleId,
+  gymId,
+  dark,
+  isAr,
+  isRTL,
+  onClose,
+}) => {
+  const t = isAr ? T_SCHED_DETAILS.ar : T_SCHED_DETAILS.en;
+  const dayNames = isAr ? DAY_NAMES_AR : DAY_NAMES_EN;
+
+  const [loading, setLoading] = useState(false);
+  const [schedule, setSchedule] = useState<MemberScheduleDetails | null>(null);
+  const [muscleLibrary, setMuscleLibrary] = useState<MuscleItem[]>([]);
+
+  useEffect(() => {
+    if (!visible || scheduleId == null || gymId == null) return;
+    (async () => {
+      try {
+        setLoading(true);
+        setSchedule(null);
+        const [sched, muscles] = await Promise.all([
+          fetchMemberScheduleById(gymId, scheduleId),
+          fetchWorkoutLibrary(gymId),
+        ]);
+        setSchedule(sched);
+        setMuscleLibrary(muscles);
+      } catch (err: any) {
+        Alert.alert("Error", `${t.loadFailed}: ${err?.message || ""}`);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [visible, scheduleId, gymId]);
+
+  const muscleName = (id: number) =>
+    muscleLibrary.find((m) => m.id === id)?.[isAr ? "nameAr" : "nameEn"] ||
+    `#${id}`;
+
+  const exerciseName = (muscleId: number, exId: number) =>
+    (muscleLibrary.find((m) => m.id === muscleId)?.exercises || []).find(
+      (e) => e.id === exId,
+    )?.[isAr ? "nameAr" : "nameEn"] || `#${exId}`;
+
+  const c = {
+    modalBg: dark ? "#111111" : "#FFFFFF",
+    border: dark ? "#222222" : "#EEEEEE",
+    text: dark ? "#EEEEEE" : "#333333",
+    sub: dark ? "#888888" : "#666666",
+    card: dark ? "#0A0A0A" : "#F8F9FA",
+    chipBg: dark ? "#1E293B" : "#E3F2FD",
+    chipText: dark ? "#93C5FD" : "#1565C0",
+    chipRest: dark ? "#221100" : "#FFF3CD",
+    chipRestText: dark ? "#FFCC44" : "#856404",
+    cancelledBg: dark ? "#220000" : "#FFEBEE",
+    cancelledText: dark ? "#FF8888" : "#C62828",
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={S_SCHED_DETAILS.overlay}>
+        <View style={[S_SCHED_DETAILS.content, { backgroundColor: c.modalBg }]}>
+          <View
+            style={[S_SCHED_DETAILS.header, { borderBottomColor: c.border }]}
+          >
+            <Text
+              style={[
+                S_SCHED_DETAILS.headerTitle,
+                { color: c.text, textAlign: isRTL ? "right" : "left" },
+              ]}
+            >
+              {schedule ? (isAr ? schedule.nameAr : schedule.nameEn) : t.title}
+            </Text>
+            <TouchableOpacity onPress={onClose}>
+              <Text style={{ fontSize: 22, color: c.sub }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loading ? (
+            <View style={S_SCHED_DETAILS.loadingRow}>
+              <ActivityIndicator />
+              <Text style={{ color: c.sub, marginTop: 6 }}>{t.loading}</Text>
+            </View>
+          ) : !schedule ? (
+            <View style={S_SCHED_DETAILS.loadingRow}>
+              <Text style={{ color: c.sub }}>{t.loadFailed}</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={S_SCHED_DETAILS.scrollContent}>
+              <View
+                style={[
+                  S_SCHED_DETAILS.metaCard,
+                  { backgroundColor: c.card, borderColor: c.border },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: c.sub,
+                    fontSize: 13,
+                    textAlign: isRTL ? "right" : "left",
+                  }}
+                >
+                  {formatDateOnly(schedule.startDate)} →{" "}
+                  {formatDateOnly(schedule.endDate)}
+                </Text>
+                <View
+                  style={[
+                    S_SCHED_DETAILS.metaRow,
+                    isRTL && { flexDirection: "row-reverse" },
+                  ]}
+                >
+                  <View
+                    style={[
+                      S_SCHED_DETAILS.sourceBadge,
+                      { backgroundColor: c.chipBg },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: "600",
+                        color: c.chipText,
+                      }}
+                    >
+                      {schedule.sourceTemplateId != null
+                        ? `${t.fromTemplate}: ${schedule.sourceTemplateNameEn}`
+                        : t.custom}
+                    </Text>
+                  </View>
+                  {schedule.isCancelled && (
+                    <View
+                      style={[
+                        S_SCHED_DETAILS.sourceBadge,
+                        { backgroundColor: c.cancelledBg },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "600",
+                          color: c.cancelledText,
+                        }}
+                      >
+                        {t.cancelled}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={{ color: c.sub, fontSize: 11 }}>
+                    {t.assignedBy}: {schedule.assignedByName}
+                  </Text>
+                </View>
+                {!!schedule.note && (
+                  <Text
+                    style={{
+                      color: c.sub,
+                      fontSize: 13,
+                      marginTop: 8,
+                      textAlign: isRTL ? "right" : "left",
+                    }}
+                  >
+                    {schedule.note}
+                  </Text>
+                )}
+              </View>
+
+              {!schedule.days || schedule.days.length === 0 ? (
+                <Text
+                  style={{
+                    color: c.sub,
+                    fontStyle: "italic",
+                    textAlign: isRTL ? "right" : "left",
+                  }}
+                >
+                  {t.noBreakdown}
+                </Text>
+              ) : (
+                [...schedule.days]
+                  .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+                  .map((day) => (
+                    <View
+                      key={day.dayOfWeek}
+                      style={[
+                        S_SCHED_DETAILS.dayCard,
+                        { backgroundColor: c.card, borderColor: c.border },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          S_SCHED_DETAILS.dayHeader,
+                          isRTL && { flexDirection: "row-reverse" },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            S_SCHED_DETAILS.dayTitle,
+                            {
+                              color: c.text,
+                              textAlign: isRTL ? "right" : "left",
+                            },
+                          ]}
+                        >
+                          {dayNames[day.dayOfWeek]}
+                        </Text>
+                        {day.isRestDay && (
+                          <View
+                            style={[
+                              S_SCHED_DETAILS.restPill,
+                              { backgroundColor: c.chipRest },
+                            ]}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontWeight: "700",
+                                color: c.chipRestText,
+                              }}
+                            >
+                              {t.restDay}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {!day.isRestDay && (
+                        <>
+                          {!!day.note && (
+                            <Text
+                              style={{
+                                color: c.sub,
+                                fontSize: 13,
+                                marginBottom: 8,
+                                textAlign: isRTL ? "right" : "left",
+                              }}
+                            >
+                              {day.note}
+                            </Text>
+                          )}
+                          {day.muscles.length === 0 ? (
+                            <Text style={{ color: c.sub, fontStyle: "italic" }}>
+                              {t.noExercises}
+                            </Text>
+                          ) : (
+                            day.muscles.map((block, i) => (
+                              <View key={i} style={{ marginBottom: 8 }}>
+                                <Text
+                                  style={{
+                                    color: c.text,
+                                    fontWeight: "600",
+                                    marginBottom: 6,
+                                    textAlign: isRTL ? "right" : "left",
+                                  }}
+                                >
+                                  {muscleName(block.muscleId)}
+                                </Text>
+                                <View
+                                  style={[
+                                    S_SCHED_DETAILS.chipsWrap,
+                                    isRTL && { flexDirection: "row-reverse" },
+                                  ]}
+                                >
+                                  {block.exercises.map((ex) => (
+                                    <View
+                                      key={ex.exerciseId}
+                                      style={[
+                                        S_SCHED_DETAILS.chip,
+                                        { backgroundColor: c.chipBg },
+                                      ]}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 12,
+                                          fontWeight: "600",
+                                          color: c.chipText,
+                                        }}
+                                      >
+                                        {exerciseName(
+                                          block.muscleId,
+                                          ex.exerciseId,
+                                        )}
+                                      </Text>
+                                    </View>
+                                  ))}
+                                </View>
+                              </View>
+                            ))
+                          )}
+                        </>
+                      )}
+                    </View>
+                  ))
+              )}
+            </ScrollView>
+          )}
+
+          <View style={[S_SCHED_DETAILS.actions, { borderTopColor: c.border }]}>
+            <TouchableOpacity
+              style={[
+                S_SCHED_DETAILS.closeBtn,
+                { backgroundColor: dark ? "#1E293B" : "#F0F0F0" },
+              ]}
+              onPress={onClose}
+            >
+              <Text style={{ color: c.sub, fontWeight: "600" }}>{t.close}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const S_SCHED_DETAILS = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  content: { width: "92%", maxHeight: "88%", borderRadius: 18 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 18,
+    borderBottomWidth: 1,
+  },
+  headerTitle: { fontSize: 19, fontWeight: "700", flex: 1 },
+  scrollContent: { padding: 18 },
+  loadingRow: { alignItems: "center", paddingVertical: 40 },
+  metaCard: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 16 },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  sourceBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  dayCard: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12 },
+  dayHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  dayTitle: { fontSize: 15, fontWeight: "700" },
+  restPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14 },
+  actions: { padding: 16, borderTopWidth: 1 },
+  closeBtn: { padding: 14, borderRadius: 10, alignItems: "center" },
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// AssignScheduleModal
+// ═══════════════════════════════════════════════════════════════════════
+
+interface AssignScheduleModalProps {
+  visible: boolean;
+  member: PTMember | null;
+  onClose: () => void;
+  onCreated: () => void;
+  dark: boolean;
+  isAr: boolean;
+  isRTL: boolean;
+}
+
+type ScheduleType = "template" | "custom";
+
+const T_ASSIGN = {
+  en: {
+    title: "Assign Schedule",
+    forMember: "For",
+    fromTemplate: "From Template",
+    custom: "Custom",
+    selectTemplate: "Select Template",
+    tapToSelectTemplate: "Tap to select a template",
+    noTemplates: "No templates yet — create one first, or use Custom.",
+    startDate: "Start Date",
+    endDate: "End Date",
+    note: "Note",
+    replaceOverlap: "Replace overlapping schedule",
+    nameEn: "Schedule name (English)",
+    nameAr: "Schedule name (Arabic)",
+    save: "Save Schedule",
+    cancel: "Cancel",
+    loadingTemplates: "Loading templates...",
+    loadingLibrary: "Loading exercises...",
+    validationTitle: "Missing exercises",
+    validationBody: (day: string) =>
+      `${day} is set as a training day but has no exercises. Add at least one exercise or switch it to a rest day.`,
+    templateRequired: "Please select a template.",
+    dateRangeInvalid: "End date must be after the start date.",
+    nameRequired: "Please enter the schedule name in English and Arabic.",
+    saved: "Schedule assigned successfully!",
+    saveFailed: "Failed to save schedule",
+  },
+  ar: {
+    title: "تعيين جدول",
+    forMember: "للعضو",
+    fromTemplate: "من قالب",
+    custom: "مخصص",
+    selectTemplate: "اختر القالب",
+    tapToSelectTemplate: "اضغط لاختيار قالب",
+    noTemplates: "لا توجد قوالب بعد — أنشئ واحداً أولاً أو استخدم المخصص.",
+    startDate: "تاريخ البدء",
+    endDate: "تاريخ الانتهاء",
+    note: "ملاحظة",
+    replaceOverlap: "استبدال الجدول المتداخل",
+    nameEn: "اسم الجدول (إنجليزي)",
+    nameAr: "اسم الجدول (عربي)",
+    save: "حفظ الجدول",
+    cancel: "إلغاء",
+    loadingTemplates: "جاري تحميل القوالب...",
+    loadingLibrary: "جاري تحميل التمارين...",
+    validationTitle: "تمارين ناقصة",
+    validationBody: (day: string) =>
+      `${day} محدد كيوم تدريب لكن بدون تمارين. أضف تمريناً واحداً على الأقل أو حوّله ليوم راحة.`,
+    templateRequired: "يرجى اختيار قالب.",
+    dateRangeInvalid: "يجب أن يكون تاريخ الانتهاء بعد تاريخ البدء.",
+    nameRequired: "يرجى إدخال اسم الجدول بالإنجليزية والعربية.",
+    saved: "تم تعيين الجدول بنجاح!",
+    saveFailed: "فشل حفظ الجدول",
+  },
+};
+
+const AssignScheduleModal: React.FC<AssignScheduleModalProps> = ({
+  visible,
+  member,
+  onClose,
+  onCreated,
+  dark,
+  isAr,
+  isRTL,
+}) => {
+  const t = isAr ? T_ASSIGN.ar : T_ASSIGN.en;
+
+  const [scheduleType, setScheduleType] = useState<ScheduleType>("template");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(
+    null,
+  );
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+
+  const [muscleLibrary, setMuscleLibrary] = useState<MuscleItem[]>([]);
+  const [customDays, setCustomDays] = useState(buildEmptyDays());
+  const [customNameEn, setCustomNameEn] = useState("");
+  const [customNameAr, setCustomNameAr] = useState("");
+
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(() => addOneMonth(new Date()));
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+  const [note, setNote] = useState("");
+  const [replaceOverlap, setReplaceOverlap] = useState(false);
+
+  // Picking a start date defaults the end date to exactly one calendar
+  // month later (30/9 → 30/10). The end date field is still separately
+  // editable afterward if a different range is needed.
+  const handleStartDateChange = (d: Date) => {
+    setStartDate(d);
+    setEndDate(addOneMonth(d));
+  };
+
+  useEffect(() => {
+    if (!visible) return;
+    (async () => {
+      try {
+        setLoading(true);
+        // Prefer the member's own gymId when we have it — confirmed via the
+        // history endpoint that a member's real gym can differ from GYM_ID.
+        const gymId = member?.gymId ?? GYM_ID;
+        const [tpls, muscles] = await Promise.all([
+          fetchTemplates(gymId),
+          fetchWorkoutLibrary(gymId),
+        ]);
+        setTemplates(tpls);
+        setMuscleLibrary(muscles);
+      } catch (err: any) {
+        Alert.alert("Error", err?.message || "Failed to load data");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [visible, member]);
+
+  const resetForm = () => {
+    setScheduleType("template");
+    setSelectedTemplateId(null);
+    setCustomDays(buildEmptyDays());
+    setCustomNameEn("");
+    setCustomNameAr("");
+    const now = new Date();
+    setStartDate(now);
+    setEndDate(addOneMonth(now));
+    setNote("");
+    setReplaceOverlap(false);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  const handleSave = async () => {
+    if (!member) return;
+    console.log("[AssignSchedule] memberShipId:", member.memberShipId);
+    if (endDate.getTime() <= startDate.getTime()) {
+      Alert.alert("Error", t.dateRangeInvalid);
+      return;
+    }
+    try {
+      setSaving(true);
+      // Same rule as above: trust the member's own gymId if we have it.
+      const gymId = member.gymId ?? GYM_ID;
+      console.log(
+        "[AssignSchedule] submitting with memberShipId:",
+        member.memberShipId,
+        "gymId:",
+        gymId,
+        "scheduleType:",
+        scheduleType,
+      );
+
+      if (scheduleType === "template") {
+        if (!selectedTemplateId) {
+          Alert.alert("Error", t.templateRequired);
+          setSaving(false);
+          return;
+        }
+        await createScheduleFromTemplate(gymId, {
+          memberShipId: member.memberShipId,
+          templateId: selectedTemplateId,
+          startDate: toApiDate(startDate),
+          endDate: toApiDate(endDate),
+          note,
+          replaceOverlappingSchedule: replaceOverlap,
+        });
+      } else {
+        if (!customNameEn.trim() || !customNameAr.trim()) {
+          Alert.alert("Error", t.nameRequired);
+          setSaving(false);
+          return;
+        }
+        const { valid, invalidDayOfWeek } = validateDays(customDays);
+        if (!valid && invalidDayOfWeek !== undefined) {
+          const dayName = (isAr ? DAY_NAMES_AR : DAY_NAMES_EN)[
+            invalidDayOfWeek
+          ];
+          Alert.alert(t.validationTitle, t.validationBody(dayName));
+          setSaving(false);
+          return;
+        }
+        await createCustomSchedule(gymId, {
+          memberShipId: member.memberShipId,
+          nameEn: customNameEn.trim(),
+          nameAr: customNameAr.trim(),
+          note,
+          startDate: toApiDate(startDate),
+          endDate: toApiDate(endDate),
+          replaceOverlappingSchedule: replaceOverlap,
+          days: sanitizeDaysForSubmit(customDays),
+        });
+      }
+
+      Alert.alert("Success", t.saved);
+      resetForm();
+      onCreated();
+      onClose();
+    } catch (err: any) {
+      Alert.alert("Error", `${t.saveFailed}: ${err?.message || ""}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const c = {
+    modalBg: dark ? "#111111" : "#FFFFFF",
+    border: dark ? "#222222" : "#EEEEEE",
+    text: dark ? "#EEEEEE" : "#333333",
+    sub: dark ? "#888888" : "#666666",
+    inputBg: dark ? "#000000" : "#F9F9F9",
+    tabInactive: dark ? "#0A0A0A" : "#F0F0F0",
+  };
+
+  const templateItems: SelectItem[] = templates.map((tpl) => ({
+    id: tpl.id ?? 0,
+    label: isAr ? tpl.nameAr : tpl.nameEn,
+    sublabel: tpl.note,
+  }));
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={handleClose}
+    >
+      <View style={S_ASSIGN.overlay}>
+        <View style={[S_ASSIGN.content, { backgroundColor: c.modalBg }]}>
+          <View style={[S_ASSIGN.header, { borderBottomColor: c.border }]}>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[
+                  S_ASSIGN.headerTitle,
+                  { color: c.text, textAlign: isRTL ? "right" : "left" },
+                ]}
+              >
+                {t.title}
+              </Text>
+              {!!member && (
+                <Text
+                  style={{
+                    color: c.sub,
+                    fontSize: 13,
+                    textAlign: isRTL ? "right" : "left",
+                  }}
+                >
+                  {t.forMember}: {member.membershipName}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity onPress={handleClose}>
+              <Text style={{ fontSize: 22, color: c.sub }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={S_ASSIGN.tabRow}>
+            {(["template", "custom"] as ScheduleType[]).map((type) => (
+              <TouchableOpacity
+                key={type}
+                style={[
+                  S_ASSIGN.tabBtn,
+                  {
+                    backgroundColor:
+                      scheduleType === type ? "#007AFF" : c.tabInactive,
+                  },
+                ]}
+                onPress={() => setScheduleType(type)}
+              >
+                <Text
+                  style={{
+                    color: scheduleType === type ? "#fff" : c.sub,
+                    fontWeight: "700",
+                  }}
+                >
+                  {type === "template" ? t.fromTemplate : t.custom}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {loading ? (
+            <View style={S_ASSIGN.loadingRow}>
+              <ActivityIndicator />
+              <Text style={{ color: c.sub, marginTop: 6 }}>
+                {scheduleType === "template"
+                  ? t.loadingTemplates
+                  : t.loadingLibrary}
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={S_ASSIGN.scrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {scheduleType === "template" ? (
+                <View style={S_ASSIGN.field}>
+                  <Text
+                    style={[
+                      S_ASSIGN.label,
+                      { color: c.text, textAlign: isRTL ? "right" : "left" },
+                    ]}
+                  >
+                    {t.selectTemplate}
+                  </Text>
+                  {templates.length === 0 ? (
+                    <Text style={{ color: c.sub, fontStyle: "italic" }}>
+                      {t.noTemplates}
+                    </Text>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        S_ASSIGN.pickerBtn,
+                        { borderColor: c.border, backgroundColor: c.inputBg },
+                      ]}
+                      onPress={() => setShowTemplatePicker(true)}
+                    >
+                      <Text
+                        style={{
+                          color: selectedTemplateId ? c.text : c.sub,
+                          textAlign: isRTL ? "right" : "left",
+                        }}
+                      >
+                        {selectedTemplateId
+                          ? isAr
+                            ? templates.find(
+                                (tp) => tp.id === selectedTemplateId,
+                              )?.nameAr
+                            : templates.find(
+                                (tp) => tp.id === selectedTemplateId,
+                              )?.nameEn
+                          : t.tapToSelectTemplate}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <>
+                  <TextInput
+                    value={customNameEn}
+                    onChangeText={setCustomNameEn}
+                    placeholder={t.nameEn}
+                    placeholderTextColor={c.sub}
+                    style={[
+                      S_ASSIGN.input,
+                      {
+                        backgroundColor: c.inputBg,
+                        borderColor: c.border,
+                        color: c.text,
+                        textAlign: isRTL ? "right" : "left",
+                      },
+                    ]}
+                  />
+                  <TextInput
+                    value={customNameAr}
+                    onChangeText={setCustomNameAr}
+                    placeholder={t.nameAr}
+                    placeholderTextColor={c.sub}
+                    style={[
+                      S_ASSIGN.input,
+                      {
+                        backgroundColor: c.inputBg,
+                        borderColor: c.border,
+                        color: c.text,
+                        textAlign: isRTL ? "right" : "left",
+                      },
+                    ]}
+                  />
+                </>
+              )}
+
+              <View
+                style={[
+                  S_ASSIGN.dateRow,
+                  isRTL && { flexDirection: "row-reverse" },
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[S_ASSIGN.label, { color: c.text }]}>
+                    {t.startDate}
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      S_ASSIGN.pickerBtn,
+                      { borderColor: c.border, backgroundColor: c.inputBg },
+                    ]}
+                    onPress={() =>
+                      Platform.OS === "android"
+                        ? openAndroidDatePicker(
+                            startDate,
+                            handleStartDateChange,
+                          )
+                        : setShowStartPicker(true)
+                    }
+                  >
+                    <Text style={{ color: c.text }}>
+                      {toApiDate(startDate)}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[S_ASSIGN.label, { color: c.text }]}>
+                    {t.endDate}
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      S_ASSIGN.pickerBtn,
+                      { borderColor: c.border, backgroundColor: c.inputBg },
+                    ]}
+                    onPress={() =>
+                      Platform.OS === "android"
+                        ? openAndroidDatePicker(endDate, setEndDate)
+                        : setShowEndPicker(true)
+                    }
+                  >
+                    <Text style={{ color: c.text }}>{toApiDate(endDate)}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* iOS only: Android uses the imperative dialog above, since the
+                  native date dialog does not nest safely inside this Modal. */}
+              {Platform.OS === "ios" && showStartPicker && (
+                <DateTimePicker
+                  value={startDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={(_, selected) => {
+                    setShowStartPicker(false);
+                    if (selected) handleStartDateChange(selected);
+                  }}
+                />
+              )}
+              {Platform.OS === "ios" && showEndPicker && (
+                <DateTimePicker
+                  value={endDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={(_, selected) => {
+                    setShowEndPicker(false);
+                    if (selected) setEndDate(selected);
+                  }}
+                />
+              )}
+
+              <TextInput
+                value={note}
+                onChangeText={setNote}
+                placeholder={t.note}
+                placeholderTextColor={c.sub}
+                style={[
+                  S_ASSIGN.input,
+                  {
+                    backgroundColor: c.inputBg,
+                    borderColor: c.border,
+                    color: c.text,
+                    textAlign: isRTL ? "right" : "left",
+                    marginTop: 12,
+                  },
+                ]}
+              />
+
+              {/* <View
+                style={[
+                  S_ASSIGN.switchRow,
+                  isRTL && { flexDirection: "row-reverse" },
+                ]}
+              >
+                <Text style={{ color: c.text, flex: 1 }}>{t.replaceOverlap}</Text>
+                <Switch value={replaceOverlap} onValueChange={setReplaceOverlap} />
+              </View> */}
+
+              {scheduleType === "custom" && (
+                <View style={{ marginTop: 8 }}>
+                  <DaySchedulePlanner
+                    days={customDays}
+                    onChange={setCustomDays}
+                    muscleLibrary={muscleLibrary}
+                    dark={dark}
+                    isAr={isAr}
+                    isRTL={isRTL}
+                  />
+                </View>
+              )}
+            </ScrollView>
+          )}
+
+          <View style={[S_ASSIGN.actions, { borderTopColor: c.border }]}>
+            <TouchableOpacity
+              style={[
+                S_ASSIGN.btn,
+                { backgroundColor: dark ? "#1E293B" : "#F0F0F0" },
+              ]}
+              onPress={handleClose}
+            >
+              <Text style={{ color: c.sub, fontWeight: "600" }}>
+                {t.cancel}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                S_ASSIGN.btn,
+                S_ASSIGN.saveBtn,
+                saving && S_ASSIGN.disabled,
+              ]}
+              onPress={handleSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={S_ASSIGN.saveBtnText}>{t.save}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      <SelectModal
+        visible={showTemplatePicker}
+        title={t.selectTemplate}
+        items={templateItems}
+        selectedId={selectedTemplateId}
+        onSelect={(item) => setSelectedTemplateId(Number(item.id))}
+        onClose={() => setShowTemplatePicker(false)}
+        dark={dark}
+        isRTL={isRTL}
+      />
+    </Modal>
+  );
+};
+
+const S_ASSIGN = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  content: { width: "92%", maxHeight: "90%", borderRadius: 18 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    padding: 18,
+    borderBottomWidth: 1,
+  },
+  headerTitle: { fontSize: 19, fontWeight: "700" },
+  tabRow: { flexDirection: "row", gap: 10, padding: 16, paddingBottom: 4 },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  loadingRow: { alignItems: "center", paddingVertical: 40 },
+  scrollContent: { padding: 18, paddingTop: 6 },
+  field: { marginBottom: 14 },
+  label: { fontSize: 14, fontWeight: "600", marginBottom: 6 },
+  pickerBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    marginBottom: 12,
+  },
+  dateRow: { flexDirection: "row", gap: 12, marginBottom: 4 },
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 12,
+  },
+  actions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 16,
+    borderTopWidth: 1,
+    gap: 10,
+  },
+  btn: { flex: 1, padding: 14, borderRadius: 10, alignItems: "center" },
+  saveBtn: { backgroundColor: "#4CAF50" },
+  saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  disabled: { opacity: 0.6 },
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// WorkoutPlansScreen — main screen (default export)
+// ═══════════════════════════════════════════════════════════════════════
+
+type Tab = "templates" | "members";
+
+const T_SCREEN = {
+  en: {
+    title: "Workout Plans",
+    subtitle: "Templates & member schedules",
+    templates: "Templates",
+    members: "Members",
+    noTemplates: "No templates yet. Tap + to create one.",
+    noMembers: "No members found.",
+    assign: "Assign Schedule",
+    history: "History",
+    loading: "Loading...",
+  },
+  ar: {
+    title: "خطط التمارين",
+    subtitle: "القوالب وجداول الأعضاء",
+    templates: "القوالب",
+    members: "الأعضاء",
+    noTemplates: "لا توجد قوالب بعد. اضغط + لإنشاء واحد.",
+    noMembers: "لا يوجد أعضاء.",
+    assign: "تعيين جدول",
+    history: "السجل",
+    loading: "جاري التحميل...",
+  },
+};
+
+const WorkoutPlansScreen = () => {
   const { getDirection, isArabic } = useI18n();
   const { isDarkMode } = useAppContext() as any;
   const dark = isDarkMode ?? false;
-
   const isAr = isArabic();
   const isRTL =
     (getDirection() as any)?.flexDirection === "row-reverse" ||
     (getDirection() as any)?.direction === "rtl";
-  const t = isAr ? translations.ar : translations.en;
+  const t = isAr ? T_SCREEN.ar : T_SCREEN.en;
+  const dayNames = isAr ? DAY_NAMES_AR : DAY_NAMES_EN;
 
-  // ── Dark mode tokens ──────────────────────────────────────────────────────
-  const d = {
-    bg: dark ? "#000000" : "#F5F5F5",
-    surface: dark ? "#111111" : "#FFFFFF",
-    surface2: dark ? "#000000" : "#F8F9FA",
-    surface3: dark ? "#111111" : "#F9F9F9",
-    border: dark ? "#222222" : "#EEEEEE",
-    border2: dark ? "#222222" : "#E0E0E0",
-    border3: dark ? "#333333" : "#CCCCCC",
-    text: dark ? "#EEEEEE" : "#333333",
-    textSub: dark ? "#888888" : "#666666",
-    textMuted: dark ? "#555555" : "#999999",
-    inputBg: dark ? "#000000" : "#F9F9F9",
-    modalBg: dark ? "#111111" : "#FFFFFF",
-    draftBg: dark ? "#111111" : "#F8F9FA",
-    draftBorder: dark ? "#222222" : "#E9ECEF",
-    editingBg: dark ? "#001133" : "#E8F4FD",
-    editingBorder: dark ? "#003399" : "#2196F3",
-    editingIndicatorBg: dark ? "#000D1A" : "#D1ECF1",
-    editingIndicatorBorder: dark ? "#003344" : "#BEE5EB",
-    editingIndicatorText: dark ? "#66BBFF" : "#0C5460",
-    summaryBg: dark ? "#000000" : "#F8F9FA",
-    updatePreviewBg: dark ? "#001100" : "#E8F5E9",
-    updatePreviewBorder: dark ? "#003300" : "#C8E6C9",
-    updatePreviewTitle: dark ? "#66FF88" : "#2E7D32",
-    previewItemBg: dark ? "#111111" : "#FFFFFF",
-    previewValue: dark ? "#66FF88" : "#2E7D32",
-    dayBtnBg: dark ? "#111111" : "#F0F0F0",
-    dayBtnText: dark ? "#888888" : "#666666",
-    dropdownBg: dark ? "#111111" : "#FFFFFF",
-    dropdownBorder: dark ? "#222222" : "#F0F0F0",
-    disabledBg: dark ? "#111111" : "#F5F5F5",
-    cancelEditBg: dark ? "#221100" : "#FFF3CD",
-    cancelEditBorder: dark ? "#664400" : "#FFC107",
-    cancelEditText: dark ? "#FFCC44" : "#856404",
-    clearDraftBg: dark ? "#220000" : "#FFEBEE",
-    clearDraftText: dark ? "#FF8888" : "#C62828",
-    addMoreBg: dark ? "#111111" : "#FFFFFF",
-    modalHeaderBorder: dark ? "#222222" : "#EEEEEE",
-    modalActionsBorder: dark ? "#222222" : "#EEEEEE",
-  };
-
-  const rowStyle = isRTL ? S.rowRTL : S.row;
-  const txtAlign = isRTL ? S.textRight : S.textLeft;
-
-  const [exerciseSchedules, setExerciseSchedules] = useState([]);
+  const [tab, setTab] = useState<Tab>("templates");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addingExercise, setAddingExercise] = useState(false);
-  const [rounds, setRounds] = useState("");
-  const [oneRoundCount, setOneRoundCount] = useState("");
-  const [selectedMuscleId, setSelectedMuscleId] = useState("");
-  const [selectedExerciseId, setSelectedExerciseId] = useState("");
-  const [selectedDayId, setSelectedDayId] = useState("");
-  const [fromDate, setFromDate] = useState(new Date());
-  const [toDate, setToDate] = useState(new Date());
-  const [users, setUsers] = useState([]);
-  const [selectedUserId, setSelectedUserId] = useState("");
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
-  const [muscles, setMuscles] = useState([]);
-  const [exercises, setExercises] = useState([]);
-  const [filteredExercises, setFilteredExercises] = useState([]);
-  const [daysOptions, setDaysOptions] = useState<
-    Array<{ id: any; name: string }>
-  >([]);
-  const [error, setError] = useState(null);
-  const [editingExercise, setEditingExercise] = useState(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editRounds, setEditRounds] = useState("");
-  const [editReps, setEditReps] = useState("");
-  const [editFromDate, setEditFromDate] = useState(new Date());
-  const [editToDate, setEditToDate] = useState(new Date());
-  const [editSelectedMuscleId, setEditSelectedMuscleId] = useState("");
-  const [editSelectedExerciseId, setEditSelectedExerciseId] = useState("");
-  const [editSelectedDayId, setEditSelectedDayId] = useState("");
-  const [showDayDropdown, setShowDayDropdown] = useState(false);
-  const [daysDraft, setDaysDraft] = useState([]);
-  const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
-  const [showExerciseDropdown, setShowExerciseDropdown] = useState(false);
-  const [editingDraftId, setEditingDraftId] = useState(null);
-  const [draftPreview, setDraftPreview] = useState([]);
-  const [expandedClients, setExpandedClients] = useState({});
 
-  const toggleClient = (memberId) =>
-    setExpandedClients((prev) => ({ ...prev, [memberId]: !prev[memberId] }));
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [members, setMembers] = useState<PTMember[]>([]);
 
-  useEffect(() => {
-    const fetchDays = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(
-          "https://gawifit.com/api/Days/getallDays",
-          { method: "GET", headers: { accept: "text/plain" } },
-        );
-        if (!response.ok)
-          throw new Error(`HTTP error! status: ${response.status}`);
-        const data = await response.json();
-        let transformed = [];
-        if (data && Array.isArray(data.result)) {
-          transformed = data.result.map((item) => ({
-            id: item.id.toString(),
-            name: item.dayName,
-            dayNumber: item.id,
-          }));
-        } else if (Array.isArray(data)) {
-          transformed = data.map((item) => ({
-            id: (item.id || item.dayId || item.dayID).toString(),
-            name: item.dayName || item.name || `Day ${item.id}`,
-            dayNumber: item.id || item.dayId || 1,
-          }));
-        }
-        if (transformed.length === 0) throw new Error("No valid data found");
-        transformed.sort((a, b) => a.dayNumber - b.dayNumber);
-        setDaysOptions(transformed);
-        if (transformed.length > 0 && !selectedDayId)
-          setSelectedDayId(transformed[0].id);
-        setError(null);
-      } catch (err) {
-        setError(err.message || "Failed to load training days");
-        setDaysOptions([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchDays();
-  }, [selectedDayId]);
-
-  const getDayNameById = useCallback(
-    (dayId) => {
-      if (!dayId && dayId !== 0) return "Not specified";
-      const day = daysOptions.find((d) => d.id.toString() === dayId.toString());
-      return day ? day.name : `Day ${dayId}`;
-    },
-    [daysOptions],
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
+  const [assignTarget, setAssignTarget] = useState<PTMember | null>(null);
+  const [detailsTemplateId, setDetailsTemplateId] = useState<number | null>(
+    null,
   );
+  const [historyTarget, setHistoryTarget] = useState<PTMember | null>(null);
 
-  useEffect(() => {
-    const preview = [];
-    daysDraft.forEach((day) => {
-      const dayName = getDayNameById(day.dayId);
-      day.muscles.forEach((muscle) => {
-        const muscleName =
-          muscles.find((m) => m.id === muscle.muscleId)?.nameEn ||
-          `Muscle ${muscle.muscleId}`;
-        muscle.exercises.forEach((exercise) => {
-          const ex = exercises.find((e) => e.id === exercise.exerciseId);
-          preview.push({
-            id: `${day.dayId}-${muscle.muscleId}-${exercise.exerciseId}-${Date.now()}`,
-            dayId: day.dayId,
-            dayName,
-            muscleId: muscle.muscleId,
-            muscleName,
-            exerciseId: exercise.exerciseId,
-            exerciseName: ex?.nameEn || `Exercise ${exercise.exerciseId}`,
-            rounds: exercise.rounds,
-            oneRoundCount: exercise.oneRoundCount,
-          });
-        });
-      });
-    });
-    setDraftPreview(preview);
-  }, [daysDraft, muscles, exercises, getDayNameById]);
-
-  const getCleanToken = async () => {
-    const token = await handleGetToken();
-    if (!token) return null;
-    return token.startsWith("Bearer ") ? token.replace("Bearer ", "") : token;
-  };
-
-  const fetchPTUsers = async () => {
+  const loadData = useCallback(async () => {
     try {
-      const token = await getCleanToken();
+      const gymId = GYM_ID;
       const ptUserId = await AsyncStorage.getItem("MemberId");
-      if (!token || !ptUserId) return;
-      const res = await fetch(
-        `https://gawifit.com/api/PT/GetAllUserForPT?userId=${ptUserId}`,
-        {
-          method: "GET",
-          headers: {
-            accept: "text/plain",
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setUsers(data);
-          if (data.length > 0)
-            setSelectedUserId(data[0].memberShipId.toString());
-        }
-      }
+      const [tpls, mems] = await Promise.all([
+        fetchTemplates(gymId),
+        ptUserId ? fetchPTMembers(ptUserId) : Promise.resolve([]),
+      ]);
+      setTemplates(tpls);
+      setMembers(mems);
     } catch (err) {
       console.error(err);
-    }
-  };
-
-  const fetchMuscles = async () => {
-    try {
-      const token = await getCleanToken();
-      if (!token) return;
-      const res = await fetch(
-        "https://gawifit.com/api/Muscles/getallMuscles?gymsId=3",
-        {
-          method: "GET",
-          headers: {
-            accept: "text/plain",
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setMuscles(Array.isArray(data) ? data : data?.result || []);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const fetchExercisesData = async () => {
-    try {
-      const token = await getCleanToken();
-      if (!token) return;
-      const res = await fetch(
-        "https://gawifit.com/api/Exercises/getallExercises",
-        {
-          method: "GET",
-          headers: {
-            accept: "text/plain",
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setExercises(Array.isArray(data) ? data : data?.result || []);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedMuscleId && exercises.length > 0)
-      setFilteredExercises(
-        exercises.filter((e) => e.musclesId === parseInt(selectedMuscleId)),
-      );
-    else setFilteredExercises([]);
-  }, [selectedMuscleId, exercises]);
-
-  const fetchExerciseSchedules = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const token = await getCleanToken();
-      const userId = await AsyncStorage.getItem("MemberId");
-      if (!token) {
-        Alert.alert("Error", t.errors.authNotFound);
-        return;
-      }
-      if (!userId) {
-        Alert.alert("Error", t.errors.userNotFound);
-        return;
-      }
-      const res = await fetch(
-        `https://gawifit.com/api/MSSMExercises/getallMSSMExersesforPT?userId=${userId}`,
-        {
-          method: "GET",
-          headers: {
-            accept: "text/plain",
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-      if (res.status === 401) {
-        Alert.alert("Session Expired", "Please login again.");
-        return;
-      }
-      if (res.status === 403) {
-        Alert.alert("Access Denied", "You don't have permission.");
-        return;
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const responseData = await res.json();
-      if (responseData?.users && Array.isArray(responseData.users)) {
-        const all = [];
-        responseData.users.forEach((userData) => {
-          if (userData?.days && Array.isArray(userData.days)) {
-            userData.days.forEach((day) => {
-              if (!day.muscles) return;
-              day.muscles.forEach((muscle) => {
-                if (!muscle.exercises) return;
-                muscle.exercises.forEach((exercise) => {
-                  all.push({
-                    id: `${userData.userId}-${day.dayId}-${muscle.muscleId}-${exercise.exerciseId}-${Date.now()}-${Math.random()}`,
-                    dayId: day.dayId,
-                    dayName: day.dayName || getDayNameById(day.dayId),
-                    muscleId: muscle.muscleId,
-                    muscleName: muscle.muscleName,
-                    exerciseId: exercise.exerciseId,
-                    exerciseName: exercise.exerciseName,
-                    rounds: exercise.rounds,
-                    oneRoundCount: exercise.oneRoundCount,
-                    from: userData.from,
-                    to: userData.to,
-                    userId: userData.userId,
-                    userName:
-                      userData.userNameEn ||
-                      userData.userNameAr ||
-                      `User ${userData.userId}`,
-                    scheduleMusclesId: userData.scheduleMusclesId,
-                    gymId: responseData.gymId,
-                  });
-                });
-              });
-            });
-          }
-        });
-        setExerciseSchedules(all);
-      } else {
-        setExerciseSchedules([]);
-      }
-    } catch (err) {
-      setError("Failed to load exercise schedules");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [getDayNameById]);
-
-  useEffect(() => {
-    fetchExerciseSchedules();
-    fetchMuscles();
-    fetchExercisesData();
-    fetchPTUsers();
   }, []);
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-    try {
-      return new Date(dateString).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    } catch {
-      return "Invalid Date";
-    }
-  };
-
-  const handleAddExercise = () => {
-    if (
-      !selectedMuscleId ||
-      !selectedExerciseId ||
-      !selectedDayId ||
-      !rounds ||
-      !oneRoundCount
-    ) {
-      Alert.alert("Error", t.errors.fillAll);
-      return;
-    }
-    const muscleId = parseInt(selectedMuscleId),
-      exerciseId = parseInt(selectedExerciseId);
-    const dayId = parseInt(selectedDayId),
-      roundsNum = parseInt(rounds),
-      repsNum = parseInt(oneRoundCount);
-    const newDraft = [...daysDraft];
-    if (editingDraftId) {
-      newDraft.forEach((day) =>
-        day.muscles.forEach((muscle) =>
-          muscle.exercises.forEach((ex) => {
-            if (
-              `${day.dayId}-${muscle.muscleId}-${ex.exerciseId}` ===
-              editingDraftId
-            ) {
-              ex.rounds = roundsNum;
-              ex.oneRoundCount = repsNum;
-            }
-          }),
-        ),
-      );
-      setDaysDraft(newDraft);
-      Alert.alert("Success", t.success.updated);
-      setEditingDraftId(null);
-    } else {
-      const existingDayIdx = newDraft.findIndex((d) => d.dayId === dayId);
-      if (existingDayIdx !== -1) {
-        const existingMuscleIdx = newDraft[existingDayIdx].muscles.findIndex(
-          (m) => m.muscleId === muscleId,
-        );
-        if (existingMuscleIdx !== -1) {
-          if (
-            newDraft[existingDayIdx].muscles[existingMuscleIdx].exercises.some(
-              (e) => e.exerciseId === exerciseId,
-            )
-          ) {
-            Alert.alert("Info", t.errors.alreadyAdded);
-            return;
-          }
-          newDraft[existingDayIdx].muscles[existingMuscleIdx].exercises.push({
-            exerciseId,
-            rounds: roundsNum,
-            oneRoundCount: repsNum,
-          });
-        } else {
-          newDraft[existingDayIdx].muscles.push({
-            muscleId,
-            exercises: [
-              { exerciseId, rounds: roundsNum, oneRoundCount: repsNum },
-            ],
-          });
-        }
-      } else {
-        newDraft.push({
-          dayId,
-          muscles: [
-            {
-              muscleId,
-              exercises: [
-                { exerciseId, rounds: roundsNum, oneRoundCount: repsNum },
-              ],
-            },
-          ],
-        });
-      }
-      setDaysDraft(newDraft);
-      Alert.alert("Success", t.success.added);
-    }
-    setRounds("");
-    setOneRoundCount("");
-    setSelectedMuscleId("");
-    setSelectedExerciseId("");
-    if (daysOptions.length > 0) setSelectedDayId(daysOptions[0].id.toString());
-  };
-
-  const handleEditDraft = (item) => {
-    setEditingDraftId(`${item.dayId}-${item.muscleId}-${item.exerciseId}`);
-    setSelectedDayId(item.dayId.toString());
-    setSelectedMuscleId(item.muscleId.toString());
-    setSelectedExerciseId(item.exerciseId.toString());
-    setRounds(item.rounds.toString());
-    setOneRoundCount(item.oneRoundCount.toString());
-  };
-
-  const removeFromDraft = (index) => {
-    const newDraft = [...daysDraft];
-    const item = draftPreview[index];
-    if (
-      editingDraftId === `${item.dayId}-${item.muscleId}-${item.exerciseId}`
-    ) {
-      setEditingDraftId(null);
-      resetForm();
-    }
-    newDraft.forEach((day, di) => {
-      if (day.dayId === item.dayId) {
-        day.muscles.forEach((muscle, mi) => {
-          if (muscle.muscleId === item.muscleId) {
-            muscle.exercises = muscle.exercises.filter(
-              (e) => e.exerciseId !== item.exerciseId,
-            );
-            if (muscle.exercises.length === 0)
-              newDraft[di].muscles.splice(mi, 1);
-          }
-        });
-        if (day.muscles.length === 0) newDraft.splice(di, 1);
-      }
-    });
-    setDaysDraft(newDraft);
-    Alert.alert("Removed", t.success.removed);
-  };
-
-  const clearDraft = () => {
-    setDaysDraft([]);
-    setDraftPreview([]);
-    Alert.alert("Cleared", t.success.cleared);
-  };
-  const cancelEditDraft = () => {
-    setEditingDraftId(null);
-    resetForm();
-    Alert.alert("Cancelled", t.success.cancelledEdit);
-  };
-
-  const handleSaveSchedule = async () => {
-    if (!selectedUserId || daysDraft.length === 0) {
-      Alert.alert("Error", t.errors.noSchedule);
-      return;
-    }
-    try {
-      setAddingExercise(true);
-      const token = await handleGetToken();
-      const res = await fetch("https://gawifit.com/api/MSSMExercises", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: Number(selectedUserId),
-          from: fromDate.toISOString(),
-          to: toDate.toISOString(),
-          days: daysDraft,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      Alert.alert("Success", t.success.saved);
-      setDaysDraft([]);
-      setDraftPreview([]);
-      setShowAddModal(false);
-      resetForm();
-      fetchExerciseSchedules();
-    } catch (err) {
-      Alert.alert("Error", `${t.errors.saveFailed}: ${err.message}`);
-    } finally {
-      setAddingExercise(false);
-    }
-  };
-
-  const handleDeleteExercise = (exercise) => {
-    Alert.alert(
-      t.confirm.delete,
-      `${t.confirm.sure} ${exercise.exerciseName}?`,
-      [
-        { text: t.confirm.cancel, style: "cancel" },
-        {
-          text: t.confirm.delete2,
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const token = await getCleanToken();
-              if (!token) {
-                Alert.alert("Error", t.errors.authNotFound);
-                return;
-              }
-              const res = await fetch(
-                `https://gawifit.com/api/MSSMExercises/${exercise.id}`,
-                {
-                  method: "DELETE",
-                  headers: {
-                    accept: "text/plain",
-                    Authorization: `Bearer ${token}`,
-                  },
-                },
-              );
-              if (res.ok) {
-                setExerciseSchedules((prev) =>
-                  prev.filter((i) => i.id !== exercise.id),
-                );
-                Alert.alert("Success", t.success.deleted);
-              } else throw new Error(`HTTP ${res.status}`);
-            } catch {
-              Alert.alert("Error", t.errors.deleteFailed);
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleEditExercise = async (exercise) => {
-    setEditingExercise(exercise);
-    setEditRounds(exercise.rounds.toString());
-    setEditReps(exercise.oneRoundCount.toString());
-    setEditSelectedMuscleId(exercise.muscleId?.toString() || "");
-    setEditSelectedExerciseId(exercise.exerciseId?.toString() || "");
-    const matchDay = daysOptions.find(
-      (d) =>
-        d.id.toString() === exercise.dayId?.toString() ||
-        d.name === exercise.dayName,
-    );
-    setEditSelectedDayId(
-      matchDay ? matchDay.id.toString() : daysOptions[0]?.id.toString() || "",
-    );
-    if (exercise.from) setEditFromDate(new Date(exercise.from));
-    if (exercise.to) setEditToDate(new Date(exercise.to));
-    setShowEditModal(true);
-  };
-
-  const updateExerciseAPI = async () => {
-    if (!editingExercise) return;
-    try {
-      const token = await getCleanToken();
-      if (!token) {
-        Alert.alert("Error", t.errors.authNotFound);
-        return;
-      }
-      const scheduleMusclesId =
-        editingExercise.scheduleMusclesId ||
-        editingExercise.memberShipsScheduleId;
-      if (!scheduleMusclesId) {
-        Alert.alert("Error", "Schedule ID not found.");
-        return;
-      }
-      const res = await fetch(
-        "https://gawifit.com/api/MSSMExercises/CreateMSSMExercisesForschedule",
-        {
-          method: "POST",
-          headers: {
-            accept: "text/plain",
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            rounds: parseInt(editRounds) || editingExercise.rounds,
-            oneRoundCount: parseInt(editReps) || editingExercise.oneRoundCount,
-            exercisesId: parseInt(
-              editSelectedExerciseId || editingExercise.exerciseId,
-            ),
-            memberShipsScheduleId: scheduleMusclesId,
-            userId: editingExercise.userId,
-            musclesId: parseInt(
-              editSelectedMuscleId || editingExercise.muscleId,
-            ),
-            dayId: parseInt(editSelectedDayId || editingExercise.dayId),
-          }),
-        },
-      );
-      if (res.ok) {
-        Alert.alert("Success", t.success.editUpdated);
-        setShowEditModal(false);
-        setEditingExercise(null);
-        setEditSelectedMuscleId("");
-        setEditSelectedExerciseId("");
-        setEditSelectedDayId("");
-        fetchExerciseSchedules();
-      } else {
-        const txt = await res.text();
-        Alert.alert("Error", `Failed to update: ${txt}`);
-      }
-    } catch {
-      Alert.alert("Error", t.errors.updateFailed);
-    }
-  };
-
   useEffect(() => {
-    if (editSelectedMuscleId && exercises.length > 0)
-      setFilteredExercises(
-        exercises.filter((e) => e.musclesId === parseInt(editSelectedMuscleId)),
-      );
-    else setFilteredExercises([]);
-  }, [editSelectedMuscleId, exercises]);
+    loadData();
+  }, [loadData]);
 
-  const resetForm = () => {
-    setRounds("");
-    setOneRoundCount("");
-    setSelectedMuscleId("");
-    setSelectedExerciseId("");
-    setSelectedDayId(
-      daysOptions.length > 0 ? daysOptions[0].id.toString() : "",
-    );
-    setFromDate(new Date());
-    setToDate(new Date());
-    if (users.length > 0) setSelectedUserId(users[0].memberShipId.toString());
-    setEditingDraftId(null);
+  const c = {
+    bg: dark ? "#000000" : "#F5F5F5",
+    surface: dark ? "#111111" : "#FFFFFF",
+    border: dark ? "#222222" : "#EEEEEE",
+    text: dark ? "#EEEEEE" : "#333333",
+    sub: dark ? "#888888" : "#666666",
+    tabInactive: dark ? "#0A0A0A" : "#F0F0F0",
+    chipRest: dark ? "#221100" : "#FFF3CD",
+    chipRestText: dark ? "#FFCC44" : "#856404",
+    chipTrain: dark ? "#001133" : "#E3F2FD",
+    chipTrainText: dark ? "#66BBFF" : "#1565C0",
   };
 
-  const getMuscleColor = (name) =>
-    ({
-      Chest: "#FF6B6B",
-      Biceps: "#4ECDC4",
-      Triceps: "#FFD166",
-      Back: "#06D6A0",
-      Legs: "#118AB2",
-      Shoulders: "#EF476F",
-      Core: "#073B4C",
-    })[name] || "#8A8A8A";
-
-  // ── Dropdown helper ────────────────────────────────────────────────────────
-
-  const DropdownModal = ({
-    visible,
-    onClose,
-    items,
-    onSelect,
-    selectedId,
-    labelKey = "name",
-  }) => {
-    const [search, setSearch] = useState("");
-
-    // ✅ Filter items based on search
-    const filteredItems = useMemo(() => {
-      if (!search.trim()) return items;
-
-      return items.filter((item) => {
-        const text =
-          item[labelKey] ||
-          item.nameEn ||
-          item.nameAr ||
-          item.membershipName ||
-          "";
-
-        return text.toLowerCase().includes(search.toLowerCase());
-      });
-    }, [search, items]);
-
-    return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="fade"
-        onRequestClose={onClose}
-      >
-        <TouchableOpacity
-          style={S.dropdownOverlay}
-          activeOpacity={1}
-          onPress={onClose}
-        >
-          <View
-            style={[S.dropdownListContainer, { backgroundColor: d.dropdownBg }]}
-          >
-            {/* ✅ SEARCH INPUT */}
-            <View style={S.searchContainer}>
-              <TextInput
-                value={search}
-                onChangeText={setSearch}
-                placeholder="Search..."
-                placeholderTextColor="#999"
-                style={S.searchInput}
-              />
-            </View>
-
-            {/* ✅ LIST */}
-            <ScrollView
-              style={S.dropdownScroll}
-              keyboardShouldPersistTaps="handled"
-            >
-              {filteredItems.length > 0 ? (
-                filteredItems.map((item) => (
-                  <TouchableOpacity
-                    key={item.id ?? item.memberShipId}
-                    style={[
-                      rowStyle,
-                      S.dropdownItem,
-                      { borderBottomColor: d.dropdownBorder },
-                    ]}
-                    onPress={() => {
-                      onSelect(item);
-                      onClose();
-                    }}
-                  >
-                    <Text
-                      style={[
-                        S.dropdownItemText,
-                        txtAlign,
-                        { color: d.text, flex: 1 },
-                      ]}
-                    >
-                      {item[labelKey] ||
-                        item.nameEn ||
-                        item.nameAr ||
-                        item.membershipName}
-                    </Text>
-
-                    {selectedId ===
-                      (item.id ?? item.memberShipId)?.toString() && (
-                      <Text style={S.checkmark}>✓</Text>
-                    )}
-                  </TouchableOpacity>
-                ))
-              ) : (
-                <Text style={{ textAlign: "center", padding: 10 }}>
-                  No results
-                </Text>
-              )}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    );
-  };
-
-  const renderExerciseItem = ({ item }) => (
-    <View
+  const renderTemplate = ({ item }: { item: WorkoutTemplate }) => (
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={() => {
+        if (item.id != null) setDetailsTemplateId(item.id);
+      }}
       style={[
-        S.exerciseCard,
-        { backgroundColor: d.surface, borderColor: d.border },
+        S_SCREEN.card,
+        { backgroundColor: c.surface, borderColor: c.border },
       ]}
     >
-      <View style={[rowStyle, S.exerciseHeader]}>
-        <Text style={[S.exerciseName, txtAlign, { color: d.text }]}>
-          {item.exerciseName}
+      <Text
+        style={[
+          S_SCREEN.cardTitle,
+          { color: c.text, textAlign: isRTL ? "right" : "left" },
+        ]}
+      >
+        {isAr ? item.nameAr : item.nameEn}
+      </Text>
+      {!!item.note && (
+        <Text
+          style={{
+            color: c.sub,
+            marginBottom: 8,
+            textAlign: isRTL ? "right" : "left",
+          }}
+        >
+          {item.note}
         </Text>
-        <View
-          style={[
-            S.muscleBadge,
-            { backgroundColor: getMuscleColor(item.muscleName) },
-          ]}
-        >
-          <Text style={S.muscleText}>{item.muscleName}</Text>
-        </View>
-      </View>
-      <View style={S.exerciseDetails}>
-        {[
-          { label: t.roundsDetail, value: item.rounds },
-          { label: t.repsDetail, value: item.oneRoundCount },
-          { label: t.dayDetail, value: item.dayName },
-        ].map(({ label, value }, i) => (
-          <View
-            key={i}
-            style={[
-              rowStyle,
-              S.detailRow,
-              { flexDirection: isAr ? "row-reverse" : "row" },
-            ]}
-          >
-            <Text
+      )}
+      <View
+        style={[
+          S_SCREEN.dayChipsRow,
+          isRTL && { flexDirection: "row-reverse" },
+        ]}
+      >
+        {[...(item.days || [])]
+          .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+          .map((d) => (
+            <View
+              key={d.dayOfWeek}
               style={[
-                S.detailLabel,
-                { color: d.textSub, textAlign: isAr ? "right" : "left" },
+                S_SCREEN.dayChip,
+                { backgroundColor: d.isRestDay ? c.chipRest : c.chipTrain },
               ]}
             >
-              {label}:{" "}
-            </Text>
-            <Text
-              style={[
-                S.detailValue,
-                txtAlign,
-                { color: d.text, textAlign: isAr ? "right" : "left" },
-              ]}
-            >
-              {value}
-            </Text>
-          </View>
-        ))}
-        <View
-          style={[
-            rowStyle,
-            S.dateRow,
-            { flexDirection: isAr ? "row-reverse" : "row" },
-          ]}
-        >
-          {[
-            { label: t.from, value: formatDate(item.from) },
-            { label: t.to, value: formatDate(item.to) },
-          ].map(({ label, value }, i) => (
-            <View key={i} style={S.dateContainer}>
               <Text
-                style={[
-                  S.dateLabel,
-                  { color: d.textSub, textAlign: isAr ? "right" : "left" },
-                ]}
+                style={{
+                  fontSize: 10,
+                  fontWeight: "600",
+                  color: d.isRestDay ? c.chipRestText : c.chipTrainText,
+                }}
               >
-                {label}:
-              </Text>
-              <Text
-                style={[
-                  S.dateValue,
-                  { color: d.text, textAlign: isAr ? "right" : "left" },
-                ]}
-              >
-                {value}
+                {dayNames[d.dayOfWeek].slice(0, 3)}
               </Text>
             </View>
           ))}
-        </View>
       </View>
-      <View style={[rowStyle, S.exerciseActions, { borderTopColor: d.border }]}>
-        <TouchableOpacity
-          style={[S.actionButton, S.editButtonCard]}
-          onPress={() => handleEditExercise(item)}
+    </TouchableOpacity>
+  );
+
+  const renderMember = ({ item }: { item: PTMember }) => (
+    <View
+      style={[
+        S_SCREEN.card,
+        S_SCREEN.memberCard,
+        { backgroundColor: c.surface, borderColor: c.border },
+      ]}
+    >
+      <View
+        style={[S_SCREEN.memberRow, isRTL && { flexDirection: "row-reverse" }]}
+      >
+        {!!item.photoUrl && (
+          <Image source={{ uri: item.photoUrl }} style={S_SCREEN.avatar} />
+        )}
+        <Text
+          style={[
+            S_SCREEN.cardTitle,
+            { color: c.text, textAlign: isRTL ? "right" : "left", flex: 1 },
+          ]}
         >
-          <Text style={[S.actionButtonText, txtAlign]}>{t.addToMuscle}</Text>
+          {item.membershipName}
+        </Text>
+      </View>
+      <View
+        style={[
+          S_SCREEN.memberActionsRow,
+          isRTL && { flexDirection: "row-reverse" },
+        ]}
+      >
+        <TouchableOpacity
+          style={[S_SCREEN.assignBtn, { flex: 1 }]}
+          onPress={() => {
+            console.log(
+              "[Members] membershipId:",
+              item.memberShipId,
+              "gymId (if present):",
+              item.gymId,
+            );
+            setAssignTarget(item);
+          }}
+        >
+          <Text style={S_SCREEN.assignBtnText}>{t.assign}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[S_SCREEN.historyBtn, { flex: 1 }]}
+          onPress={() => setHistoryTarget(item)}
+        >
+          <Text style={S_SCREEN.historyBtnText}>{t.history}</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
-  const renderClientCard = ({ item }) => {
-    const clientExercises = exerciseSchedules.filter(
-      (ex) => ex.userId === item.memberShipId,
-    );
-    const isExpanded = expandedClients[item.memberShipId] || false;
+  if (loading) {
     return (
-      <View style={[S.clientCard, { backgroundColor: d.surface }]}>
-        <TouchableOpacity
-          style={[rowStyle, S.clientHeader]}
-          onPress={() => toggleClient(item.memberShipId)}
-        >
-          <View style={[rowStyle]}>
-            <Image source={{ uri: item.photoUrl }} style={S.clientAvatar} />
-            <Text style={[S.clientName, txtAlign, { color: d.text }]}>
-              {item.membershipName}
-            </Text>
-          </View>
-          <Text style={[S.arrow, { color: d.textSub }]}>
-            {isExpanded ? "▲" : "▼"}
-          </Text>
-        </TouchableOpacity>
-        {isExpanded && clientExercises.length > 0 && (
-          <FlatList
-            data={clientExercises}
-            renderItem={renderExerciseItem}
-            keyExtractor={(ex) => ex.id.toString()}
-            scrollEnabled={false}
-            contentContainerStyle={{ paddingVertical: 5 }}
-          />
-        )}
-        {isExpanded && clientExercises.length === 0 && (
-          <Text style={[S.noExercisesText, txtAlign, { color: d.textSub }]}>
-            {t.noExercises}
-          </Text>
-        )}
-      </View>
-    );
-  };
-
-  if (loading && !refreshing)
-    return (
-      <View style={[S.loadingContainer, { backgroundColor: d.bg }]}>
+      <View style={[S_SCREEN.loadingContainer, { backgroundColor: c.bg }]}>
         <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={[S.loadingText, txtAlign, { color: d.textSub }]}>
-          {t.loading}
-        </Text>
+        <Text style={{ color: c.sub, marginTop: 10 }}>{t.loading}</Text>
       </View>
     );
+  }
 
   return (
-    <View style={[S.container, { backgroundColor: d.bg }]}>
-      {/* Header */}
-      <View style={S.header}>
-        <Text style={[S.headerTitle, txtAlign]}>{t.title}</Text>
-        <Text style={[S.headerSubtitle, txtAlign]}>{t.subtitle}</Text>
-        <View style={[rowStyle, S.userInfoRow]}>
-          {/* <Text style={S.exerciseCount}>
-            {t.totalExercises}: {exerciseSchedules.length}
-          </Text> */}
-          <Text style={S.clientCount}>
-            {users.length > 0 ? `${users.length} ${t.clients}` : t.noClients}
-          </Text>
-        </View>
+    <View style={[S_SCREEN.container, { backgroundColor: c.bg }]}>
+      <View style={S_SCREEN.header}>
+        <Text style={S_SCREEN.headerTitle}>{t.title}</Text>
+        <Text style={S_SCREEN.headerSubtitle}>{t.subtitle}</Text>
       </View>
 
-      <FlatList
-        data={users}
-        renderItem={renderClientCard}
-        keyExtractor={(item) => item.memberShipId.toString()}
-        contentContainerStyle={S.listContainer}
-        showsVerticalScrollIndicator={false}
-        refreshing={refreshing}
-        onRefresh={() => {
-          setRefreshing(true);
-          fetchExerciseSchedules();
-        }}
-        ListEmptyComponent={() => (
-          <Text style={[{ color: d.textSub }]}>{"No clients found."}</Text>
-        )}
+      <View style={S_SCREEN.tabRow}>
+        {(["templates", "members"] as Tab[]).map((tb) => (
+          <TouchableOpacity
+            key={tb}
+            style={[
+              S_SCREEN.tabBtn,
+              { backgroundColor: tab === tb ? "#007AFF" : c.tabInactive },
+            ]}
+            onPress={() => setTab(tb)}
+          >
+            <Text
+              style={{ color: tab === tb ? "#fff" : c.sub, fontWeight: "700" }}
+            >
+              {tb === "templates" ? t.templates : t.members}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {tab === "templates" ? (
+        <FlatList
+          data={templates}
+          renderItem={renderTemplate}
+          keyExtractor={(item, i) => (item.id ?? i).toString()}
+          contentContainerStyle={S_SCREEN.listContainer}
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            loadData();
+          }}
+          ListEmptyComponent={
+            <Text style={{ color: c.sub, textAlign: "center", marginTop: 30 }}>
+              {t.noTemplates}
+            </Text>
+          }
+        />
+      ) : (
+        <FlatList
+          data={members}
+          renderItem={renderMember}
+          keyExtractor={(item) => item.memberShipId.toString()}
+          contentContainerStyle={S_SCREEN.listContainer}
+          refreshing={refreshing}
+          onRefresh={() => {
+            setRefreshing(true);
+            loadData();
+          }}
+          ListEmptyComponent={
+            <Text style={{ color: c.sub, textAlign: "center", marginTop: 30 }}>
+              {t.noMembers}
+            </Text>
+          }
+        />
+      )}
+
+      {tab === "templates" && (
+        <TouchableOpacity
+          style={[S_SCREEN.fab, isRTL && { right: undefined, left: 30 }]}
+          onPress={() => setShowCreateTemplate(true)}
+        >
+          <Text style={S_SCREEN.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
+
+      <CreateTemplateModal
+        visible={showCreateTemplate}
+        onClose={() => setShowCreateTemplate(false)}
+        onCreated={loadData}
+        dark={dark}
+        isAr={isAr}
+        isRTL={isRTL}
       />
 
-      <TouchableOpacity
-        style={[S.fab, isRTL && { right: "auto" as any, left: 30 }]}
-        onPress={() => {
-          resetForm();
-          setShowAddModal(true);
-        }}
-      >
-        <Text style={S.fabText}>+</Text>
-      </TouchableOpacity>
+      <AssignScheduleModal
+        visible={assignTarget !== null}
+        member={assignTarget}
+        onClose={() => setAssignTarget(null)}
+        onCreated={loadData}
+        dark={dark}
+        isAr={isAr}
+        isRTL={isRTL}
+      />
 
-      {/* ── ADD MODAL ── */}
-      <Modal
-        visible={showAddModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowAddModal(false)}
-      >
-        <View style={S.modalOverlay}>
-          <View style={[S.modalContent, { backgroundColor: d.modalBg }]}>
-            <View
-              style={[
-                rowStyle,
-                S.modalHeader,
-                { borderBottomColor: d.modalHeaderBorder },
-              ]}
-            >
-              <Text style={[S.modalTitle, txtAlign, { color: d.text }]}>
-                {t.createSchedule}
-              </Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                <Text style={[S.closeButton, { color: d.textSub }]}>✕</Text>
-              </TouchableOpacity>
-            </View>
+      <TemplateDetailsModal
+        visible={detailsTemplateId !== null}
+        templateId={detailsTemplateId}
+        onClose={() => setDetailsTemplateId(null)}
+        dark={dark}
+        isAr={isAr}
+        isRTL={isRTL}
+      />
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={S.modalScrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* Select Client */}
-              {users.length > 0 && (
-                <View style={S.inputGroup}>
-                  <Text style={[S.inputLabel, txtAlign, { color: d.text }]}>
-                    {t.selectClient}
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      rowStyle,
-                      S.customDropdown,
-                      { backgroundColor: d.surface, borderColor: d.border3 },
-                    ]}
-                    onPress={() => {
-                      setShowMuscleDropdown(false);
-                      setShowExerciseDropdown(false);
-                      setShowUserDropdown(!showUserDropdown);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        S.dropdownText,
-                        !selectedUserId && S.placeholderText,
-                        txtAlign,
-                        { color: selectedUserId ? d.text : d.textMuted },
-                      ]}
-                    >
-                      {selectedUserId
-                        ? users.find(
-                            (u) => u.memberShipId.toString() === selectedUserId,
-                          )?.membershipName || `User ${selectedUserId}`
-                        : t.tapToSelect}
-                    </Text>
-                    <Text style={[S.dropdownArrow, { color: d.textSub }]}>
-                      {showUserDropdown ? "▲" : "▼"}
-                    </Text>
-                  </TouchableOpacity>
-                  <DropdownModal
-                    visible={showUserDropdown}
-                    onClose={() => setShowUserDropdown(false)}
-                    items={users}
-                    selectedId={selectedUserId}
-                    onSelect={(user) =>
-                      setSelectedUserId(user.memberShipId.toString())
-                    }
-                    labelKey="membershipName"
-                  />
-                </View>
-              )}
-
-              {/* Draft Preview */}
-              {draftPreview.length > 0 && (
-                <View
-                  style={[
-                    S.draftPreviewSection,
-                    { backgroundColor: d.draftBg, borderColor: d.draftBorder },
-                  ]}
-                >
-                  <View style={[rowStyle, S.draftPreviewHeader]}>
-                    <Text
-                      style={[S.draftPreviewTitle, txtAlign, { color: d.text }]}
-                    >
-                      {editingDraftId
-                        ? t.editingExercise
-                        : `${t.draft} (${draftPreview.length} ${t.exercises})`}
-                    </Text>
-                    <View style={[rowStyle, { gap: 10 }]}>
-                      {editingDraftId && (
-                        <TouchableOpacity
-                          onPress={cancelEditDraft}
-                          style={[
-                            S.cancelEditButton,
-                            {
-                              backgroundColor: d.cancelEditBg,
-                              borderColor: d.cancelEditBorder,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              S.cancelEditText,
-                              txtAlign,
-                              { color: d.cancelEditText },
-                            ]}
-                          >
-                            {t.cancelEdit}
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity
-                        onPress={clearDraft}
-                        style={[
-                          S.clearDraftButton,
-                          { backgroundColor: d.clearDraftBg },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            S.clearDraftText,
-                            txtAlign,
-                            { color: d.clearDraftText },
-                          ]}
-                        >
-                          {t.clearAll}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  {editingDraftId && (
-                    <View
-                      style={[
-                        S.editingIndicator,
-                        {
-                          backgroundColor: d.editingIndicatorBg,
-                          borderColor: d.editingIndicatorBorder,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          S.editingText,
-                          txtAlign,
-                          { color: d.editingIndicatorText },
-                        ]}
-                      >
-                        {t.editingMode}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={S.draftPreviewList}>
-                    {draftPreview.map((item, index) => {
-                      const currentId = `${item.dayId}-${item.muscleId}-${item.exerciseId}`;
-                      const isEditing = editingDraftId === currentId;
-                      return (
-                        <View
-                          key={item.id}
-                          style={[
-                            rowStyle,
-                            S.draftItem,
-                            {
-                              backgroundColor: d.surface,
-                              borderColor: d.border,
-                            },
-                            isEditing && {
-                              backgroundColor: d.editingBg,
-                              borderColor: d.editingBorder,
-                              borderWidth: 2,
-                            },
-                          ]}
-                        >
-                          <View style={{ flex: 1 }}>
-                            <View style={[rowStyle, { marginBottom: 4 }]}>
-                              <Text
-                                style={[
-                                  S.draftExerciseName,
-                                  txtAlign,
-                                  { color: d.text },
-                                ]}
-                              >
-                                {item.exerciseName}
-                                {isEditing ? " (Editing)" : ""}
-                              </Text>
-                              <View style={[rowStyle, { gap: 5 }]}>
-                                <View
-                                  style={[
-                                    S.dayBadge,
-                                    dark && { backgroundColor: "#1E3A5F" },
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      S.dayBadgeText,
-                                      dark && { color: "#93C5FD" },
-                                    ]}
-                                  >
-                                    {item.dayName}
-                                  </Text>
-                                </View>
-                                <View
-                                  style={[
-                                    S.muscleBadgeSmall,
-                                    {
-                                      backgroundColor: getMuscleColor(
-                                        item.muscleName,
-                                      ),
-                                    },
-                                  ]}
-                                >
-                                  <Text style={S.muscleBadgeTextSmall}>
-                                    {item.muscleName}
-                                  </Text>
-                                </View>
-                              </View>
-                            </View>
-                            <Text
-                              style={[
-                                S.draftDetail,
-                                txtAlign,
-                                { color: d.textSub },
-                              ]}
-                            >
-                              {item.rounds} {t.sets} × {item.oneRoundCount}{" "}
-                              {t.repsLabel}
-                            </Text>
-                          </View>
-                          <View style={[rowStyle, { gap: 5 }]}>
-                            <TouchableOpacity
-                              onPress={() => handleEditDraft(item)}
-                              style={[
-                                S.editDraftButton,
-                                {
-                                  backgroundColor: d.surface2,
-                                  borderColor: d.draftBorder,
-                                },
-                              ]}
-                              disabled={isEditing}
-                            >
-                              <Text
-                                style={[
-                                  S.editDraftText,
-                                  { color: d.text },
-                                  isEditing && { color: d.textMuted },
-                                ]}
-                              >
-                                {isEditing ? t.editing : "✏️"}
-                              </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => removeFromDraft(index)}
-                              style={S.removeDraftButton}
-                            >
-                              <Text style={S.removeDraftText}>✕</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              {/* Add Exercise Section */}
-              <View
-                style={[
-                  S.addMoreSection,
-                  { backgroundColor: d.addMoreBg, borderColor: d.border2 },
-                ]}
-              >
-                <Text
-                  style={[
-                    S.sectionTitle,
-                    { color: d.text, textAlign: isAr ? "right" : "left" },
-                  ]}
-                >
-                  {t.addExercise}
-                </Text>
-
-                {/* Day */}
-                <View style={S.inputGroup}>
-                  <Text
-                    style={[
-                      S.inputLabel,
-                      { color: d.text, textAlign: isAr ? "right" : "left" },
-                    ]}
-                  >
-                    {t.trainingDay}
-                  </Text>
-                  <View
-                    style={[
-                      S.daySelection,
-                      isRTL && { flexDirection: "row-reverse" },
-                    ]}
-                  >
-                    {daysOptions.map((day) => (
-                      <TouchableOpacity
-                        key={day.id}
-                        style={[
-                          S.dayButton,
-                          { backgroundColor: d.dayBtnBg },
-                          selectedDayId === day.id.toString() &&
-                            S.selectedDayButton,
-                        ]}
-                        onPress={() => setSelectedDayId(day.id.toString())}
-                      >
-                        <Text
-                          style={[
-                            S.dayButtonText,
-                            { color: d.dayBtnText },
-                            selectedDayId === day.id.toString() &&
-                              S.selectedDayButtonText,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {day.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Muscle */}
-                <View style={S.inputGroup}>
-                  <Text
-                    style={[
-                      S.inputLabel,
-                      { color: d.text, textAlign: isAr ? "right" : "left" },
-                    ]}
-                  >
-                    {t.muscleGroup}
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      rowStyle,
-                      S.customDropdown,
-                      { backgroundColor: d.surface, borderColor: d.border3 },
-                    ]}
-                    onPress={() => {
-                      setShowUserDropdown(false);
-                      setShowExerciseDropdown(false);
-                      setShowMuscleDropdown(!showMuscleDropdown);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        S.dropdownText,
-                        !selectedMuscleId && S.placeholderText,
-                        {
-                          color: selectedMuscleId ? d.text : d.textMuted,
-                          textAlign: isAr ? "right" : "left",
-                        },
-                      ]}
-                    >
-                      {selectedMuscleId
-                        ? muscles.find(
-                            (m) => m.id.toString() === selectedMuscleId,
-                          )?.nameEn || t.tapToSelectMuscle
-                        : t.tapToSelectMuscle}
-                    </Text>
-                    <Text style={[S.dropdownArrow, { color: d.textSub }]}>
-                      {showMuscleDropdown ? "▲" : "▼"}
-                    </Text>
-                  </TouchableOpacity>
-                  <DropdownModal
-                    visible={showMuscleDropdown}
-                    onClose={() => setShowMuscleDropdown(false)}
-                    items={muscles}
-                    selectedId={selectedMuscleId}
-                    onSelect={(m) => {
-                      setSelectedMuscleId(m.id.toString());
-                      setSelectedExerciseId("");
-                    }}
-                    labelKey="nameEn"
-                  />
-                </View>
-
-                {/* Exercise */}
-                <View style={S.inputGroup}>
-                  <Text
-                    style={[
-                      S.inputLabel,
-                      { color: d.text, textAlign: isAr ? "right" : "left" },
-                    ]}
-                  >
-                    {t.selectExercise}
-                  </Text>
-                  {!selectedMuscleId ? (
-                    <View
-                      style={[
-                        S.disabledDropdown,
-                        {
-                          backgroundColor: d.disabledBg,
-                          borderColor: d.border2,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          S.disabledText,
-                          {
-                            color: d.textMuted,
-                            textAlign: isAr ? "right" : "left",
-                          },
-                        ]}
-                      >
-                        {t.selectMuscleFirst}
-                      </Text>
-                    </View>
-                  ) : filteredExercises.length === 0 ? (
-                    <View
-                      style={[
-                        S.disabledDropdown,
-                        {
-                          backgroundColor: d.disabledBg,
-                          borderColor: d.border2,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          S.disabledText,
-                          {
-                            color: d.textMuted,
-                            textAlign: isAr ? "right" : "left",
-                          },
-                        ]}
-                      >
-                        {t.noExercisesForMuscle}
-                      </Text>
-                    </View>
-                  ) : (
-                    <>
-                      <TouchableOpacity
-                        style={[
-                          rowStyle,
-                          S.customDropdown,
-                          {
-                            backgroundColor: d.surface,
-                            borderColor: d.border3,
-                          },
-                        ]}
-                        onPress={() => {
-                          setShowUserDropdown(false);
-                          setShowMuscleDropdown(false);
-                          setShowExerciseDropdown(!showExerciseDropdown);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            S.dropdownText,
-                            !selectedExerciseId && S.placeholderText,
-                            {
-                              color: selectedExerciseId ? d.text : d.textMuted,
-                              textAlign: isAr ? "right" : "left",
-                            },
-                          ]}
-                        >
-                          {selectedExerciseId
-                            ? filteredExercises.find(
-                                (e) => e.id.toString() === selectedExerciseId,
-                              )?.nameEn || t.tapToSelectExer
-                            : t.tapToSelectExer}
-                        </Text>
-                        <Text style={[S.dropdownArrow, { color: d.textSub }]}>
-                          {showExerciseDropdown ? "▲" : "▼"}
-                        </Text>
-                      </TouchableOpacity>
-                      <DropdownModal
-                        visible={showExerciseDropdown}
-                        onClose={() => setShowExerciseDropdown(false)}
-                        items={filteredExercises}
-                        selectedId={selectedExerciseId}
-                        onSelect={(ex) =>
-                          setSelectedExerciseId(ex.id.toString())
-                        }
-                        labelKey="nameEn"
-                      />
-                    </>
-                  )}
-                </View>
-
-                {/* Rounds & Reps */}
-                <View style={[rowStyle, { gap: 10 }]}>
-                  {[
-                    {
-                      label: t.rounds,
-                      val: rounds,
-                      set: setRounds,
-                      ph: t.setsPlaceholder,
-                    },
-                    {
-                      label: t.reps,
-                      val: oneRoundCount,
-                      set: setOneRoundCount,
-                      ph: t.repsPlaceholder,
-                    },
-                  ].map(({ label, val, set, ph }, i) => (
-                    <View key={i} style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          S.inputLabel,
-                          { color: d.text, textAlign: isAr ? "right" : "left" },
-                        ]}
-                      >
-                        {label}
-                      </Text>
-                      <TextInput
-                        style={[
-                          S.input,
-                          {
-                            backgroundColor: d.inputBg,
-                            borderColor: d.border2,
-                            color: d.text,
-                            textAlign: isAr ? "right" : "left",
-                          },
-                        ]}
-                        value={val}
-                        onChangeText={set}
-                        placeholder={ph}
-                        placeholderTextColor={d.textMuted}
-                        keyboardType="numeric"
-                        textAlign={isAr ? "right" : "left"}
-                      />
-                    </View>
-                  ))}
-                </View>
-
-                <TouchableOpacity
-                  style={[
-                    S.addToDraftButton,
-                    (!selectedMuscleId ||
-                      !selectedExerciseId ||
-                      !selectedDayId ||
-                      !rounds ||
-                      !oneRoundCount) &&
-                      S.disabledButton,
-                    editingDraftId && S.updateButton,
-                  ]}
-                  onPress={handleAddExercise}
-                  disabled={
-                    !selectedMuscleId ||
-                    !selectedExerciseId ||
-                    !selectedDayId ||
-                    !rounds ||
-                    !oneRoundCount
-                  }
-                >
-                  <Text
-                    style={[
-                      S.addToDraftButtonText,
-                      { textAlign: isAr ? "right" : "left" },
-                    ]}
-                  >
-                    {editingDraftId ? t.updateDraft : t.addToDraft}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-
-            <View
-              style={[
-                rowStyle,
-                S.modalActions,
-                { borderTopColor: d.modalActionsBorder },
-              ]}
-            >
-              <TouchableOpacity
-                style={[
-                  S.modalButton,
-                  S.cancelButton,
-                  { backgroundColor: dark ? "#1E293B" : "#F0F0F0" },
-                ]}
-                onPress={() => setShowAddModal(false)}
-              >
-                <Text
-                  style={[
-                    S.cancelButtonText,
-                    { color: d.textSub, textAlign: isAr ? "right" : "left" },
-                  ]}
-                >
-                  {t.cancel}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  S.modalButton,
-                  S.saveButton,
-                  (daysDraft.length === 0 || addingExercise) &&
-                    S.disabledButton,
-                ]}
-                onPress={handleSaveSchedule}
-                disabled={daysDraft.length === 0 || addingExercise}
-              >
-                {addingExercise ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <Text
-                    style={[
-                      S.saveButtonText,
-                      { textAlign: isAr ? "right" : "left" },
-                    ]}
-                  >
-                    {t.saveSchedule} ({draftPreview.length})
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── EDIT MODAL ── */}
-      <Modal
-        visible={showEditModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => {
-          setShowEditModal(false);
-          setEditingExercise(null);
-        }}
-      >
-        <View style={S.modalOverlay}>
-          <View
-            style={[
-              S.modalContent,
-              S.editModalContent,
-              { backgroundColor: d.modalBg },
-            ]}
-          >
-            <View
-              style={[
-                rowStyle,
-                S.modalHeader,
-                { borderBottomColor: d.modalHeaderBorder },
-              ]}
-            >
-              <Text
-                style={[
-                  S.modalTitle,
-                  { color: d.text, textAlign: isAr ? "right" : "left" },
-                ]}
-              >
-                {t.editExercise}: {editingExercise?.exerciseName}
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowEditModal(false);
-                  setEditingExercise(null);
-                }}
-              >
-                <Text style={[S.closeButton, { color: d.textSub }]}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={S.modalScrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              {editingExercise && (
-                <>
-                  <View
-                    style={[
-                      S.exerciseSummary,
-                      {
-                        backgroundColor: d.summaryBg,
-                        borderColor: d.draftBorder,
-                      },
-                    ]}
-                  >
-                    {[
-                      {
-                        label: t.currentExercise,
-                        value: editingExercise.exerciseName,
-                      },
-                      {
-                        label: t.currentClient,
-                        value: editingExercise.userName,
-                      },
-                      {
-                        label: t.currentMuscle,
-                        value: editingExercise.muscleName,
-                      },
-                      { label: t.currentDay, value: editingExercise.dayName },
-                    ].map(({ label, value }, i) => (
-                      <View
-                        key={i}
-                        style={[
-                          rowStyle,
-                          S.summaryRow,
-                          { flexDirection: isAr ? "row-reverse" : "row" },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            S.summaryLabel,
-                            {
-                              color: d.textSub,
-                              textAlign: isAr ? "right" : "left",
-                            },
-                          ]}
-                        >
-                          {label}:
-                        </Text>
-                        <Text
-                          style={[
-                            S.summaryValue,
-                            {
-                              color: d.text,
-                              textAlign: isAr ? "right" : "left",
-                            },
-                          ]}
-                        >
-                          {value}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {[
-                    { label: t.rounds, val: editRounds, set: setEditRounds },
-                    { label: t.reps, val: editReps, set: setEditReps },
-                  ].map(({ label, val, set }, i) => (
-                    <View key={i} style={S.inputGroup}>
-                      <Text
-                        style={[
-                          S.inputLabel,
-                          { color: d.text, textAlign: isAr ? "right" : "left" },
-                        ]}
-                      >
-                        {label}
-                      </Text>
-                      <TextInput
-                        style={[
-                          S.input,
-                          {
-                            backgroundColor: d.inputBg,
-                            borderColor: d.border2,
-                            color: d.text,
-                            textAlign: isAr ? "right" : "left",
-                          },
-                        ]}
-                        value={val}
-                        onChangeText={set}
-                        keyboardType="numeric"
-                        textAlign={isRTL ? "right" : "left"}
-                      />
-                    </View>
-                  ))}
-
-                  {/* Change Muscle */}
-                  <View style={S.inputGroup}>
-                    <Text
-                      style={[
-                        S.inputLabel,
-                        { color: d.text, textAlign: isAr ? "right" : "left" },
-                      ]}
-                    >
-                      {t.changeMuscle}
-                    </Text>
-                    <TouchableOpacity
-                      style={[
-                        rowStyle,
-                        S.customDropdown,
-                        { backgroundColor: d.surface, borderColor: d.border3 },
-                      ]}
-                      onPress={() => setShowMuscleDropdown(!showMuscleDropdown)}
-                    >
-                      <Text style={[S.dropdownText, { color: d.text }]}>
-                        {editSelectedMuscleId
-                          ? muscles.find(
-                              (m) => m.id.toString() === editSelectedMuscleId,
-                            )?.nameEn
-                          : editingExercise.muscleName || t.tapToSelectMuscle}
-                      </Text>
-                      <Text style={[S.dropdownArrow, { color: d.textSub }]}>
-                        {showMuscleDropdown ? "▲" : "▼"}
-                      </Text>
-                    </TouchableOpacity>
-                    <DropdownModal
-                      visible={showMuscleDropdown}
-                      onClose={() => setShowMuscleDropdown(false)}
-                      items={muscles}
-                      selectedId={editSelectedMuscleId}
-                      onSelect={(m) => {
-                        setEditSelectedMuscleId(m.id.toString());
-                        setEditSelectedExerciseId("");
-                      }}
-                      labelKey="nameEn"
-                    />
-                  </View>
-
-                  {/* Change Exercise */}
-                  <View style={S.inputGroup}>
-                    <Text
-                      style={[
-                        S.inputLabel,
-                        { color: d.text, textAlign: isAr ? "right" : "left" },
-                      ]}
-                    >
-                      {t.changeExercise}
-                    </Text>
-                    {!editSelectedMuscleId ? (
-                      <View
-                        style={[
-                          S.disabledDropdown,
-                          {
-                            backgroundColor: d.disabledBg,
-                            borderColor: d.border2,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            S.disabledText,
-                            {
-                              color: d.textMuted,
-                              textAlign: isAr ? "right" : "left",
-                            },
-                          ]}
-                        >
-                          {t.selectMuscleFirst}
-                        </Text>
-                      </View>
-                    ) : filteredExercises.length === 0 ? (
-                      <View
-                        style={[
-                          S.disabledDropdown,
-                          {
-                            backgroundColor: d.disabledBg,
-                            borderColor: d.border2,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            S.disabledText,
-                            {
-                              color: d.textMuted,
-                              textAlign: isAr ? "right" : "left",
-                            },
-                          ]}
-                        >
-                          {t.noExercisesForMuscle}
-                        </Text>
-                      </View>
-                    ) : (
-                      <>
-                        <TouchableOpacity
-                          style={[
-                            rowStyle,
-                            S.customDropdown,
-                            {
-                              backgroundColor: d.surface,
-                              borderColor: d.border3,
-                            },
-                          ]}
-                          onPress={() =>
-                            setShowExerciseDropdown(!showExerciseDropdown)
-                          }
-                        >
-                          <Text
-                            style={[
-                              S.dropdownText,
-                              {
-                                color: d.text,
-                                textAlign: isAr ? "right" : "left",
-                              },
-                            ]}
-                          >
-                            {editSelectedExerciseId
-                              ? filteredExercises.find(
-                                  (e) =>
-                                    e.id.toString() === editSelectedExerciseId,
-                                )?.nameEn
-                              : editingExercise.exerciseName ||
-                                t.tapToSelectExer}
-                          </Text>
-                          <Text style={[S.dropdownArrow, { color: d.textSub }]}>
-                            {showExerciseDropdown ? "▲" : "▼"}
-                          </Text>
-                        </TouchableOpacity>
-                        <DropdownModal
-                          visible={showExerciseDropdown}
-                          onClose={() => setShowExerciseDropdown(false)}
-                          items={filteredExercises}
-                          selectedId={editSelectedExerciseId}
-                          onSelect={(ex) =>
-                            setEditSelectedExerciseId(ex.id.toString())
-                          }
-                          labelKey="nameEn"
-                        />
-                      </>
-                    )}
-                  </View>
-
-                  {/* Change Day */}
-                  <View style={S.inputGroup}>
-                    <Text
-                      style={[
-                        S.inputLabel,
-                        { color: d.text, textAlign: isAr ? "right" : "left" },
-                      ]}
-                    >
-                      {t.changeDay}
-                    </Text>
-                    <TouchableOpacity
-                      style={[
-                        rowStyle,
-                        S.customDropdown,
-                        { backgroundColor: d.surface, borderColor: d.border3 },
-                      ]}
-                      onPress={() => setShowDayDropdown(!showDayDropdown)}
-                    >
-                      <Text
-                        style={[
-                          S.dropdownText,
-                          { color: d.text, textAlign: isAr ? "right" : "left" },
-                        ]}
-                      >
-                        {editSelectedDayId
-                          ? daysOptions.find(
-                              (d) => d.id.toString() === editSelectedDayId,
-                            )?.name
-                          : t.selectDay}
-                      </Text>
-                      <Text style={[S.dropdownArrow, { color: d.textSub }]}>
-                        {showDayDropdown ? "▲" : "▼"}
-                      </Text>
-                    </TouchableOpacity>
-                    <DropdownModal
-                      visible={showDayDropdown}
-                      onClose={() => setShowDayDropdown(false)}
-                      items={daysOptions}
-                      selectedId={editSelectedDayId}
-                      onSelect={(day) =>
-                        setEditSelectedDayId(day.id.toString())
-                      }
-                      labelKey="name"
-                    />
-                  </View>
-
-                  {/* Update Preview */}
-                  <View
-                    style={[
-                      S.updatePreview,
-                      {
-                        backgroundColor: d.updatePreviewBg,
-                        borderColor: d.updatePreviewBorder,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        S.updatePreviewTitle,
-                        txtAlign,
-                        {
-                          color: d.updatePreviewTitle,
-                          textAlign: isAr ? "right" : "left",
-                        },
-                      ]}
-                    >
-                      {t.updatePreview}
-                    </Text>
-                    <View
-                      style={{
-                        flexDirection: isRTL ? "row-reverse" : "row",
-                        flexWrap: "wrap",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      {[
-                        {
-                          label: t.roundsLabel,
-                          value: editRounds || editingExercise.rounds,
-                        },
-                        {
-                          label: t.repsPreview,
-                          value: editReps || editingExercise.oneRoundCount,
-                        },
-                        {
-                          label: t.muscleLabel,
-                          value: editSelectedMuscleId
-                            ? muscles.find(
-                                (m) => m.id.toString() === editSelectedMuscleId,
-                              )?.nameEn
-                            : editingExercise.muscleName,
-                        },
-                        {
-                          label: t.dayLabel,
-                          value: editSelectedDayId
-                            ? daysOptions.find(
-                                (d) => d.id.toString() === editSelectedDayId,
-                              )?.name
-                            : editingExercise.dayName,
-                        },
-                      ].map(({ label, value }, i) => (
-                        <View
-                          key={i}
-                          style={[
-                            S.previewItem,
-                            {
-                              backgroundColor: d.previewItemBg,
-                              borderColor: d.border2,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              S.previewLabel,
-                              txtAlign,
-                              {
-                                color: d.textSub,
-                                textAlign: isAr ? "right" : "left",
-                              },
-                            ]}
-                          >
-                            {label}:
-                          </Text>
-                          <Text
-                            style={[
-                              S.previewValue,
-                              txtAlign,
-                              {
-                                color: d.previewValue,
-                                textAlign: isAr ? "right" : "left",
-                              },
-                            ]}
-                          >
-                            {value}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                </>
-              )}
-            </ScrollView>
-
-            <View
-              style={[
-                rowStyle,
-                S.modalActions,
-                { borderTopColor: d.modalActionsBorder },
-              ]}
-            >
-              <TouchableOpacity
-                style={[
-                  S.modalButton,
-                  S.cancelButton,
-                  { backgroundColor: dark ? "#1E293B" : "#F0F0F0" },
-                ]}
-                onPress={() => {
-                  setShowEditModal(false);
-                  setEditingExercise(null);
-                }}
-              >
-                <Text
-                  style={[S.cancelButtonText, txtAlign, { color: d.textSub }]}
-                >
-                  {t.cancel}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[S.modalButton, S.saveButton]}
-                onPress={updateExerciseAPI}
-              >
-                <Text style={[S.saveButtonText, txtAlign]}>{t.update}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <MemberHistoryModal
+        visible={historyTarget !== null}
+        member={historyTarget}
+        onClose={() => setHistoryTarget(null)}
+        dark={dark}
+        isAr={isAr}
+        isRTL={isRTL}
+      />
     </View>
   );
 };
 
-const S = StyleSheet.create({
-  searchContainer: {
-    padding: 10,
-    borderBottomWidth: 1,
-  },
-
-  searchInput: {
-    height: 40,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    backgroundColor: "#f1f1f1",
-  },
-  row: { flexDirection: "row", alignItems: "center" },
-  rowRTL: { flexDirection: "row-reverse", alignItems: "center" },
-  textLeft: { textAlign: "left" },
-  textRight: { textAlign: "right" },
+const S_SCREEN = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  loadingText: { marginTop: 10, fontSize: 16 },
   header: {
     backgroundColor: "#007AFF",
     padding: 20,
+    paddingTop: 50,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "white",
-    marginBottom: 5,
-    marginTop: 30,
-  },
+  headerTitle: { fontSize: 26, fontWeight: "bold", color: "#fff" },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: "rgba(255,255,255,0.8)",
+    marginTop: 4,
+  },
+  tabRow: { flexDirection: "row", gap: 10, padding: 15, paddingBottom: 5 },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  listContainer: { padding: 15, paddingBottom: 90 },
+  card: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 12 },
+  cardTitle: { fontSize: 16, fontWeight: "700" },
+  dayChipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 },
+  dayChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  memberCard: { flexDirection: "column" },
+  memberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     marginBottom: 10,
   },
-  userInfoRow: { justifyContent: "space-between" },
-  exerciseCount: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.6)",
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  clientCount: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.6)",
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  listContainer: { padding: 15, paddingBottom: 80 },
-  clientCard: {
-    marginVertical: 5,
-    borderRadius: 10,
-    padding: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  clientHeader: { justifyContent: "space-between", paddingVertical: 5 },
-  clientName: { fontSize: 16, fontWeight: "bold" },
-  clientAvatar: {
+  avatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: "#e0e0e0",
-    marginRight: 10,
   },
-  arrow: { fontSize: 18 },
-  noExercisesText: { fontStyle: "italic", paddingTop: 5 },
-  exerciseCard: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-    borderWidth: 1,
-  },
-  exerciseHeader: { justifyContent: "space-between", marginBottom: 12 },
-  exerciseName: { fontSize: 18, fontWeight: "bold", flex: 1 },
-  muscleBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  muscleText: { fontSize: 12, color: "white", fontWeight: "600" },
-  exerciseDetails: { marginBottom: 12 },
-  detailRow: { marginBottom: 4 },
-  detailLabel: { fontSize: 14, width: 120 },
-  detailValue: { fontSize: 14, fontWeight: "500" },
-  dateRow: { justifyContent: "space-between", marginTop: 8 },
-  dateContainer: { flex: 1 },
-  dateLabel: { fontSize: 12 },
-  dateValue: { fontSize: 13, fontWeight: "500" },
-  exerciseActions: {
-    justifyContent: "flex-end",
-    borderTopWidth: 1,
-    paddingTop: 12,
-  },
-  actionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  memberActionsRow: { flexDirection: "row", gap: 8 },
+  assignBtn: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 10,
     borderRadius: 8,
-    flex: 1,
-    marginHorizontal: 5,
     alignItems: "center",
   },
-  editButtonCard: { backgroundColor: "#5f5f5f" },
-  actionButtonText: { fontSize: 14, fontWeight: "500", color: "white" },
+  assignBtnText: { color: "#fff", fontWeight: "700" },
+  historyBtn: {
+    backgroundColor: "#5f5f5f",
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  historyBtnText: { color: "#fff", fontWeight: "700" },
   fab: {
     position: "absolute",
     bottom: 30,
@@ -2388,229 +3406,9 @@ const S = StyleSheet.create({
     backgroundColor: "#007AFF",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
     elevation: 5,
   },
-  fabText: { fontSize: 30, color: "white", fontWeight: "bold" },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    borderRadius: 20,
-    width: "90%",
-    maxHeight: "85%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  editModalContent: { maxHeight: "90%", width: "95%" },
-  modalHeader: {
-    justifyContent: "space-between",
-    padding: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-  },
-  modalTitle: { fontSize: 20, fontWeight: "bold", flex: 1 },
-  closeButton: { fontSize: 24 },
-  modalScrollContent: { paddingHorizontal: 20, paddingBottom: 20 },
-  modalActions: {
-    justifyContent: "space-between",
-    padding: 20,
-    paddingTop: 15,
-    borderTopWidth: 1,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 15,
-    borderRadius: 10,
-    alignItems: "center",
-    marginHorizontal: 5,
-  },
-  cancelButton: { backgroundColor: "#f0f0f0" },
-  saveButton: { backgroundColor: "#4CAF50" },
-  disabledButton: { backgroundColor: "#ccc", opacity: 0.7 },
-  cancelButtonText: { fontSize: 16, fontWeight: "500" },
-  saveButtonText: { color: "white", fontSize: 16, fontWeight: "500" },
-  inputGroup: { marginBottom: 16 },
-  inputLabel: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 14, fontSize: 16 },
-  customDropdown: {
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 14,
-    marginTop: 6,
-  },
-  dropdownText: { fontSize: 16, flex: 1 },
-  placeholderText: { color: "#999" },
-  dropdownArrow: { fontSize: 12, marginLeft: 8 },
-  disabledDropdown: { borderWidth: 1, borderRadius: 10, padding: 14 },
-  disabledText: {},
-  dropdownOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  dropdownListContainer: {
-    width: "90%",
-    maxHeight: 400,
-    borderRadius: 12,
-    padding: 10,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  dropdownScroll: { maxHeight: 380 },
-  dropdownItem: {
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    borderBottomWidth: 1,
-  },
-  dropdownItemText: { fontSize: 16, flex: 1 },
-  checkmark: { fontSize: 16, color: "#007AFF", fontWeight: "bold" },
-  userAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
-  userAvatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#007AFF",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  userAvatarText: { color: "white", fontSize: 16, fontWeight: "bold" },
-  userName: { fontSize: 16, fontWeight: "500", marginBottom: 2 },
-  userRole: { fontSize: 12 },
-  daySelection: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  dayButton: {
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    minWidth: 70,
-    alignItems: "center",
-  },
-  selectedDayButton: { backgroundColor: "#007AFF" },
-  dayButtonText: { fontSize: 14, fontWeight: "500" },
-  selectedDayButtonText: { color: "white" },
-  draftPreviewSection: {
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 20,
-    borderWidth: 1,
-  },
-  draftPreviewHeader: { justifyContent: "space-between", marginBottom: 10 },
-  draftPreviewTitle: { fontSize: 16, fontWeight: "bold" },
-  cancelEditButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  cancelEditText: { fontSize: 12, fontWeight: "500" },
-  clearDraftButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  clearDraftText: { fontSize: 12, fontWeight: "500" },
-  editingIndicator: {
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 10,
-    borderWidth: 1,
-  },
-  editingText: { fontSize: 12, textAlign: "center" },
-  draftPreviewList: { maxHeight: 200 },
-  draftItem: {
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    justifyContent: "space-between",
-  },
-  draftExerciseName: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 4,
-    flex: 1,
-  },
-  draftDetail: { fontSize: 12 },
-  dayBadge: {
-    backgroundColor: "#e3f2fd",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  dayBadgeText: { fontSize: 10, color: "#1565c0", fontWeight: "500" },
-  muscleBadgeSmall: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  muscleBadgeTextSmall: { fontSize: 10, color: "white", fontWeight: "500" },
-  editDraftButton: { padding: 8, borderRadius: 6, borderWidth: 1 },
-  editDraftText: { fontSize: 14 },
-  removeDraftButton: { padding: 8, marginLeft: 10 },
-  removeDraftText: { fontSize: 16, color: "#ff5252", fontWeight: "bold" },
-  addMoreSection: { borderRadius: 10, padding: 15, borderWidth: 1 },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 15,
-    textAlign: "center",
-  },
-  addToDraftButton: {
-    backgroundColor: "#2196f3",
-    padding: 15,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  addToDraftButtonText: { color: "white", fontSize: 16, fontWeight: "500" },
-  updateButton: { backgroundColor: "#ff9800" },
-  exerciseSummary: {
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 20,
-    borderWidth: 1,
-  },
-  summaryRow: { justifyContent: "space-between", marginBottom: 8 },
-  summaryLabel: { fontSize: 14, fontWeight: "500" },
-  summaryValue: { fontSize: 14, fontWeight: "600" },
-  updatePreview: {
-    borderRadius: 10,
-    padding: 15,
-    marginTop: 10,
-    borderWidth: 1,
-  },
-  updatePreviewTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  previewItem: {
-    width: "48%",
-    marginBottom: 8,
-    padding: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  previewLabel: { fontSize: 12, marginBottom: 2 },
-  previewValue: { fontSize: 14, fontWeight: "bold" },
+  fabText: { fontSize: 30, color: "#fff", fontWeight: "bold" },
 });
 
-export default MuselsePlanPtList;
+export default WorkoutPlansScreen;

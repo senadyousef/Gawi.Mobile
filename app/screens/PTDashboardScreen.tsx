@@ -35,6 +35,28 @@ const ml = (r: boolean, v: number) => ({
 const aEnd = (r: boolean) =>
   ({ alignItems: r ? "flex-end" : "flex-start" }) as const;
 
+// Hardcoded day names/abbreviations — does NOT depend on ar.ts/en.ts having a
+// `days` object. This is what actually fixes the English-days-in-Arabic-mode bug:
+// T.days.Monday was missing from the localization file, so the old code was
+// silently falling back to the raw English key ("Monday") itself.
+const DAY_META: Record<
+  string,
+  { en: string; enShort: string; ar: string; arShort: string }
+> = {
+  Monday: { en: "Monday", enShort: "Mon", ar: "الإثنين", arShort: "إثنين" },
+  Tuesday: { en: "Tuesday", enShort: "Tue", ar: "الثلاثاء", arShort: "ثلاثاء" },
+  Wednesday: {
+    en: "Wednesday",
+    enShort: "Wed",
+    ar: "الأربعاء",
+    arShort: "أربعاء",
+  },
+  Thursday: { en: "Thursday", enShort: "Thu", ar: "الخميس", arShort: "خميس" },
+  Friday: { en: "Friday", enShort: "Fri", ar: "الجمعة", arShort: "جمعة" },
+  Saturday: { en: "Saturday", enShort: "Sat", ar: "السبت", arShort: "سبت" },
+  Sunday: { en: "Sunday", enShort: "Sun", ar: "الأحد", arShort: "أحد" },
+};
+
 const TimePicker = React.memo(
   ({ visible, value, onChange, title, colors, cancelLabel }: any) => {
     if (!visible) return null;
@@ -43,6 +65,7 @@ const TimePicker = React.memo(
         <DateTimePicker
           value={value}
           mode="time"
+          textColor="#000"
           display="default"
           onChange={onChange}
         />
@@ -69,6 +92,7 @@ const TimePicker = React.memo(
           <DateTimePicker
             value={value}
             mode="time"
+            textColor="#000"
             display="spinner"
             onChange={onChange}
             style={{ height: 200, backgroundColor: "#FFF" }}
@@ -86,7 +110,7 @@ const DayGrid = React.memo(
     onSelect,
     dark,
   }: {
-    days: { key: string; label: string }[];
+    days: { key: string; label: string; short: string }[];
     selected: string;
     onSelect: (key: string) => void;
     dark: boolean;
@@ -109,7 +133,7 @@ const DayGrid = React.memo(
               dark && !(selected === day.key) && { color: "#888888" },
             ]}
           >
-            {day.label.substring(0, 3)}
+            {day.short}
           </Text>
           <Text
             style={[
@@ -347,7 +371,7 @@ const PtInfoCard = React.memo(
         >
           {selectedPT?.photoUrlPt ? (
             <Image
-              source={{ uri: selectedPT.photoUrlPt }}
+              source={{ uri: `https://gawifit.com/${selectedPT.photoUrlPt}` }}
               style={S.ptInfoImg}
             />
           ) : (
@@ -361,7 +385,7 @@ const PtInfoCard = React.memo(
           <Text style={[S.ptInfoName, ta(isRTL), dark && { color: "#EEEEEE" }]}>
             {selectedPT?.namePt}
           </Text>
-          <View style={[dir(isRTL), { gap: 8, flexWrap: "wrap" }]}>
+          {/* <View style={[dir(isRTL), { gap: 8, flexWrap: "wrap" }]}>
             <View style={[dir("ltr"), S.badge, { backgroundColor: "#3B82F6" }]}>
               <Icon name="finger-print" size={11} color="#FFF" />
               <Text style={S.badgeTxt}>
@@ -374,7 +398,7 @@ const PtInfoCard = React.memo(
                 {gymIdLabel}: {selectedPT?.gymId}
               </Text>
             </View>
-          </View>
+          </View> */}
           {extraContent}
         </View>
       </View>
@@ -428,19 +452,23 @@ const PTDashboardScreen = ({ navigation }: any) => {
     "Sunday",
   ];
 
-  // غيّر daysOfWeek ليرجع objects بدل strings
- const daysOfWeek = useMemo(
-  () =>
-    API_DAYS.map((key) => ({
-      key,
-      label: (T?.days as any)?.[key] || key,
-    })),
-  [T],
-);
+  // Full day name + abbreviation, localized. Hardcoded from DAY_META (see top
+  // of file) rather than T.days, because the ar/en localization files don't
+  // reliably provide a `days` object with these keys.
+  const daysOfWeek = useMemo(
+    () =>
+      API_DAYS.map((key) => ({
+        key,
+        label: isAr ? DAY_META[key].ar : DAY_META[key].en,
+        short: isAr ? DAY_META[key].arShort : DAY_META[key].enShort,
+      })),
+    [isAr],
+  );
 
   const DAY_MAP = {
     // Arabic → English
     الاثنين: "Monday",
+    الإثنين: "Monday",
     الثلاثاء: "Tuesday",
     الأربعاء: "Wednesday",
     الخميس: "Thursday",
@@ -448,7 +476,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
     السبت: "Saturday",
     الأحد: "Sunday",
 
-    // Short English → Full English
+    // Short/lowercase English → Full English
     mon: "Monday",
     tue: "Tuesday",
     wed: "Wednesday",
@@ -456,22 +484,42 @@ const PTDashboardScreen = ({ navigation }: any) => {
     fri: "Friday",
     sat: "Saturday",
     sun: "Sunday",
+    monday: "Monday",
+    tuesday: "Tuesday",
+    wednesday: "Wednesday",
+    thursday: "Thursday",
+    friday: "Friday",
+    saturday: "Saturday",
+    sunday: "Sunday",
   };
 
   const normalizeDay = (day) => {
     if (!day) return "";
 
     const value = day.toString().trim();
-    const lower = value;
+    const lower = value.toLowerCase();
 
-    // إذا كان أصلاً Monday / Sunday ...
-    if (API_DAYS.includes(lower)) {
-      return lower;
-    }
+    // إذا كان أصلاً Monday / Sunday ... (بغض النظر عن حالة الأحرف)
+    const exactMatch = API_DAYS.find((d) => d.toLowerCase() === lower);
+    if (exactMatch) return exactMatch;
 
     // إذا كان عربي أو مختصر إنجليزي
-    return DAY_MAP[value] || DAY_MAP[lower] || lower;
+    return DAY_MAP[value] || DAY_MAP[lower] || value;
   };
+
+  // Full localized day name for a raw API day value (any language/case/abbr).
+  const getDayLabel = (dayKey?: string) => {
+    const key = normalizeDay(dayKey);
+    return daysOfWeek.find((d) => d.key === key)?.label || dayKey || "";
+  };
+
+  // Short localized day abbreviation (e.g. badge/circle text) — never derived
+  // via substring() on Arabic text, since that chops letterforms mid-word.
+  const getDayShort = (dayKey?: string) => {
+    const key = normalizeDay(dayKey);
+    return daysOfWeek.find((d) => d.key === key)?.short || dayKey || "";
+  };
+
   const formatTime = useCallback(
     (s: string) => {
       if (!s) return T.time.na;
@@ -485,8 +533,6 @@ const PTDashboardScreen = ({ navigation }: any) => {
     [T],
   );
 
-  const cap = (d: string) =>
-    d ? d[0].toUpperCase() + d.slice(1).toLowerCase() : "";
   const fmtAPI = (d: Date) => {
     const h = d.getHours(),
       m = d.getMinutes();
@@ -542,6 +588,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
       );
       if (!res.ok) throw new Error(`${res.status}`);
       const data = await res.json();
+      console.log("data PT ", data);
       const grouped = data.ptWithClassBooked.reduce((acc: any[], item: any) => {
         let pt = acc.find((p) => p.ptId === item.ptId);
         if (!pt) {
@@ -586,7 +633,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
 
   const openAddModal = (pt: any) => {
     setSelectedPT(pt);
-    setShiftDay(API_DAYS[0]); // دايماً "monday" كـ key
+    setShiftDay(API_DAYS[0]); // دايماً "Monday" كـ key
     setShiftFromTime(new Date());
     setShiftToTime(new Date());
     setShowAddShiftModal(true);
@@ -645,7 +692,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
   const openEditModal = (pt: any, wd: any) => {
     setSelectedPT(pt);
     setEditingWD(wd);
-    setEditShiftDay(wd.day.toLowerCase());
+    setEditShiftDay(normalizeDay(wd.day));
     setEditFromTime(parseTime(wd.fromHour));
     setEditToTime(parseTime(wd.toHour));
     setShowEditShiftModal(true);
@@ -705,11 +752,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
     setShowDeleteModal(false);
     setShiftToDelete(null);
   };
-  const getDayLabel = (dayKey: string) => {
-    return (
-      daysOfWeek.find((d) => d.key === dayKey?.toLowerCase())?.label || dayKey
-    );
-  };
+
   const deleteWorkShift = async () => {
     if (!shiftToDelete || !selectedPT) return;
     setDeletingShift(true);
@@ -755,7 +798,10 @@ const PTDashboardScreen = ({ navigation }: any) => {
         {/* PT header */}
         <View style={[S.cardPtRow, dir(isRTL)]}>
           {item?.photoUrlPt ? (
-            <Image source={{ uri: item.photoUrlPt }} style={S.cardPtImg} />
+            <Image
+              source={{ uri: `https://gawifit.com/${item.photoUrlPt}` }}
+              style={S.cardPtImg}
+            />
           ) : (
             <View style={S.cardPtImgPlaceholder}>
               <Icon name="person" size={36} color="#FFF" />
@@ -767,19 +813,6 @@ const PTDashboardScreen = ({ navigation }: any) => {
             >
               {item?.namePt ?? "PT Name"}
             </Text>
-            <View
-              style={[
-                dir(isRTL),
-                { alignItems: "center", gap: 6, marginTop: 4 },
-              ]}
-            >
-              <Icon name="business" size={14} color="#10B981" />
-              <Text
-                style={[S.cardPtSub, ta(isRTL), dark && { color: "#888888" }]}
-              >
-                {T.ptInfo.gymId}: {item.gymId}
-              </Text>
-            </View>
           </View>
         </View>
 
@@ -850,7 +883,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
                       onPress={() => openEditModal(item, wd)}
                     >
                       <Text style={S.shiftCircleTxt}>
-                        {cap(wd.day).substring(0, 3)}
+                        {getDayShort(wd.day)}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -1001,7 +1034,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
                         dark && { color: "#888888" },
                       ]}
                     >
-                      {cap(cls.day)} · {formatTime(cls.from)} -{" "}
+                      {getDayLabel(cls.day)} · {formatTime(cls.from)} -{" "}
                       {formatTime(cls.to)}
                     </Text>
                   </View>
@@ -1350,7 +1383,8 @@ const PTDashboardScreen = ({ navigation }: any) => {
                   >
                     <Icon name="information-circle" size={14} color="#10B981" />
                     <Text style={[S.currentShiftTxt, ta(isRTL)]}>
-                      {T.modals.editShift.current}: {cap(editingWD?.day)} ·{" "}
+                      {T.modals.editShift.current}:{" "}
+                      {getDayLabel(editingWD?.day)} ·{" "}
                       {formatTime(editingWD?.fromHour)} -{" "}
                       {formatTime(editingWD?.toHour)}
                     </Text>
@@ -1524,7 +1558,9 @@ const PTDashboardScreen = ({ navigation }: any) => {
               >
                 {selectedPT?.photoUrlPt ? (
                   <Image
-                    source={{ uri: selectedPT.photoUrlPt }}
+                    source={{
+                      uri: `https://gawifit.com/${selectedPT.photoUrlPt}`,
+                    }}
                     style={S.delPtImg}
                   />
                 ) : (
@@ -1542,12 +1578,12 @@ const PTDashboardScreen = ({ navigation }: any) => {
                   >
                     {selectedPT?.namePt}
                   </Text>
-                  <View style={[dir("ltr"), S.delPtBadge]}>
+                  {/* <View style={[dir("ltr"), S.delPtBadge]}>
                     <Icon name="finger-print" size={11} color="#FFF" />
                     <Text style={S.badgeTxt}>
                       {T.ptInfo.ptId}: {selectedPT?.ptId}
                     </Text>
-                  </View>
+                  </View> */}
                 </View>
               </View>
               <View
@@ -1580,7 +1616,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
                   {
                     icon: "calendar",
                     label: T.modals.deleteShift.day,
-                    value: cap(shiftToDelete?.day),
+                    value: getDayLabel(shiftToDelete?.day),
                   },
                   {
                     icon: "play",
@@ -1591,11 +1627,6 @@ const PTDashboardScreen = ({ navigation }: any) => {
                     icon: "stop",
                     label: T.modals.deleteShift.to,
                     value: formatTime(shiftToDelete?.toHour),
-                  },
-                  {
-                    icon: "key",
-                    label: T.modals.deleteShift.shiftId,
-                    value: shiftToDelete?.workshiftId,
                   },
                 ].map(({ icon, label, value }, i) => (
                   <View
@@ -2060,13 +2091,19 @@ const S = StyleSheet.create({
   },
   dayCardSelected: { backgroundColor: "#3B82F6", borderColor: "#2563EB" },
   dayCardAbbr: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: "800",
     color: "#64748B",
     marginBottom: 3,
+    textAlign: "center",
   },
   dayCardAbbrSel: { color: "#FFF" },
-  dayCardName: { fontSize: 11, fontWeight: "600", color: "#94A3B8" },
+  dayCardName: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#94A3B8",
+    textAlign: "center",
+  },
   dayCardNameSel: { color: "#FFF" },
   dayCheck: {
     position: "absolute",

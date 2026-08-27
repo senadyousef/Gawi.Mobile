@@ -49,6 +49,8 @@ PODS:
     - ExpoModulesCore
     - ZXingObjC/OneD
     - ZXingObjC/PDF417
+  - ExpoClipboard (8.0.8):
+    - ExpoModulesCore
   - ExpoDevice (8.0.10):
     - ExpoModulesCore
   - ExpoDocumentPicker (14.0.8):
@@ -2334,6 +2336,7 @@ DEPENDENCIES:
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
   - ExpoBlur (from `../node_modules/expo-blur/ios`)
   - ExpoCamera (from `../node_modules/expo-camera/ios`)
+  - ExpoClipboard (from `../node_modules/expo-clipboard/ios`)
   - ExpoDevice (from `../node_modules/expo-device/ios`)
   - ExpoDocumentPicker (from `../node_modules/expo-document-picker/ios`)
   - ExpoFileSystem (from `../node_modules/expo/node_modules/expo-file-system/ios`)
@@ -2463,6 +2466,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-blur/ios"
   ExpoCamera:
     :path: "../node_modules/expo-camera/ios"
+  ExpoClipboard:
+    :path: "../node_modules/expo-clipboard/ios"
   ExpoDevice:
     :path: "../node_modules/expo-device/ios"
   ExpoDocumentPicker:
@@ -2672,6 +2677,7 @@ SPEC CHECKSUMS:
   ExpoAsset: cc98e16f65a64e58079d9ccad3b5eec2b57b9263
   ExpoBlur: 688c53d5d26575cbb6c72e7fbd4caef8d8cfadf6
   ExpoCamera: 44705f35b32741582d00c69187c8ee59669ed46e
+  ExpoClipboard: 50fa3332136758be7ca2ea912bae585f74bb93c3
   ExpoDevice: 0773c782b055558ca9b40b74aa4a8133a66cd0d2
   ExpoDocumentPicker: 774b0d1f41468f79148e8201afd094ca852e9e42
   ExpoFileSystem: 72c7bedb30b6c8565322f9c6377663a1476d7703

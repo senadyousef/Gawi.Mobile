@@ -11,6 +11,7 @@ import {
   Modal,
   Switch,
   Platform,
+  TextInput, // 👈 new — for the cancellation reason input
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -79,20 +80,51 @@ const translateDay = (day: string, ar: boolean) => {
   return label || day;
 };
 
-const fetchGymClassByUser = async () => {
+// 👇 new — is this booking occurrence's date already in the past?
+const isBookingPastDate = (dateStr: string) => {
+  const now = new Date();
+  const todayStr = now.toISOString().split("T")[0];
+  const bookingDateStr = String(dateStr).split("T")[0];
+  return bookingDateStr < todayStr;
+};
+
+// 👇 new — maps a per-booking cancellationStatus to a display label.
+// "None" (or missing) means nothing to show / still cancellable.
+const getCancellationStatusLabel = (status?: string): string | null => {
+  switch (status) {
+    case "Pending":
+      return i18n.t("cancellation_pending") || "Cancellation pending";
+    case "Approved":
+      return i18n.t("cancellation_approved") || "Cancelled";
+    case "Rejected":
+      return i18n.t("cancellation_rejected") || "Cancellation rejected";
+    default:
+      return null;
+  }
+};
+
+// 👇 replaces fetchGymClassByUser — fetches ONE class by id via the JWT-authed
+// /mobile/{id} endpoint instead of fetching the whole list and finding it.
+const fetchGymClassById = async (classId: number) => {
   try {
-    const MemberId = await AsyncStorage.getItem("MemberId");
-    if (!MemberId) throw new Error("User not found");
+    const token = await handleGetToken();
+    if (!token) throw new Error("User not authenticated");
     const response = await fetch(
-      `http://192.168.1.16/api/GymClass/getAllGymClassByUser?userId=${MemberId}`,
+      `https://gawifit.com/api/GymClass/mobile/${classId}`,
+      {
+        headers: {
+          accept: "text/plain",
+          Authorization: `Bearer ${token}`,
+        },
+      },
     );
-    if (!response.ok) throw new Error("Failed to fetch gym classes");
+    if (!response.ok) throw new Error("Failed to fetch gym class");
     const data = await response.json();
-    console.log("fetchGymClassByUser response:", JSON.stringify(data, null, 2));
+    console.log("fetchGymClassById response:", JSON.stringify(data, null, 2));
     return data;
   } catch (error) {
     console.error("API Error:", error);
-    return [];
+    return null;
   }
 };
 
@@ -105,13 +137,26 @@ export default function ClassDetailsScreen({ route }: any) {
   const [gymClass, setGymClass] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // 👇 Recurring booking config modal state
+  // 👇 Recurring booking config modal state — only used for "Ongoing" mode
   const [isBookingModalVisible, setIsBookingModalVisible] = useState(false);
   const [isRecurringBooking, setIsRecurringBooking] = useState(true);
   const [selectedClassDate, setSelectedClassDate] = useState<Date>(new Date());
   const [selectedRepeatDays, setSelectedRepeatDays] = useState<string[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // 👇 new — recurring booking end date, only shown/used when
+  // isRecurringBooking is true. null = no end date chosen yet / unbounded.
+  const [selectedRecurringEndDate, setSelectedRecurringEndDate] =
+    useState<Date>(new Date());
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+
+  // 👇 Cancellation modal state — collects a reason before calling
+  // /request-cancellation. cancelTargetId holds the userClassId being cancelled.
+  const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
+  const [isSubmittingCancellation, setIsSubmittingCancellation] =
+    useState(false);
   // 👇 SweetAlert state — replaces Alert.alert entirely
   const [alertConfig, setAlertConfig] = useState<{
     visible: boolean;
@@ -144,6 +189,10 @@ export default function ClassDetailsScreen({ route }: any) {
 
     return classDateStr < todayStr;
   }, [gymClass]);
+  const isBookingBlocked = React.useMemo(() => {
+    if (!gymClass) return false;
+    return gymClass.isClassBookingBlocked === true;
+  }, [gymClass]);
 
   const isClassFull = React.useMemo(() => {
     if (!gymClass) return false;
@@ -154,6 +203,16 @@ export default function ClassDetailsScreen({ route }: any) {
         gymClass.bookedCount != null &&
         gymClass.bookedCount >= gymClass.capacity)
     );
+  }, [gymClass]);
+
+  // 👇 Booking-type classification, drives which flow the Book button opens.
+  // - not recurring at all -> "oneTime"
+  // - recurring + fixed "Course" schedule -> "course" (no date/day choice)
+  // - recurring + "Ongoing" -> "ongoing" (modal: pick date, or pick repeat days)
+  const bookingKind: "oneTime" | "course" | "ongoing" = React.useMemo(() => {
+    if (!gymClass?.isRecurring) return "oneTime";
+    if (gymClass.recurringMode === "Course") return "course";
+    return "ongoing";
   }, [gymClass]);
 
   const loadClass = React.useCallback(
@@ -173,8 +232,7 @@ export default function ClassDetailsScreen({ route }: any) {
           }
           return;
         }
-        const classes = await fetchGymClassByUser();
-        const foundClass = classes.find((c: any) => c.id === classId);
+        const foundClass = await fetchGymClassById(classId);
         if (!foundClass) {
           if (!silent) {
             showAlert(
@@ -231,10 +289,31 @@ export default function ClassDetailsScreen({ route }: any) {
         "You have already booked this class."
       );
     }
-    if (normalized.includes("full") || normalized.includes("capacity")) {
+    if (
+      normalized.includes("subscription has not started") ||
+      (normalized.includes("subscription") &&
+        normalized.includes("not started"))
+    ) {
       return (
-        i18n.t("class_full_message") || "Sorry, this class is fully booked."
+        i18n.t("subscription_not_started_message") ||
+        "Your subscription hasn't started yet."
       );
+    }
+    // 👇 new — the picked repeat days + end date didn't produce any valid
+    // occurrence (e.g. end date before the first matching weekday)
+    if (
+      normalized.includes("no recurring dates") ||
+      (normalized.includes("recurring") &&
+        normalized.includes("no") &&
+        normalized.includes("found"))
+    ) {
+      return (
+        i18n.t("no_recurring_dates_found") ||
+        "No dates were found for the days and end date you selected. Please choose different days or a later end date."
+      );
+    }
+    if (normalized.includes("full") || normalized.includes("capacity")) {
+      return resultText || "Sorry, this class is fully booked.";
     }
     if (
       normalized.includes("insufficient") ||
@@ -254,72 +333,109 @@ export default function ClassDetailsScreen({ route }: any) {
     );
   };
 
-  // 👇 Core booking submission — shared by both the simple (non-recurring)
-  // confirm flow and the recurring booking config modal.
-  const submitBooking = async (
-    isRecurringBookingFlag: boolean,
-    classDate: Date,
-    repeatDays: string[],
+  // 👇 Shared pre-flight checks (login, class still exists, not already
+  // booked, not full) — used by both booking submit paths below.
+  const preflightBookingCheck = async (): Promise<{
+    MemberId: string;
+    classToBook: any;
+  } | null> => {
+    const MemberId = await AsyncStorage.getItem("MemberId");
+    if (!MemberId) {
+      showAlert(
+        "error",
+        i18n.t("login_required_title") || "Login Required",
+        i18n.t("login_required_book_class") || "Please log in to book a class.",
+      );
+      return null;
+    }
+    const classToBook = await fetchGymClassById(classId);
+    if (!classToBook) {
+      showAlert(
+        "error",
+        i18n.t("error_title") || "Error",
+        i18n.t("class_not_found_cannot_book") ||
+          "Class not found. Cannot book.",
+      );
+      return null;
+    }
+    if (classToBook.isBooked) {
+      showAlert(
+        "info",
+        i18n.t("already_booked_title") || "Already Booked",
+        i18n.t("already_booked_message") ||
+          "You have already booked this class.",
+      );
+      return null;
+    }
+    if (classToBook.isClassBookingBlocked === true) {
+      showAlert(
+        "error",
+        i18n.t("booking_blocked_title") || "Booking Blocked",
+        i18n.t("booking_blocked_message") ||
+          "You can't book this class because you are blocked.",
+      );
+      return null;
+    }
+    const isClassFullFresh =
+      classToBook.isFull === true ||
+      classToBook.availableSeats === 0 ||
+      (classToBook.capacity &&
+        classToBook.bookedCount &&
+        classToBook.bookedCount >= classToBook.capacity);
+
+    if (isClassFullFresh) {
+      setGymClass((prev: any) => (prev ? { ...prev, isFull: true } : prev));
+      showAlert(
+        "info",
+        i18n.t("class_full_title") || "Class Full",
+        i18n.t("class_full_message") || "Sorry, this class is fully booked.",
+      );
+      return null;
+    }
+
+    return { MemberId, classToBook };
+  };
+
+  const handleBookingResponse = async (
+    response: Response,
+    classToBook: any,
   ) => {
+    const resultText = await response.text();
+    console.log(resultText);
+    if (!response.ok) {
+      showAlert(
+        "error",
+        i18n.t("booking_failed_title") || "Booking Failed",
+        getLocalizedBookingError(resultText),
+      );
+      return;
+    }
+    showAlert(
+      "success",
+      i18n.t("booking_confirmed_title") || "Booking Confirmed",
+      i18n.t("booking_confirmed_message", {
+        name: isArabic ? classToBook.nameAr : classToBook.nameEn,
+      }) || `You successfully booked ${classToBook.nameEn}!`,
+    );
+    setGymClass((prev: any) => ({ ...prev, isBooked: true }));
+  };
+
+  // 👇 One-time class (isRecurring: false) OR fixed-schedule course
+  // (isRecurring: true, recurringMode: "Course") — no date/day choice,
+  // minimal payload.
+  const submitOneTimeOrCourseBooking = async () => {
     try {
-      const MemberId = await AsyncStorage.getItem("MemberId");
-      if (!MemberId) {
-        showAlert(
-          "error",
-          i18n.t("login_required_title") || "Login Required",
-          i18n.t("login_required_book_class") ||
-            "Please log in to book a class.",
-        );
-        return;
-      }
-      const classes = await fetchGymClassByUser();
-      const classToBook = classes.find((c: any) => c.id === classId);
-      if (!classToBook) {
-        showAlert(
-          "error",
-          i18n.t("error_title") || "Error",
-          i18n.t("class_not_found_cannot_book") ||
-            "Class not found. Cannot book.",
-        );
-        return;
-      }
-      if (classToBook.isBooked) {
-        showAlert(
-          "info",
-          i18n.t("already_booked_title") || "Already Booked",
-          i18n.t("already_booked_message") ||
-            "You have already booked this class.",
-        );
-        return;
-      }
-
-      const isClassFullFresh =
-        classToBook.isFull === true ||
-        classToBook.availableSeats === 0 ||
-        (classToBook.capacity &&
-          classToBook.bookedCount &&
-          classToBook.bookedCount >= classToBook.capacity);
-
-      if (isClassFullFresh) {
-        setGymClass((prev: any) => (prev ? { ...prev, isFull: true } : prev));
-        showAlert(
-          "info",
-          i18n.t("class_full_title") || "Class Full",
-          i18n.t("class_full_message") || "Sorry, this class is fully booked.",
-        );
-        return;
-      }
+      const pre = await preflightBookingCheck();
+      if (!pre) return;
+      const { MemberId, classToBook } = pre;
 
       const payload = {
         userId: parseInt(MemberId),
         gymClassId: classToBook.id,
-        isRecurringBooking: isRecurringBookingFlag,
-        classDate: classDate.toISOString(),
-        selectedRepeatDays: isRecurringBookingFlag ? repeatDays : [],
       };
 
       const token = await handleGetToken();
-      const response = await fetch("http://192.168.1.16/api/UserClass", {
+      const response = await fetch("https://gawifit.com/api/UserClass", {
         method: "POST",
         headers: {
           Accept: "text/plain",
@@ -329,25 +445,9 @@ export default function ClassDetailsScreen({ route }: any) {
         body: JSON.stringify(payload),
       });
 
-      const resultText = await response.text();
-      console.log(resultText);
-      if (!response.ok) {
-        showAlert(
-          "error",
-          i18n.t("booking_failed_title") || "Booking Failed",
-          getLocalizedBookingError(resultText),
-        );
-        return;
-      }
-      showAlert(
-        "success",
-        i18n.t("booking_confirmed_title") || "Booking Confirmed",
-        i18n.t("booking_confirmed_message", {
-          name: isArabic ? classToBook.nameAr : classToBook.nameEn,
-        }) || `You successfully booked ${classToBook.nameEn}!`,
-      );
-      setGymClass((prev: any) => ({ ...prev, isBooked: true }));
+      await handleBookingResponse(response, classToBook);
     } catch (error) {
+      console.log(error);
       showAlert(
         "error",
         i18n.t("error_title") || "Error",
@@ -357,18 +457,65 @@ export default function ClassDetailsScreen({ route }: any) {
     }
   };
 
-  // 👇 Simple one-off booking flow — used for NON-recurring classes only.
-  const handleBookClassSimple = () => {
-    submitBooking(false, new Date(gymClass.date), []);
+  // 👇 "Ongoing" recurring class — isRecurringBooking false = one specific
+  // date, true = a weekly repeat on the chosen days (optionally bounded by
+  // recurringEndDate).
+  const submitRecurringBooking = async (
+    isRecurringBookingFlag: boolean,
+    classDate: Date,
+    repeatDays: string[],
+    recurringEndDate: Date | null, // 👈 new
+  ) => {
+    try {
+      const pre = await preflightBookingCheck();
+      if (!pre) return;
+      const { MemberId, classToBook } = pre;
+
+      const payload = {
+        userId: parseInt(MemberId),
+        gymClassId: classToBook.id,
+        isRecurringBooking: isRecurringBookingFlag,
+        classDate: classDate.toISOString(),
+        selectedRepeatDays: isRecurringBookingFlag ? repeatDays : [],
+        // 👇 new — only sent when recurring; null means no end date chosen
+        recurringBookingEndDate:
+          isRecurringBookingFlag && recurringEndDate
+            ? recurringEndDate.toISOString()
+            : null,
+      };
+
+      const token = await handleGetToken();
+      const response = await fetch("https://gawifit.com/api/UserClass", {
+        method: "POST",
+        headers: {
+          Accept: "text/plain",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      await handleBookingResponse(response, classToBook);
+    } catch (error: any) {
+      console.log("submitRecurringBooking error:", error?.message ?? error);
+      console.log("stack:", error?.stack);
+      showAlert(
+        "error",
+        i18n.t("error_title") || "Error",
+        i18n.t("booking_error_message") ||
+          "An unexpected error occurred while booking.",
+      );
+    }
   };
 
-  // 👇 Opens the recurring booking config modal — used for RECURRING
-  // classes. Defaults: recurring ON, today's date, all repeat days
-  // pre-selected.
+  // 👇 Opens the recurring booking config modal — only reached for
+  // "Ongoing" mode. Defaults: recurring ON, today's date, no days pre-picked,
+  // no end date pre-picked.
   const openBookingModal = () => {
     setIsRecurringBooking(true);
     setSelectedClassDate(new Date());
     setSelectedRepeatDays([]);
+    setSelectedRecurringEndDate(new Date());
     setIsBookingModalVisible(true);
   };
   const toggleRepeatDay = (day: string) => {
@@ -390,9 +537,18 @@ export default function ClassDetailsScreen({ route }: any) {
       return;
     }
     setIsBookingModalVisible(false);
-    submitBooking(isRecurringBooking, selectedClassDate, selectedRepeatDays);
+    submitRecurringBooking(
+      isRecurringBooking,
+      selectedClassDate,
+      selectedRepeatDays,
+      isRecurringBooking ? selectedRecurringEndDate : null, // 👈 new
+    );
   };
 
+  // 👇 Opens the cancellation-reason modal instead of an immediate
+  // Yes/No confirm — the reason itself is now required input.
+  // 👇 Simple confirm + DELETE — used for "ongoing" and "oneTime" bookings,
+  // which don't go through the reason-request flow (that's Course-only).
   const handleBookClassDelete = async (userClassId: string) => {
     try {
       if (!userClassId) return;
@@ -413,6 +569,7 @@ export default function ClassDetailsScreen({ route }: any) {
         },
       );
       if (!response.ok) {
+        console.log(response.status);
         showAlert(
           "error",
           i18n.t("error_title") || "Error",
@@ -425,10 +582,10 @@ export default function ClassDetailsScreen({ route }: any) {
         i18n.t("cancel_booking"),
         i18n.t("cancel_booking_success") || "Booking successfully cancelled",
       );
-      setGymClass((prev: any) =>
-        prev ? { ...prev, isBooked: false, userClassId: null } : prev,
-      );
-    } catch (error) {
+      // 👇 refresh from the server rather than guessing local state
+      loadClass({ silent: true });
+    } catch (error: any) {
+      console.log("handleBookClassDelete error:", error?.message ?? error);
       showAlert(
         "error",
         i18n.t("error_title") || "Error",
@@ -438,8 +595,8 @@ export default function ClassDetailsScreen({ route }: any) {
     }
   };
 
-  // 👇 Confirmation prompt shown before actually cancelling the booking
-  const confirmBookClassDelete = (userClassId: string) => {
+  // 👇 Confirmation prompt for the plain-delete path (ongoing/oneTime)
+  const confirmDeleteBooking = (userClassId: string) => {
     showAlert(
       "warning",
       i18n.t("cancel_booking_title") || "Cancel Booking",
@@ -454,6 +611,126 @@ export default function ClassDetailsScreen({ route }: any) {
         },
       ],
     );
+  };
+
+  // 👇 Opens the cancellation-reason modal — Course mode ONLY. Ongoing and
+  // one-time bookings go through confirmDeleteBooking + DELETE instead.
+  const openCancelModal = (userClassId: string | number | undefined) => {
+    if (!userClassId) {
+      showAlert(
+        "error",
+        i18n.t("error_title") || "Error",
+        i18n.t("no_booking_to_cancel") ||
+          "No booking was found to cancel for this class.",
+      );
+      return;
+    }
+    setCancelTargetId(String(userClassId));
+    setCancelReason("");
+    setIsCancelModalVisible(true);
+  };
+
+  // 👇 Routes to the right cancellation flow based on bookingKind:
+  // Course -> reason-request modal, everything else -> plain delete confirm.
+  // Takes a specific userClassId so each occurrence in the "My Bookings"
+  // list can be cancelled independently.
+  const handleCancelPress = (userClassId: string | number | undefined) => {
+    if (!userClassId) {
+      showAlert(
+        "error",
+        i18n.t("error_title") || "Error",
+        i18n.t("no_booking_to_cancel") ||
+          "No booking was found to cancel for this class.",
+      );
+      return;
+    }
+    if (bookingKind === "course") {
+      openCancelModal(userClassId);
+    } else {
+      confirmDeleteBooking(String(userClassId));
+    }
+  };
+  // 👇 Replaces the old DELETE call — now POSTs a reason to
+  // /UserClass/{id}/request-cancellation. Since this is a *request* (the
+  // booking has requiresCancellationApproval / cancellationStatus fields),
+  // we don't optimistically flip isBooked to false — we just show the
+  // outcome and re-fetch the class so its real status comes from the server.
+  const submitCancellationRequest = async () => {
+    if (!cancelTargetId) return;
+
+    const trimmedReason = cancelReason.trim();
+    if (!trimmedReason) {
+      showAlert(
+        "warning",
+        i18n.t("cancellation_reason_required_title") || "Reason Required",
+        i18n.t("cancellation_reason_required_message") ||
+          "Please enter a reason for cancelling this class.",
+      );
+      return;
+    }
+
+    setIsSubmittingCancellation(true);
+    try {
+      const token = await handleGetToken();
+      if (!token) {
+        showAlert(
+          "error",
+          i18n.t("error_title") || "Error",
+          i18n.t("user_not_authenticated") || "User not authenticated",
+        );
+        return;
+      }
+      const response = await fetch(
+        `https://gawifit.com/api/UserClass/${cancelTargetId}/request-cancellation`,
+        {
+          method: "POST",
+          headers: {
+            accept: "*/*",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ reason: trimmedReason }),
+        },
+      );
+
+      const resultText = await response.text();
+      console.log(
+        "request-cancellation response:",
+        response.status,
+        resultText,
+      );
+
+      if (!response.ok) {
+        showAlert(
+          "error",
+          i18n.t("error_title") || "Error",
+          resultText ||
+            i18n.t("cancel_booking_failed") ||
+            "Unable to cancel this booking.",
+        );
+        return;
+      }
+
+      setIsCancelModalVisible(false);
+      showAlert(
+        "success",
+        i18n.t("cancel_booking"),
+        i18n.t("cancel_request_submitted_message") ||
+          "Your cancellation request has been submitted.",
+      );
+      // 👇 refresh from the server instead of guessing the new state locally
+      loadClass({ silent: true });
+    } catch (error: any) {
+      console.log("submitCancellationRequest error:", error?.message ?? error);
+      showAlert(
+        "error",
+        i18n.t("error_title") || "Error",
+        i18n.t("cancel_booking_error") ||
+          "An error occurred while cancelling the booking.",
+      );
+    } finally {
+      setIsSubmittingCancellation(false);
+    }
   };
 
   const alertNode = (
@@ -677,6 +954,61 @@ export default function ClassDetailsScreen({ route }: any) {
               </Text>
             </View>
           )}
+          {gymClass.isRecurring ? (
+            gymClass.recurringMode && (
+              <View
+                style={[
+                  s.modeBadge,
+                  {
+                    backgroundColor:
+                      gymClass.recurringMode === "Course"
+                        ? "#8B5CF6"
+                        : "#FF7002",
+                    alignSelf: isAr ? "flex-end" : "flex-start",
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={
+                    gymClass.recurringMode === "Course"
+                      ? "book-open-variant"
+                      : "infinity"
+                  }
+                  size={14}
+                  color="#FFFFFF"
+                />
+                <Text style={s.modeBadgeText}>
+                  {gymClass.recurringMode === "Course"
+                    ? isAr
+                      ? "دورة"
+                      : "Course"
+                    : isAr
+                      ? "مستمر"
+                      : "Ongoing"}
+                </Text>
+              </View>
+            )
+          ) : (
+            // 👇 isRecurring: false -> one-time class, own badge (gray, calendar icon)
+            <View
+              style={[
+                s.modeBadge,
+                {
+                  backgroundColor: "#6B7280",
+                  alignSelf: isAr ? "flex-end" : "flex-start",
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="calendar-blank"
+                size={14}
+                color="#FFFFFF"
+              />
+              <Text style={s.modeBadgeText}>
+                {isAr ? "لمرة واحدة" : "One Time"}
+              </Text>
+            </View>
+          )}
         </View>
 
         <Text
@@ -690,83 +1022,174 @@ export default function ClassDetailsScreen({ route }: any) {
         >
           {description}
         </Text>
+
+        {/* 👇 new — "My Bookings": lists every occurrence in gymClass.bookings
+            (not just bookings[0]) so a multi-date Course booking shows each
+            date, its attendance/cancellation status, and its own cancel
+            action. Replaces the old single bottom "Cancel booking" button. */}
+        {gymClass.isBooked && (gymClass.bookings?.length ?? 0) > 0 && (
+          <View style={s.bookingsSection}>
+            <Text
+              style={[
+                s.sectionTitle,
+                {
+                  textAlign: isAr ? "right" : "left",
+                  writingDirection: isAr ? "rtl" : "ltr",
+                },
+              ]}
+            >
+              🗓️ {i18n.t("my_bookings") || "My Bookings"}
+            </Text>
+
+            {gymClass.bookings.map((booking: any) => {
+              const bookingPast = isBookingPastDate(booking.classDate);
+              const statusLabel = getCancellationStatusLabel(
+                booking.cancellationStatus,
+              );
+              const canCancelThis =
+                !bookingPast &&
+                (!booking.cancellationStatus ||
+                  booking.cancellationStatus === "None");
+
+              return (
+                <View
+                  key={booking.userClassId}
+                  style={[
+                    s.bookingRow,
+                    { flexDirection: isAr ? "row-reverse" : "row" },
+                  ]}
+                >
+                  <View style={s.bookingRowInfo}>
+                    <Text
+                      style={[
+                        s.bookingDateText,
+                        { textAlign: isAr ? "right" : "left" },
+                      ]}
+                    >
+                      {translateDay(booking.day, isAr)} •{" "}
+                      {formatDateDMY(booking.classDate)}
+                    </Text>
+                    <Text
+                      style={[
+                        s.bookingMetaText,
+                        { textAlign: isAr ? "right" : "left" },
+                      ]}
+                    >
+                      {booking.paidAmount} {i18n.t("currency") || "JOD"}
+                      {booking.isAttended
+                        ? ` • ${i18n.t("attended") || "Attended"}`
+                        : bookingPast
+                          ? ` • ${i18n.t("not_attended") || "Not attended"}`
+                          : ""}
+                    </Text>
+                    {statusLabel && (
+                      <View style={s.bookingStatusBadge}>
+                        <Text style={s.bookingStatusText}>{statusLabel}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {canCancelThis && (
+                    <TouchableOpacity
+                      style={s.bookingCancelBtn}
+                      onPress={() => handleCancelPress(booking.userClassId)}
+                    >
+                      <MaterialCommunityIcons
+                        name="close-circle-outline"
+                        size={16}
+                        color="#DC2626"
+                      />
+                      <Text style={s.bookingCancelBtnText}>
+                        {i18n.t("cancel") || "Cancel"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
 
       {/* Book Button — only when upcoming, not already booked, and not full */}
-      {!isPastClass && !gymClass.isBooked && !isClassFull && (
-        <TouchableOpacity
-          onPress={() => {
-            if (gymClass.isRecurring) {
-              // Recurring classes go through the date + days config modal
-              openBookingModal();
-              return;
-            }
-            // Non-recurring classes keep the simple confirm-alert flow
-            showAlert(
-              "warning",
-              i18n.t("book_this_class"),
-              gymClass.isPaid
-                ? `${i18n.t("confirm_book_class") || "Are you sure you want to book this class?"} ${
-                    i18n.t("wallet_withdraw_notice") || "This is a paid class"
-                  } (${gymClass.price} ${i18n.t("currency") || "JOD"}) ${
-                    i18n.t("will_be_deducted_from_wallet") ||
-                    "will be deducted from your wallet."
-                  }`
-                : i18n.t("confirm_book_class") ||
-                    "Are you sure you want to book this class?",
-              [
-                { text: i18n.t("no") || "No", style: "cancel" },
-                {
-                  text: i18n.t("yes") || "Yes",
-                  style: "primary",
-                  onPress: handleBookClassSimple,
-                },
-              ],
-            );
-          }}
-          activeOpacity={0.9}
-        >
-          <LinearGradient
-            colors={["#FF7002", "#FF7002"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={s.bookButton}
-          >
-            <Text style={s.bookButtonText}>{i18n.t("book_this_class")}</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      )}
-
-      {/* Class Full — upcoming, not booked, no seats left: no button, just a notice */}
-      {!isPastClass && !gymClass.isBooked && isClassFull && (
+      {/* Blocked — upcoming, not booked, blocked from booking at all */}
+      {!isPastClass && !gymClass.isBooked && isBookingBlocked && (
         <View style={s.fullClassBox}>
           <MaterialCommunityIcons
-            name="account-multiple-remove"
+            name="account-cancel"
             size={20}
             color={theme.muted}
           />
           <Text style={s.fullClassText}>
-            {i18n.t("class_full_message") || "This class is fully booked"}
+            {i18n.t("booking_blocked_message") ||
+              "You can't book this class because you are blocked."}
           </Text>
         </View>
       )}
 
-      {/* Cancel button — confirms before deleting the booking */}
-      {!isPastClass && gymClass.isBooked && (
-        <TouchableOpacity
-          onPress={() => confirmBookClassDelete(gymClass.userClassId)}
-          activeOpacity={0.9}
-        >
-          <LinearGradient
-            colors={["#620000", "#5F0000"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={s.bookButton}
+      {/* Book Button — only when upcoming, not already booked, not blocked, and not full */}
+      {!isPastClass &&
+        !gymClass.isBooked &&
+        !isBookingBlocked &&
+        !isClassFull && (
+          <TouchableOpacity
+            onPress={() => {
+              if (bookingKind === "ongoing") {
+                openBookingModal();
+                return;
+              }
+              showAlert(
+                "warning",
+                i18n.t("book_this_class"),
+                gymClass.isPaid
+                  ? `${i18n.t("confirm_book_class") || "Are you sure you want to book this class?"} ${
+                      i18n.t("wallet_withdraw_notice") || "This is a paid class"
+                    } (${gymClass.price} ${i18n.t("currency") || "JOD"}) ${
+                      i18n.t("will_be_deducted_from_wallet") ||
+                      "will be deducted from your wallet."
+                    }`
+                  : i18n.t("confirm_book_class") ||
+                      "Are you sure you want to book this class?",
+                [
+                  { text: i18n.t("no") || "No", style: "cancel" },
+                  {
+                    text: i18n.t("yes") || "Yes",
+                    style: "primary",
+                    onPress: submitOneTimeOrCourseBooking,
+                  },
+                ],
+              );
+            }}
+            activeOpacity={0.9}
           >
-            <Text style={s.bookButtonText}>{i18n.t("cancel_booking")}</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      )}
+            <LinearGradient
+              colors={["#FF7002", "#FF7002"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.bookButton}
+            >
+              <Text style={s.bookButtonText}>{i18n.t("book_this_class")}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+      {/* Class Full — upcoming, not booked, not blocked, no seats left */}
+      {!isPastClass &&
+        !gymClass.isBooked &&
+        !isBookingBlocked &&
+        isClassFull && (
+          <View style={s.fullClassBox}>
+            <MaterialCommunityIcons
+              name="account-multiple-remove"
+              size={20}
+              color={theme.muted}
+            />
+            <Text style={s.fullClassText}>
+              {i18n.t("class_full_message") || "This class is fully booked"}
+            </Text>
+          </View>
+        )}
+
       {isPastClass && (
         <View
           style={{
@@ -789,7 +1212,7 @@ export default function ClassDetailsScreen({ route }: any) {
         </View>
       )}
 
-      {/* Recurring booking config modal */}
+      {/* Recurring booking config modal — "Ongoing" mode only */}
       <Modal
         transparent
         animationType="slide"
@@ -815,7 +1238,8 @@ export default function ClassDetailsScreen({ route }: any) {
               {i18n.t("book_this_class")}
             </Text>
 
-            {/* Recurring toggle */}
+            {/* Recurring toggle — false: book just the picked date.
+                true: book a weekly repeat on the picked days. */}
             <View
               style={[
                 s.modalRow,
@@ -832,7 +1256,9 @@ export default function ClassDetailsScreen({ route }: any) {
               />
             </View>
 
-            {/* Start date picker — past dates disabled via minimumDate */}
+            {/* Start / single-occurrence date picker — past dates disabled
+                via minimumDate. Always shown: it's the target date when
+                the toggle is off, and the recurrence start date when on. */}
             <TouchableOpacity
               style={[
                 s.modalRow,
@@ -863,7 +1289,7 @@ export default function ClassDetailsScreen({ route }: any) {
               />
             )}
 
-            {/* Repeat day selector — only relevant when recurring */}
+            {/* Repeat day selector — only relevant when recurring toggle is on */}
             {isRecurringBooking && (
               <View style={s.modalDaysSection}>
                 <Text
@@ -898,6 +1324,42 @@ export default function ClassDetailsScreen({ route }: any) {
               </View>
             )}
 
+            {/* 👇 new — recurring booking end date, only shown when
+                isRecurringBooking is true. Optional: null stays unbounded. */}
+            {isRecurringBooking && (
+              <>
+                <TouchableOpacity
+                  style={[
+                    s.modalRow,
+                    { flexDirection: isAr ? "row-reverse" : "row" },
+                  ]}
+                  onPress={() => setShowEndDatePicker(true)}
+                >
+                  <Text style={s.modalRowLabel}>
+                    {i18n.t("recurring_end_date") || "Repeat until"}
+                  </Text>
+                  <Text style={s.modalDateValue}>
+                    {formatDateDMY(selectedRecurringEndDate)}
+                  </Text>
+                </TouchableOpacity>
+
+                {showEndDatePicker && (
+                  <DateTimePicker
+                    value={selectedRecurringEndDate}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    minimumDate={selectedClassDate}
+                    textColor={isDarkMode ? "#F0F0F0" : "#222222"}
+                    themeVariant={isDarkMode ? "dark" : "light"}
+                    onChange={(_event, date) => {
+                      setShowEndDatePicker(Platform.OS === "ios");
+                      if (date) setSelectedRecurringEndDate(date);
+                    }}
+                  />
+                )}
+              </>
+            )}
+
             <TouchableOpacity onPress={handleConfirmBookingModal}>
               <LinearGradient
                 colors={["#FF7002", "#FF7002"]}
@@ -914,6 +1376,81 @@ export default function ClassDetailsScreen({ route }: any) {
         </View>
       </Modal>
 
+      {/* Cancellation reason modal — new */}
+      <Modal
+        transparent
+        animationType="slide"
+        visible={isCancelModalVisible}
+        onRequestClose={() => setIsCancelModalVisible(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalBox}>
+            <TouchableOpacity
+              style={s.modalCloseBtn}
+              onPress={() => setIsCancelModalVisible(false)}
+              disabled={isSubmittingCancellation}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={22}
+                color={theme.muted}
+              />
+            </TouchableOpacity>
+
+            <Text
+              style={[s.modalTitle, { textAlign: isAr ? "right" : "left" }]}
+            >
+              {i18n.t("cancel_booking_title") || "Cancel Booking"}
+            </Text>
+
+            <Text
+              style={[
+                s.modalRowLabel,
+                { marginBottom: 8, textAlign: isAr ? "right" : "left" },
+              ]}
+            >
+              {i18n.t("cancellation_reason_label") ||
+                "Please tell us why you're cancelling"}
+            </Text>
+
+            <TextInput
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              placeholder={
+                i18n.t("cancellation_reason_placeholder") ||
+                "Type your reason here..."
+              }
+              placeholderTextColor={theme.muted}
+              multiline
+              numberOfLines={4}
+              textAlign={isAr ? "right" : "left"}
+              style={s.reasonInput}
+              editable={!isSubmittingCancellation}
+            />
+
+            <TouchableOpacity
+              onPress={submitCancellationRequest}
+              disabled={isSubmittingCancellation}
+            >
+              <LinearGradient
+                colors={["#620000", "#5F0000"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.modalConfirmBtn}
+              >
+                {isSubmittingCancellation ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={s.bookButtonText}>
+                    {i18n.t("submit_cancellation") || "Submit"}
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {alertNode}
     </View>
   );
@@ -922,6 +1459,21 @@ export default function ClassDetailsScreen({ route }: any) {
 // ─── Styles factory ───────────────────────────────────────────────────────────
 const createStyles = (theme: ReturnType<typeof getTheme>) =>
   StyleSheet.create({
+    infoText: { color: "#FF7002", fontSize: 15, marginLeft: 6 },
+    modeBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+      marginTop: 8,
+    },
+    modeBadgeText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "700",
+    },
     container: {
       flex: 1,
       backgroundColor: theme.bg,
@@ -931,7 +1483,6 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
     headerContent: { padding: 16 },
     classType: { fontSize: 28, fontWeight: "700", color: "#FFFFFF" },
     infoRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
-    infoText: { color: "#FF7002", fontSize: 15, marginLeft: 6 },
     detailsSection: { flex: 1, paddingHorizontal: 16, marginTop: 10 },
     sectionTitle: {
       fontSize: 18,
@@ -965,7 +1516,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       backgroundColor: theme.surface,
       padding: 12,
       borderRadius: 12,
-      marginBottom: 80,
+      marginBottom: 16,
       shadowColor: "#000",
       shadowOpacity: 0.05,
       shadowOffset: { width: 0, height: 2 },
@@ -974,6 +1525,42 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       borderWidth: 0.5,
       borderColor: theme.border,
     },
+    // ── My Bookings list ───────────────────────────────────────────────
+    bookingsSection: { marginBottom: 24 },
+    bookingRow: {
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 8,
+      alignItems: "center",
+      justifyContent: "space-between",
+      borderWidth: 0.5,
+      borderColor: theme.border,
+    },
+    bookingRowInfo: { flex: 1 },
+    bookingDateText: { fontSize: 15, fontWeight: "700", color: theme.ink },
+    bookingMetaText: { fontSize: 13, color: theme.muted, marginTop: 2 },
+    bookingStatusBadge: {
+      marginTop: 6,
+      alignSelf: "flex-start",
+      backgroundColor: "#FEF3C7",
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 8,
+    },
+    bookingStatusText: { fontSize: 11, fontWeight: "700", color: "#92400E" },
+    bookingCancelBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: theme.bg,
+      borderWidth: 1,
+      borderColor: "#DC2626",
+    },
+    bookingCancelBtnText: { fontSize: 12, fontWeight: "700", color: "#DC2626" },
     bookButton: {
       paddingVertical: 14,
       borderRadius: 12,
@@ -1004,7 +1591,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       fontWeight: "700",
       color: theme.muted,
     },
-    // ── Booking modal ──────────────────────────────────────────────────
+    // ── Booking / cancellation modals ──────────────────────────────────
     modalOverlay: {
       flex: 1,
       backgroundColor: "rgba(0,0,0,0.4)",
@@ -1067,5 +1654,18 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       marginTop: 20,
       paddingVertical: 14,
       borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    // 👇 new — reason text input for cancellation modal
+    reasonInput: {
+      minHeight: 100,
+      borderWidth: 1,
+      borderColor: theme.border || "#DDD",
+      borderRadius: 12,
+      padding: 12,
+      color: theme.ink,
+      backgroundColor: theme.bg,
+      textAlignVertical: "top",
     },
   });

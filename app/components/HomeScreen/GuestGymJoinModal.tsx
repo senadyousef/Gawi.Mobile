@@ -18,7 +18,7 @@ import { handleGetToken } from "../../helpers";
 // 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
 import SweetAlert, { SweetAlertButton, SweetAlertType } from "../SweetAlert";
 
-const API_BASE_URL = "http://192.168.1.16/api";
+const API_BASE_URL = "https://gawifit.com/api";
 const STORAGE_KEY = "GuestGymJoinKey";
 
 interface StoredKeyData {
@@ -331,7 +331,12 @@ export default function GuestGymJoinModal({
     try {
       await handleLogout();
       await AsyncStorage.clear();
-      setGuestMode?.(true);
+      // 👇 FIX: must be false, not commented out / true. RootNavigator
+      // (Navigation.tsx) only registers "Login" when !isAuthenticated &&
+      // !guestMode — leaving guestMode true keeps the guest-enabled
+      // branch active, where "Login" doesn't exist, so the reset below
+      // silently does nothing.
+      setGuestMode?.(false);
 
       hideAlert();
 
@@ -340,11 +345,17 @@ export default function GuestGymJoinModal({
       // (see Header.tsx's own SignUp redirect) — one level only reaches an
       // intermediate Tab/Drawer navigator with no "Login" route, so the
       // reset silently fails there.
-      const rootNavigation = navigation.getParent()?.getParent();
-
-      rootNavigation?.dispatch(
-        CommonActions.reset({ index: 0, routes: [{ name: "Login" }] }),
-      );
+      //
+      // Also wait one tick before dispatching — this gives the
+      // Stack.Navigator a render cycle to pick up "Login" in its screen
+      // list now that guestMode has flipped to false, before we navigate
+      // to it. Same pattern used in SettingsSection.tsx's logout flow.
+      setTimeout(() => {
+        const rootNavigation = navigation.getParent()?.getParent();
+        rootNavigation?.dispatch(
+          CommonActions.reset({ index: 0, routes: [{ name: "Login" }] }),
+        );
+      }, 200);
     } catch (error) {
       console.error("❌ Error logging out after confirm:", error);
       hideAlert();

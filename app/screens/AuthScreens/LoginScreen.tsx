@@ -102,8 +102,7 @@ const LoginScreen = () => {
       }
     })();
   }, []);
-  
-  
+
   // const handleAutoFill = () => {
   //   Alert.alert("Auto Fill", "Choose account", [
   //     {
@@ -209,6 +208,7 @@ const LoginScreen = () => {
       // 8️⃣ Navigate - Use a small delay to ensure context updates
       setTimeout(() => {
         const targetRoute = isPT ? "PTRoot" : "Root";
+        console.log("targetRoute", targetRoute);
 
         // Get the root navigator from ref or navigation container
         navigation.dispatch(
