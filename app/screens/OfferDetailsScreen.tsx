@@ -32,7 +32,7 @@ interface OfferDetailsProps {
 
 // ---------------- COMPONENT ----------------
 export default function OfferDetailsScreen() {
-  const BASE_URL = "https://gawifit.com";
+  const BASE_URL = "http://192.168.1.16";
 
   const route = useRoute<RouteProp<{ params: OfferDetailsProps }, "params">>();
   const { offer } = route.params;

@@ -51,7 +51,7 @@ export default function WalletHistoryScreen() {
       }
 
       const response = await fetch(
-        "https://gawifit.com/api/MemberWallet/me/sales-history",
+        "http://192.168.1.16/api/MemberWallet/me/sales-history",
         {
           method: "GET",
           headers: {

@@ -18,7 +18,7 @@ import { handleGetToken } from "../../helpers";
 // 👇 adjust this path to wherever SweetAlert.tsx actually lives in this project
 import SweetAlert, { SweetAlertButton, SweetAlertType } from "../SweetAlert";
 
-const API_BASE_URL = "https://gawifit.com/api";
+const API_BASE_URL = "http://192.168.1.16/api";
 const STORAGE_KEY = "GuestGymJoinKey";
 
 interface StoredKeyData {

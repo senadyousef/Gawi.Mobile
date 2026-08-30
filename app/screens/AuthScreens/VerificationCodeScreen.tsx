@@ -38,7 +38,7 @@ const VerifyCodeScreen = () => {
       setErrorMessage('');
 
       const res = await fetch(
-        'https://gawifit.com/resetpassmobile/verify-code',
+        'http://192.168.1.16/resetpassmobile/verify-code',
         {
           method: 'POST',
           headers: { Accept: '*/*', 'Content-Type': 'application/json' },

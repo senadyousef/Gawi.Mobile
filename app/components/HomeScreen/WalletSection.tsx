@@ -65,7 +65,7 @@ export default function WalletSection({
       }
 
       const response = await fetch(
-        "https://gawifit.com/api/MemberWallet/me",
+        "http://192.168.1.16/api/MemberWallet/me",
         {
           method: "GET",
           headers: {

@@ -55,7 +55,7 @@ const LatestNewsSection = ({ refreshTrigger = 0 }: Props) => {
       setLoading(true);
 
       const response = await fetch(
-        `https://gawifit.com/api/News/getallNews?userId=${MemberId}&role=${UserRole}`,
+        `http://192.168.1.16/api/News/getallNews?userId=${MemberId}&role=${UserRole}`,
         {
           method: "GET",
           headers: {

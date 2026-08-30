@@ -249,7 +249,7 @@ export default function BookPTScreen() {
         return;
       }
       const token = await handleGetToken();
-      const response = await fetch("https://gawifit.com/api/PTClass", {
+      const response = await fetch("http://192.168.1.16/api/PTClass", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

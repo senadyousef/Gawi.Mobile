@@ -31,10 +31,9 @@ interface IExtendedContext extends Icontext {
   expoPushToken?: string | null;
   cartId?: number | null;
   setCartId?: (id: number | null) => void;
-  userType?: "PT" | "GymMember" | null;
+  userType?: "pt" | "member" | "employee" | null;
   isDarkMode?: boolean;
-  setUserType?: (type: "pt" | "member" | null) => void;
-
+  setUserType?: (type: "pt" | "member" | "employee" | null) => void;
   // 👇 NEW
   authIntent?: "signup" | "login" | null;
   setAuthIntent?: (intent: "signup" | "login" | null) => void;
@@ -92,8 +91,12 @@ export const ContextProvider: React.FC<Iprops> = ({
   const [cartId, setCartId] = React.useState<number | null>(null);
   const [isDarkMode, setIsDarkMode] = React.useState<boolean>(false);
   const [isInitializing, setIsInitializing] = React.useState(true);
-  const [userType, setUserType] = React.useState<"pt" | "member" | null>(null);
-  const [authIntent, setAuthIntent] = React.useState<"signup" | "login" | null>(null);
+  const [userType, setUserType] = React.useState<
+    "pt" | "member" | "employee" | null
+  >(null);
+  const [authIntent, setAuthIntent] = React.useState<"signup" | "login" | null>(
+    null,
+  );
 
   const [isAuthenticated, setIsAuthenticated] = React.useState<boolean>(false);
   const [guestMode, setGuestMode] = React.useState<boolean>(false);
@@ -193,6 +196,8 @@ export const ContextProvider: React.FC<Iprops> = ({
 
           if (profile.role === "PT") {
             setUserType("pt");
+          } else if (profile.role === "GymEmployee") {
+            setUserType("employee");
           } else {
             setUserType("member");
           }
@@ -324,6 +329,8 @@ export const ContextProvider: React.FC<Iprops> = ({
 
       if (profile.role === "PT") {
         setUserType("pt");
+      } else if (profile.role === "GymEmployee") {
+        setUserType("employee");
       } else {
         setUserType("member");
       }
@@ -346,6 +353,8 @@ export const ContextProvider: React.FC<Iprops> = ({
 
     if (profile.role === "PT") {
       setUserType("pt");
+    } else if (profile.role === "GymEmployee") {
+      setUserType("employee");
     } else {
       setUserType("member");
     }

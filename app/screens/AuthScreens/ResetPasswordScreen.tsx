@@ -43,7 +43,7 @@ const ResetPasswordScreen = () => {
       }
 
       const res = await fetch(
-        'https://gawifit.com/resetpassmobile/reset-password',
+        'http://192.168.1.16/resetpassmobile/reset-password',
         {
           method: 'POST',
           headers: { Accept: '*/*', 'Content-Type': 'application/json' },

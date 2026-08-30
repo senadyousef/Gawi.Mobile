@@ -29,7 +29,7 @@ const ForgetPasswordScreen = () => {
       setIsLoading(true);
       setErrorMessage('');
 
-      const res = await fetch('https://gawifit.com/resetpassmobile/request', {
+      const res = await fetch('http://192.168.1.16/resetpassmobile/request', {
         method: 'POST',
         headers: { Accept: '*/*', 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: data.email }),

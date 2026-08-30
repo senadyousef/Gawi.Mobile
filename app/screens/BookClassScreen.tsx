@@ -90,7 +90,7 @@ export default function BookClassScreen() {
       const token = await handleGetToken(); // 👈 was MemberId — now JWT
 
       const response = await fetch(
-        `https://gawifit.com/api/GymClass/mobile`, // 👈 new endpoint
+        `http://192.168.1.16/api/GymClass/mobile`, // 👈 new endpoint
         {
           headers: {
             accept: "text/plain",
@@ -120,10 +120,13 @@ export default function BookClassScreen() {
     fetchClasses();
   }, []);
 
+  // 👇 shared pull-to-refresh handler — used by RefreshControl AND
+  // by the "All Classes" button below
   const onRefresh = () => {
     setRefreshing(true);
     fetchClasses(false);
   };
+
   const getWeekDays = () => {
     const days = [];
     const start = new Date(currentWeekStart);
@@ -173,6 +176,12 @@ export default function BookClassScreen() {
     setCurrentWeekStart(newDate);
   };
 
+  // 👇 "All Classes" — clears the date filter AND refreshes the list
+  const handleShowAllClasses = () => {
+    setSelectedDate(undefined);
+    onRefresh();
+  };
+
   if (loading) {
     return (
       <View style={[s.center, { backgroundColor: theme.bg }]}>
@@ -183,7 +192,7 @@ export default function BookClassScreen() {
   }
 
   if (error) {
-    console.log("error",error);
+    console.log("error", error);
     return (
       <View style={[s.center, { backgroundColor: theme.bg }]}>
         <Text style={{ color: "red" }}>{i18n.t("error_loading")}</Text>
@@ -292,7 +301,7 @@ export default function BookClassScreen() {
       </View>
       <View style={{ alignItems: "center", marginTop: 10 }}>
         <TouchableOpacity
-          onPress={() => setSelectedDate(undefined)}
+          onPress={handleShowAllClasses}
           style={{
             backgroundColor: "#FF7002",
             paddingHorizontal: 16,
@@ -306,150 +315,155 @@ export default function BookClassScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Classes for selected date */}
-      {displayedClasses.length > 0 ? (
-        <FlatList
-          data={displayedClasses}
-          keyExtractor={(item) => item.id.toString()}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[Colors.primary]} // Android
-              tintColor={Colors.primary} // iOS
-            />
-          }
-          renderItem={({ item }) => {
-            const itemDateStr = item.date.split("T")[0];
-            const isEnded = itemDateStr < todayStr;
-            const isBlocked =
-              !isEnded && !item.isBooked && isGymClassBlocked(item); // 👈 new
-            const isFull =
-              !isEnded && !item.isBooked && !isBlocked && isGymClassFull(item); // 👈 blocked takes priority over full
+      {/* 👇 Classes list — always the FlatList now (even when empty) so
+          RefreshControl / pull-to-refresh keeps working with zero results.
+          The old separate empty-state View is now ListEmptyComponent. */}
+      <FlatList
+        data={displayedClasses}
+        keyExtractor={(item) => item.id.toString()}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]} // Android
+            tintColor={Colors.primary} // iOS
+          />
+        }
+        ListEmptyComponent={
+          <View style={[s.center, { marginTop: 20 }]}>
+            <Text
+              style={[
+                { color: theme.emptyText },
+                {
+                  textAlign: isArabic ? "right" : "center",
+                  writingDirection: isArabic ? "rtl" : "ltr",
+                },
+              ]}
+            >
+              {i18n.t("no_class_on_date")}
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const itemDateStr = item.date.split("T")[0];
+          const isEnded = itemDateStr < todayStr;
+          const isBlocked =
+            !isEnded && !item.isBooked && isGymClassBlocked(item); // 👈 new
+          const isFull =
+            !isEnded && !item.isBooked && !isBlocked && isGymClassFull(item); // 👈 blocked takes priority over full
 
-            const statusColor = isEnded
-              ? "#9CA3AF"
-              : item.isBooked
-                ? "#3B82F6"
-                : isBlocked
-                  ? "#6B7280" // 👈 gray for blocked, distinct from red "full"
-                  : isFull
-                    ? "#EF4444"
-                    : "#FF7002";
+          const statusColor = isEnded
+            ? "#9CA3AF"
+            : item.isBooked
+              ? "#3B82F6"
+              : isBlocked
+                ? "#6B7280" // 👈 gray for blocked, distinct from red "full"
+                : isFull
+                  ? "#EF4444"
+                  : "#FF7002";
 
-            const statusLabelText = isEnded
-              ? isArabic
-                ? "منتهية"
-                : "Ended"
-              : item.isBooked
-                ? i18n.t("already_booked")
-                : isBlocked
-                  ? i18n.t("class_blocked_short") ||
-                    (isArabic ? "محظور" : "Blocked") // 👈 new
-                  : isFull
-                    ? i18n.t("class_full_short") ||
-                      (isArabic ? "ممتلئ - غير متاح" : "Full - Not Available")
-                    : i18n.t("available");
+          const statusLabelText = isEnded
+            ? isArabic
+              ? "منتهية"
+              : "Ended"
+            : item.isBooked
+              ? i18n.t("already_booked")
+              : isBlocked
+                ? i18n.t("class_blocked_short") ||
+                  (isArabic ? "محظور" : "Blocked") // 👈 new
+                : isFull
+                  ? i18n.t("class_full_short") ||
+                    (isArabic ? "ممتلئ - غير متاح" : "Full - Not Available")
+                  : i18n.t("available");
 
-            return (
-              <TouchableOpacity
-                style={s.cardContainer}
-                activeOpacity={0.9}
-                onPress={() =>
-                  navigation.navigate("ClassDetails", { classId: item.id })
-                }
+          return (
+            <TouchableOpacity
+              style={s.cardContainer}
+              activeOpacity={0.9}
+              onPress={() =>
+                navigation.navigate("ClassDetails", { classId: item.id })
+              }
+            >
+              <ImageBackground
+                source={{
+                  uri: `http://192.168.1.16/${item.photoUrl}`,
+                }}
+                style={s.imageBackground}
+                imageStyle={{ borderRadius: 16 }}
               >
-                <ImageBackground
-                  source={{
-                    uri: `https://gawifit.com/${item.photoUrl}`,
-                  }}
-                  style={s.imageBackground}
-                  imageStyle={{ borderRadius: 16 }}
+                <LinearGradient
+                  colors={["transparent", "rgba(0,0,0,1)"]}
+                  style={s.gradientOverlay}
+                />
+                <View
+                  style={[
+                    s.statusLabel,
+                    { backgroundColor: statusColor }, // 👈
+                  ]}
                 >
-                  <LinearGradient
-                    colors={["transparent", "rgba(0,0,0,1)"]}
-                    style={s.gradientOverlay}
-                  />
-                  <View
+                  <Text
                     style={[
-                      s.statusLabel,
-                      { backgroundColor: statusColor }, // 👈
+                      s.statusText,
+                      {
+                        textAlign: isArabic ? "right" : "left",
+                        writingDirection: isArabic ? "rtl" : "ltr",
+                      },
                     ]}
                   >
+                    {statusLabelText}
+                  </Text>
+                </View>
+                <View style={s.cardContent}>
+                  <Text style={s.classType}>
+                    {isArabic ? item.nameAr : item.nameEn}
+                  </Text>
+                  <View style={s.infoRow}>
+                    <MaterialCommunityIcons
+                      name="calendar"
+                      size={16}
+                      color="#FF7002"
+                    />
                     <Text
                       style={[
-                        s.statusText,
+                        s.infoText,
                         {
                           textAlign: isArabic ? "right" : "left",
                           writingDirection: isArabic ? "rtl" : "ltr",
                         },
                       ]}
                     >
-                      {statusLabelText}
+                      {item.form} - {item.to}
                     </Text>
                   </View>
-                  <View style={s.cardContent}>
-                    <Text style={s.classType}>
-                      {isArabic ? item.nameAr : item.nameEn}
+                  <View style={s.infoRow}>
+                    <MaterialCommunityIcons
+                      name="account-group"
+                      size={16}
+                      color="#FF7002"
+                    />
+                    <Text
+                      style={[
+                        s.infoText,
+                        {
+                          textAlign: isArabic ? "right" : "left",
+                          writingDirection: isArabic ? "rtl" : "ltr",
+                        },
+                      ]}
+                    >
+                      {i18n.t("capacity")}: {item.capacity}
                     </Text>
-                    <View style={s.infoRow}>
-                      <MaterialCommunityIcons
-                        name="calendar"
-                        size={16}
-                        color="#FF7002"
-                      />
-                      <Text
-                        style={[
-                          s.infoText,
-                          {
-                            textAlign: isArabic ? "right" : "left",
-                            writingDirection: isArabic ? "rtl" : "ltr",
-                          },
-                        ]}
-                      >
-                        {item.form} - {item.to}
-                      </Text>
-                    </View>
-                    <View style={s.infoRow}>
-                      <MaterialCommunityIcons
-                        name="account-group"
-                        size={16}
-                        color="#FF7002"
-                      />
-                      <Text
-                        style={[
-                          s.infoText,
-                          {
-                            textAlign: isArabic ? "right" : "left",
-                            writingDirection: isArabic ? "rtl" : "ltr",
-                          },
-                        ]}
-                      >
-                        {i18n.t("capacity")}: {item.capacity}
-                      </Text>
-                    </View>
                   </View>
-                </ImageBackground>
-              </TouchableOpacity>
-            );
-          }}
-          contentContainerStyle={{ paddingBottom: 30 }}
-        />
-      ) : (
-        <View style={s.center}>
-          <Text
-            style={[
-              { color: theme.emptyText, marginTop: 20 },
-              {
-                textAlign: isArabic ? "right" : "center",
-                writingDirection: isArabic ? "rtl" : "ltr",
-              },
-            ]}
-          >
-            {i18n.t("no_class_on_date")}
-          </Text>
-        </View>
-      )}
+                </View>
+              </ImageBackground>
+            </TouchableOpacity>
+          );
+        }}
+        contentContainerStyle={
+          displayedClasses.length === 0
+            ? { flexGrow: 1, paddingBottom: 30 }
+            : { paddingBottom: 30 }
+        }
+      />
     </View>
   );
 }

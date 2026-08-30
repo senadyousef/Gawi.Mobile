@@ -97,7 +97,7 @@ const CartScreen: React.FC = () => {
       }
       const token = await handleGetToken();
       const res = await fetch(
-        `https://gawifit.com/api/Cart/getCartWithItems?cartId=${cartId}`,
+        `http://192.168.1.16/api/Cart/getCartWithItems?cartId=${cartId}`,
         {
           method: "GET",
           headers: {
@@ -137,7 +137,7 @@ const CartScreen: React.FC = () => {
       if (!MemberId) return;
 
       const res = await fetch(
-        `https://gawifit.com/api/MemberShips/MemberShipsforuser/${MemberId}`,
+        `http://192.168.1.16/api/MemberShips/MemberShipsforuser/${MemberId}`,
         { method: "GET", headers: { accept: "application/json" } },
       );
       if (!res.ok) return;
@@ -213,7 +213,7 @@ const CartScreen: React.FC = () => {
 
       console.log("Submitting order:", orderData);
 
-      const response = await fetch("https://gawifit.com/api/Orders/checkout", {
+      const response = await fetch("http://192.168.1.16/api/Orders/checkout", {
         method: "POST",
         headers: {
           accept: "text/plain",

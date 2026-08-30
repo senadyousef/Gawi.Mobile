@@ -75,7 +75,7 @@ export default function AnnouncementsNewsScreen() {
       setLoading(true);
 
       const response = await fetch(
-        `https://gawifit.com/api/News/getallNews?userId=${MemberId}&role=${UserRole}`,
+        `http://192.168.1.16/api/News/getallNews?userId=${MemberId}&role=${UserRole}`,
         {
           method: "GET",
           headers: {
@@ -141,7 +141,7 @@ export default function AnnouncementsNewsScreen() {
                   title: i18n.locale === "ar" ? item.nameAr : item.nameEn,
                   photo:
                     item.photoUrl && !item.photoUrl.startsWith("http")
-                      ? `https://gawifit.com${item.photoUrl}`
+                      ? `http://192.168.1.16${item.photoUrl}`
                       : item.photoUrl,
                   description:
                     i18n.locale === "ar" ? item.contentAr : item.contentEn,
@@ -153,7 +153,7 @@ export default function AnnouncementsNewsScreen() {
               source={{
                 uri:
                   item.photoUrl && !item.photoUrl.startsWith("http")
-                    ? `https://gawifit.com${item.photoUrl}`
+                    ? `http://192.168.1.16${item.photoUrl}`
                     : item.photoUrl,
               }}
               style={s.cardImage}

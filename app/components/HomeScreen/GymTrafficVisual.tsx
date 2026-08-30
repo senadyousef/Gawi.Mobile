@@ -107,7 +107,7 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
       if (!MemberId) throw new Error("MemberId missing");
 
       const res = await fetch(
-        `https://gawifit.com/api/MemberShips/currentMembersForMemberTraffic?memberId=${MemberId}`,
+        `http://192.168.1.16/api/MemberShips/currentMembersForMemberTraffic?memberId=${MemberId}`,
         {
           headers: {
             Accept: "text/plain",
@@ -153,7 +153,7 @@ export default function GymTrafficVisual({ refreshTrigger = 0 }: Props) {
       if (!MemberId) throw new Error("MemberId missing");
 
       const res = await fetch(
-        `https://gawifit.com/api/MemberShips/getMemberGymTodayAttendanceEstimate?memberId=${MemberId}`,
+        `http://192.168.1.16/api/MemberShips/getMemberGymTodayAttendanceEstimate?memberId=${MemberId}`,
         {
           headers: {
             Accept: "text/plain",

@@ -17,7 +17,7 @@ import { useAppContext } from "../context";
 import { handleGetToken } from "../helpers";
 import AddComplaintModal from "./AddComplaintModal";
 
-const BASE_URL = "https://gawifit.com";
+const BASE_URL = "http://192.168.1.16";
 
 interface ComplaintItem {
   id: number;
@@ -54,7 +54,7 @@ const getStatusStyle = (status: string, theme: ReturnType<typeof getTheme>) => {
   return { bg: theme.muted + "25", fg: theme.muted }; // pending / default
 };
 
-// 👇 return null instead of building a broken "https://gawifit.comnull" url
+// 👇 return null instead of building a broken "http://192.168.1.16null" url
 const resolveMediaUrl = (path: string | null | undefined) =>
   path ? `${BASE_URL}${path}` : null;
 

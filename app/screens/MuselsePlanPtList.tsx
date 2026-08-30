@@ -201,7 +201,7 @@ const validateDays = (
 // API HELPERS
 // ═══════════════════════════════════════════════════════════════════════
 
-const BASE_URL = "https://gawifit.com/api";
+const BASE_URL = "http://192.168.1.16/api";
 
 const getCleanToken = async (): Promise<string | null> => {
   const token = await handleGetToken();

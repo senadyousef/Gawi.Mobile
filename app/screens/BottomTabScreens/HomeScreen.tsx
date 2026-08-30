@@ -126,7 +126,7 @@ const NotesSection = ({
     try {
       setDeletingId(id);
       const token = await handleGetToken();
-      const response = await fetch(`https://gawifit.com/api/Notes/${id}`, {
+      const response = await fetch(`http://192.168.1.16/api/Notes/${id}`, {
         method: "DELETE",
         headers: {
           accept: "*/*",
@@ -667,7 +667,7 @@ const HomeScreen = () => {
       const userId = await AsyncStorage.getItem("MemberId");
       if (!userId) return;
       const response = await fetch(
-        `https://gawifit.com/api/Notes/getallNotes?userId=${userId}`,
+        `http://192.168.1.16/api/Notes/getallNotes?userId=${userId}`,
         { method: "GET", headers: { accept: "text/plain" } },
       );
       if (response.ok) {

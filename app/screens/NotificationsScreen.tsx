@@ -89,7 +89,7 @@ export default function NotificationsScreen() {
       const token = await handleGetToken();
       if (!token) throw new Error("Authorization token missing");
       const response = await fetch(
-        "https://gawifit.com/api/Notification",
+        "http://192.168.1.16/api/Notification",
         {
           method: "GET",
           headers: {
@@ -132,7 +132,7 @@ export default function NotificationsScreen() {
 
       if (item.id) {
         await fetch(
-          `https://gawifit.com/api/Notification/readNotification?notificationId=${item.id}`,
+          `http://192.168.1.16/api/Notification/readNotification?notificationId=${item.id}`,
           {
             method: "PUT",
             headers: {

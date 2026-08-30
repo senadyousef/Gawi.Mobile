@@ -71,7 +71,7 @@ export default function PTDetailsScreen() {
             try {
               const token = await handleGetToken();
               const response = await fetch(
-                `https://gawifit.com/api/PTClass/${cls.ptClassId}`,
+                `http://192.168.1.16/api/PTClass/${cls.ptClassId}`,
                 {
                   method: "DELETE",
                   headers: { accept: "*/*", Authorization: `Bearer ${token}` },
@@ -196,7 +196,7 @@ export default function PTDetailsScreen() {
       {/* Header Image */}
       <View style={s.headerContainer}>
         <Image
-          source={{ uri: `https://gawifit.com${trainer.url}` }}
+          source={{ uri: `http://192.168.1.16${trainer.url}` }}
           style={s.headerImage}
         />
         <LinearGradient

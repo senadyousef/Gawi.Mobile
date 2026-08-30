@@ -41,7 +41,7 @@ const GallerySection = ({ refreshTrigger = 0 }: Props) => {
   const s = React.useMemo(() => createStyles(theme), [theme]); // 👈 reactive styles
 
   const { isArabic } = useI18n();
-  const BASE_URL = "https://gawifit.com";
+  const BASE_URL = "http://192.168.1.16";
 
   const [data, setData] = React.useState<any[]>([]);
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
@@ -56,7 +56,7 @@ const GallerySection = ({ refreshTrigger = 0 }: Props) => {
     try {
       const MemberId = (await AsyncStorage.getItem("MemberId")) || "0";
       const UserRole = (await AsyncStorage.getItem("UserRole")) || "Guest";
-      const url = `https://gawifit.com/api/Gyms/getAllGymsGallery?userId=${MemberId}&role=${UserRole}`;
+      const url = `http://192.168.1.16/api/Gyms/getAllGymsGallery?userId=${MemberId}&role=${UserRole}`;
       const res = await fetch(url, {
         method: "GET",
         headers: { Accept: "application/json" },

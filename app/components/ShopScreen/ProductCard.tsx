@@ -42,7 +42,7 @@ const ProductCard: React.FC<Props> = ({
 
   const imageUrl =
     item.photoUrl && item.photoUrl.trim() !== ""
-      ? `https://gawifit.com/${item.photoUrl}`
+      ? `http://192.168.1.16/${item.photoUrl}`
       : "https://via.placeholder.com/300x300.png?text=No+Image";
 
   return (

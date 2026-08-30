@@ -28,7 +28,7 @@ import {
 } from "../../constants";
 import i18n from "../../localization";
 
-const API_BASE_URL = "https://gawifit.com/api";
+const API_BASE_URL = "http://192.168.1.16/api";
 
 const Header: React.FC = () => {
   const { getDirection } = useI18n();

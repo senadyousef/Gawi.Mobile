@@ -42,7 +42,7 @@ const MyStatusSection: React.FC<Props> = ({ refreshTrigger = 0 }) => {
     const token = await handleGetToken();
 
     const response = await fetch(
-      `https://gawifit.com/api/MemberShips/MemberShipsforuser/${memberId}`,
+      `http://192.168.1.16/api/MemberShips/MemberShipsforuser/${memberId}`,
       {
         method: "GET",
         cache: "no-store",

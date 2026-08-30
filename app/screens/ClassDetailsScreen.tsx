@@ -25,7 +25,10 @@ import SweetAlert, {
   SweetAlertButton,
   SweetAlertType,
 } from "../components/SweetAlert";
-
+interface BookingErrorResponse {
+  message?: string;
+  messageAr?: string;
+}
 // ─── Theme factory ────────────────────────────────────────────────────────────
 const getTheme = (dark: boolean) => ({
   bg: dark ? "#121212" : "#F8FAFF",
@@ -110,7 +113,7 @@ const fetchGymClassById = async (classId: number) => {
     const token = await handleGetToken();
     if (!token) throw new Error("User not authenticated");
     const response = await fetch(
-      `https://gawifit.com/api/GymClass/mobile/${classId}`,
+      `http://192.168.1.16/api/GymClass/mobile/${classId}`,
       {
         headers: {
           accept: "text/plain",
@@ -189,21 +192,6 @@ export default function ClassDetailsScreen({ route }: any) {
 
     return classDateStr < todayStr;
   }, [gymClass]);
-  const isBookingBlocked = React.useMemo(() => {
-    if (!gymClass) return false;
-    return gymClass.isClassBookingBlocked === true;
-  }, [gymClass]);
-
-  const isClassFull = React.useMemo(() => {
-    if (!gymClass) return false;
-    return (
-      gymClass.isFull === true ||
-      gymClass.availableSeats === 0 ||
-      (gymClass.capacity != null &&
-        gymClass.bookedCount != null &&
-        gymClass.bookedCount >= gymClass.capacity)
-    );
-  }, [gymClass]);
 
   // 👇 Booking-type classification, drives which flow the Book button opens.
   // - not recurring at all -> "oneTime"
@@ -271,66 +259,17 @@ export default function ClassDetailsScreen({ route }: any) {
     return () => subscription.remove();
   }, [loadClass]);
 
-  const getLocalizedBookingError = (resultText: string): string => {
-    const normalized = resultText.trim().toLowerCase();
+  const getLocalizedBookingError = (result: BookingErrorResponse): string => {
+    const text = result?.message || "";
+    const messageAr = result?.messageAr || "";
 
-    if (
-      normalized.includes("already started") ||
-      normalized.includes("no longer be booked")
-    ) {
-      return (
-        i18n.t("class_already_started") ||
-        "This class has already started and can no longer be booked."
-      );
-    }
-    if (normalized.includes("already booked")) {
-      return (
-        i18n.t("already_booked_message") ||
-        "You have already booked this class."
-      );
-    }
-    if (
-      normalized.includes("subscription has not started") ||
-      (normalized.includes("subscription") &&
-        normalized.includes("not started"))
-    ) {
-      return (
-        i18n.t("subscription_not_started_message") ||
-        "Your subscription hasn't started yet."
-      );
-    }
-    // 👇 new — the picked repeat days + end date didn't produce any valid
-    // occurrence (e.g. end date before the first matching weekday)
-    if (
-      normalized.includes("no recurring dates") ||
-      (normalized.includes("recurring") &&
-        normalized.includes("no") &&
-        normalized.includes("found"))
-    ) {
-      return (
-        i18n.t("no_recurring_dates_found") ||
-        "No dates were found for the days and end date you selected. Please choose different days or a later end date."
-      );
-    }
-    if (normalized.includes("full") || normalized.includes("capacity")) {
-      return resultText || "Sorry, this class is fully booked.";
-    }
-    if (
-      normalized.includes("insufficient") ||
-      normalized.includes("wallet") ||
-      normalized.includes("balance")
-    ) {
-      return (
-        i18n.t("insufficient_wallet_balance") ||
-        "Insufficient wallet balance to book this class."
-      );
+    // Show Arabic when the current language is Arabic
+    if (i18n.locale.startsWith("ar")) {
+      return messageAr || text;
     }
 
-    return (
-      resultText ||
-      i18n.t("booking_failed_message") ||
-      "Unable to book this class."
-    );
+    // Otherwise show English
+    return text;
   };
 
   // 👇 Shared pre-flight checks (login, class still exists, not already
@@ -358,38 +297,15 @@ export default function ClassDetailsScreen({ route }: any) {
       );
       return null;
     }
-    if (classToBook.isBooked) {
+    if (!classToBook.canBook) {
       showAlert(
         "info",
-        i18n.t("already_booked_title") || "Already Booked",
-        i18n.t("already_booked_message") ||
-          "You have already booked this class.",
+        i18n.t("cannot_book_title") || "Can't Book",
+        isArabic
+          ? classToBook.cannotBookReasonAr
+          : classToBook.cannotBookReasonEn,
       );
-      return null;
-    }
-    if (classToBook.isClassBookingBlocked === true) {
-      showAlert(
-        "error",
-        i18n.t("booking_blocked_title") || "Booking Blocked",
-        i18n.t("booking_blocked_message") ||
-          "You can't book this class because you are blocked.",
-      );
-      return null;
-    }
-    const isClassFullFresh =
-      classToBook.isFull === true ||
-      classToBook.availableSeats === 0 ||
-      (classToBook.capacity &&
-        classToBook.bookedCount &&
-        classToBook.bookedCount >= classToBook.capacity);
-
-    if (isClassFullFresh) {
-      setGymClass((prev: any) => (prev ? { ...prev, isFull: true } : prev));
-      showAlert(
-        "info",
-        i18n.t("class_full_title") || "Class Full",
-        i18n.t("class_full_message") || "Sorry, this class is fully booked.",
-      );
+      setGymClass(classToBook);
       return null;
     }
 
@@ -400,16 +316,32 @@ export default function ClassDetailsScreen({ route }: any) {
     response: Response,
     classToBook: any,
   ) => {
-    const resultText = await response.text();
-    console.log(resultText);
+    // Read the response body only once
+    const raw = await response.text();
+    let result: any;
+
+    try {
+      result = JSON.parse(raw);
+    } catch {
+      result = {
+        message: raw,
+        messageAr: "",
+      };
+    }
+
+    console.log("Booking Response:", result);
+    console.log("English:", result.message);
+    console.log("Arabic:", result.messageAr);
+
     if (!response.ok) {
       showAlert(
         "error",
         i18n.t("booking_failed_title") || "Booking Failed",
-        getLocalizedBookingError(resultText),
+        getLocalizedBookingError(result),
       );
       return;
     }
+
     showAlert(
       "success",
       i18n.t("booking_confirmed_title") || "Booking Confirmed",
@@ -417,7 +349,10 @@ export default function ClassDetailsScreen({ route }: any) {
         name: isArabic ? classToBook.nameAr : classToBook.nameEn,
       }) || `You successfully booked ${classToBook.nameEn}!`,
     );
-    setGymClass((prev: any) => ({ ...prev, isBooked: true }));
+
+    // 👇 refresh from the server so canBook / cannotBookReason* / bookings
+    // reflect the new state rather than guessing it locally
+    loadClass({ silent: true });
   };
 
   // 👇 One-time class (isRecurring: false) OR fixed-schedule course
@@ -435,7 +370,7 @@ export default function ClassDetailsScreen({ route }: any) {
       };
 
       const token = await handleGetToken();
-      const response = await fetch("https://gawifit.com/api/UserClass", {
+      const response = await fetch("http://192.168.1.16/api/UserClass", {
         method: "POST",
         headers: {
           Accept: "text/plain",
@@ -483,9 +418,26 @@ export default function ClassDetailsScreen({ route }: any) {
             ? recurringEndDate.toISOString()
             : null,
       };
+      console.log("========== Booking Dates ==========");
+      console.log("Start Date:", classDate);
+      console.log("Start Date ISO:", classDate.toISOString());
+      console.log("Start Date Local:", classDate.toLocaleString());
 
+      console.log("End Date:", recurringEndDate);
+      console.log(
+        "End Date ISO:",
+        recurringEndDate ? recurringEndDate.toISOString() : null,
+      );
+      console.log(
+        "End Date Local:",
+        recurringEndDate ? recurringEndDate.toLocaleString() : null,
+      );
+
+      console.log("Repeat Days:", repeatDays);
+      console.log("Recurring:", isRecurringBookingFlag);
+      console.log("===================================");
       const token = await handleGetToken();
-      const response = await fetch("https://gawifit.com/api/UserClass", {
+      const response = await fetch("http://192.168.1.16/api/UserClass", {
         method: "POST",
         headers: {
           Accept: "text/plain",
@@ -562,7 +514,7 @@ export default function ClassDetailsScreen({ route }: any) {
         return;
       }
       const response = await fetch(
-        `https://gawifit.com/api/UserClass/${userClassId}`,
+        `http://192.168.1.16/api/UserClass/${userClassId}`,
         {
           method: "DELETE",
           headers: { Accept: "*/*", Authorization: `Bearer ${token}` },
@@ -681,7 +633,7 @@ export default function ClassDetailsScreen({ route }: any) {
         return;
       }
       const response = await fetch(
-        `https://gawifit.com/api/UserClass/${cancelTargetId}/request-cancellation`,
+        `http://192.168.1.16/api/UserClass/${cancelTargetId}/request-cancellation`,
         {
           method: "POST",
           headers: {
@@ -786,6 +738,14 @@ export default function ClassDetailsScreen({ route }: any) {
     (isAr ? gymClass.descriptionAr : gymClass.descriptionEn) ||
     i18n.t("default_class_description");
 
+  // 👇 localized reason shown instead of the Book button whenever the API
+  // says canBook is false (already booked, blocked, full, etc. all come
+  // through this one field now).
+  const cannotBookReason =
+    (isAr ? gymClass.cannotBookReasonAr : gymClass.cannotBookReasonEn) ||
+    i18n.t("cannot_book_default") ||
+    "This class can't be booked right now.";
+
   const formatDateDMY = (date: string | Date) => {
     const d = new Date(date);
     const day = String(d.getDate()).padStart(2, "0");
@@ -799,7 +759,7 @@ export default function ClassDetailsScreen({ route }: any) {
     <View style={s.container}>
       {/* Header Image */}
       <ImageBackground
-        source={{ uri: `https://gawifit.com/${gymClass.photoUrl}` }}
+        source={{ uri: `http://192.168.1.16/${gymClass.photoUrl}` }}
         style={s.bannerImage}
       >
         <LinearGradient
@@ -968,7 +928,7 @@ export default function ClassDetailsScreen({ route }: any) {
                   },
                 ]}
               >
-                <MaterialCommunityIcons
+                {/* <MaterialCommunityIcons
                   name={
                     gymClass.recurringMode === "Course"
                       ? "book-open-variant"
@@ -976,7 +936,7 @@ export default function ClassDetailsScreen({ route }: any) {
                   }
                   size={14}
                   color="#FFFFFF"
-                />
+                /> */}
                 <Text style={s.modeBadgeText}>
                   {gymClass.recurringMode === "Course"
                     ? isAr
@@ -1111,27 +1071,12 @@ export default function ClassDetailsScreen({ route }: any) {
         )}
       </ScrollView>
 
-      {/* Book Button — only when upcoming, not already booked, and not full */}
-      {/* Blocked — upcoming, not booked, blocked from booking at all */}
-      {!isPastClass && !gymClass.isBooked && isBookingBlocked && (
-        <View style={s.fullClassBox}>
-          <MaterialCommunityIcons
-            name="account-cancel"
-            size={20}
-            color={theme.muted}
-          />
-          <Text style={s.fullClassText}>
-            {i18n.t("booking_blocked_message") ||
-              "You can't book this class because you are blocked."}
-          </Text>
-        </View>
-      )}
-
-      {/* Book Button — only when upcoming, not already booked, not blocked, and not full */}
+      {/* 👇 Book Button area — driven entirely by gymClass.canBook now.
+          When canBook is true -> show the Book button (bookingKind-based
+          flow). When false -> show the localized reason from the API
+          (cannotBookReasonEn / cannotBookReasonAr) instead of the button. */}
       {!isPastClass &&
-        !gymClass.isBooked &&
-        !isBookingBlocked &&
-        !isClassFull && (
+        (gymClass.canBook ? (
           <TouchableOpacity
             onPress={() => {
               if (bookingKind === "ongoing") {
@@ -1171,24 +1116,16 @@ export default function ClassDetailsScreen({ route }: any) {
               <Text style={s.bookButtonText}>{i18n.t("book_this_class")}</Text>
             </LinearGradient>
           </TouchableOpacity>
-        )}
-
-      {/* Class Full — upcoming, not booked, not blocked, no seats left */}
-      {!isPastClass &&
-        !gymClass.isBooked &&
-        !isBookingBlocked &&
-        isClassFull && (
+        ) : (
           <View style={s.fullClassBox}>
             <MaterialCommunityIcons
-              name="account-multiple-remove"
+              name="information-outline"
               size={20}
               color={theme.muted}
             />
-            <Text style={s.fullClassText}>
-              {i18n.t("class_full_message") || "This class is fully booked"}
-            </Text>
+            <Text style={s.fullClassText}>{cannotBookReason}</Text>
           </View>
-        )}
+        ))}
 
       {isPastClass && (
         <View
@@ -1351,9 +1288,19 @@ export default function ClassDetailsScreen({ route }: any) {
                     minimumDate={selectedClassDate}
                     textColor={isDarkMode ? "#F0F0F0" : "#222222"}
                     themeVariant={isDarkMode ? "dark" : "light"}
-                    onChange={(_event, date) => {
+                    onChange={(event, date) => {
+                      console.log("Picker event:", event.type);
+                      console.log("Selected date:", date);
+                      console.log(
+                        "Selected local:",
+                        date ? date.toLocaleDateString() : null,
+                      );
+
                       setShowEndDatePicker(Platform.OS === "ios");
-                      if (date) setSelectedRecurringEndDate(date);
+
+                      if (date) {
+                        setSelectedRecurringEndDate(date);
+                      }
                     }}
                   />
                 )}
@@ -1580,6 +1527,7 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       backgroundColor: theme.surface,
       borderRadius: 12,
       paddingVertical: 14,
+      paddingHorizontal: 12,
       marginHorizontal: 16,
       marginBottom: 24,
       borderWidth: 0.5,
@@ -1590,6 +1538,8 @@ const createStyles = (theme: ReturnType<typeof getTheme>) =>
       fontSize: 16,
       fontWeight: "700",
       color: theme.muted,
+      flexShrink: 1,
+      textAlign: "center",
     },
     // ── Booking / cancellation modals ──────────────────────────────────
     modalOverlay: {

@@ -2,7 +2,7 @@ import * as signalR from "@microsoft/signalr";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { handleGetToken } from "../helpers";
 
-const HUB_URL = "https://gawifit.com/Hub/Gym";
+const HUB_URL = "http://192.168.1.16/Hub/Gym";
 
 export interface GymNotification {
   memberId: number;

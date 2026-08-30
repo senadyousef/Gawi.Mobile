@@ -53,7 +53,7 @@ const CouponsCarousel: React.FC<Props> = ({ refreshTrigger = 0 }) => {
         }
         const Gender = await AsyncStorage.getItem("Gender");
 
-        const url = `https://gawifit.com/api/Gyms/getAllGymsCarousel?userId=${MemberId}&role=${UserRole}&gender=${Gender}`;
+        const url = `http://192.168.1.16/api/Gyms/getAllGymsCarousel?userId=${MemberId}&role=${UserRole}&gender=${Gender}`;
         const res = await fetch(url, {
           headers: { Accept: "application/json" },
         });
@@ -101,7 +101,7 @@ const CouponsCarousel: React.FC<Props> = ({ refreshTrigger = 0 }) => {
             source={{
               uri:
                 item.photoUrl && !item.photoUrl.startsWith("http")
-                  ? `https://gawifit.com${item.photoUrl}`
+                  ? `http://192.168.1.16${item.photoUrl}`
                   : item.photoUrl,
             }}
             style={s.image}
@@ -153,7 +153,7 @@ const CouponsCarousel: React.FC<Props> = ({ refreshTrigger = 0 }) => {
                       title: i18n.locale === "ar" ? item.nameAr : item.nameEn,
                       photo:
                         item.photoUrl && !item.photoUrl.startsWith("http")
-                          ? `https://gawifit.com${item.photoUrl}`
+                          ? `http://192.168.1.16${item.photoUrl}`
                           : item.photoUrl,
                       description:
                         i18n.locale === "ar" ? item.contentAr : item.contentEn,

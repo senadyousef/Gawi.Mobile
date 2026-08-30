@@ -122,7 +122,7 @@ const CalendarScreen = () => {
   const fetchNotes = async () => {
     try {
       const token = await handleGetToken();
-      const res = await fetch("https://gawifit.com/api/Notes/getallNotes", {
+      const res = await fetch("http://192.168.1.16/api/Notes/getallNotes", {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -158,7 +158,7 @@ const CalendarScreen = () => {
       const memberId = await AsyncStorage.getItem("MemberId");
 
       const response = await fetch(
-        `https://gawifit.com/api/Gyms/GetAllGymsCarouselWithClass?userId=${memberId}&selectedDate=${selected}`,
+        `http://192.168.1.16/api/Gyms/GetAllGymsCarouselWithClass?userId=${memberId}&selectedDate=${selected}`,
         {
           method: "GET",
           headers: {
@@ -198,7 +198,7 @@ const CalendarScreen = () => {
     }
     try {
       const token = await handleGetToken();
-      const res = await fetch("https://gawifit.com/api/Notes", {
+      const res = await fetch("http://192.168.1.16/api/Notes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -273,7 +273,7 @@ const CalendarScreen = () => {
               title: i18n.locale === "ar" ? item.nameAr : item.nameEn,
               photo:
                 item.photoUrl && !item.photoUrl.startsWith("http")
-                  ? `https://gawifit.com${item.photoUrl}`
+                  ? `http://192.168.1.16${item.photoUrl}`
                   : item.photoUrl,
               description:
                 i18n.locale === "ar" ? item.contentAr : item.contentEn,
@@ -314,7 +314,7 @@ const CalendarScreen = () => {
             <View style={s.newsCard}>
               <Image
                 source={{
-                  uri: `https://gawifit.com${item.photoUrl}`,
+                  uri: `http://192.168.1.16${item.photoUrl}`,
                 }}
                 style={s.image}
               />
@@ -342,7 +342,7 @@ const CalendarScreen = () => {
             <View style={s.offerCard}>
               <Image
                 source={{
-                  uri: `https://gawifit.com${item.photoUrl}`,
+                  uri: `http://192.168.1.16${item.photoUrl}`,
                 }}
                 style={s.offerImage}
               />
@@ -366,7 +366,7 @@ const CalendarScreen = () => {
             <View style={s.classCard}>
               <Image
                 source={{
-                  uri: `https://gawifit.com${item.photoUrl}`,
+                  uri: `http://192.168.1.16${item.photoUrl}`,
                 }}
                 style={s.classImage}
               />

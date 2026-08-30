@@ -52,7 +52,7 @@ export default function AttendanceHistoryScreen() {
       }
 
       const response = await fetch(
-        `https://gawifit.com/api/MemberShips/getMemberAttendanceHistory?id=${memberId}`,
+        `http://192.168.1.16/api/MemberShips/getMemberAttendanceHistory?id=${memberId}`,
       );
 
       if (!response.ok) {

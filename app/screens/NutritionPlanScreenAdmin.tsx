@@ -200,7 +200,7 @@ const NutritionPlanScreenAdmin = ({ route, navigation }) => {
         return;
       }
       const res = await fetch(
-        `https://gawifit.com/api/PT/GetAllUserForPT?userId=${memberId}`,
+        `http://192.168.1.16/api/PT/GetAllUserForPT?userId=${memberId}`,
         {
           method: "GET",
           headers: { accept: "text/plain", Authorization: `Bearer ${token}` },
@@ -275,7 +275,7 @@ const NutritionPlanScreenAdmin = ({ route, navigation }) => {
         Alert.alert(t.errorTitle, t.errorNoToken);
         return;
       }
-      const res = await fetch("https://gawifit.com/api/NutritionPlan", {
+      const res = await fetch("http://192.168.1.16/api/NutritionPlan", {
         method: "POST",
         headers: {
           accept: "text/plain",

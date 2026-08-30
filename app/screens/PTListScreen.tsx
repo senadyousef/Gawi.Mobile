@@ -58,7 +58,7 @@ export default function PTListScreen() {
       const userId = (await AsyncStorage.getItem("MemberId")) || "0";
 
       const res = await fetch(
-        `https://gawifit.com/api/PT/getPTWithUser?userId=${userId}`,
+        `http://192.168.1.16/api/PT/getPTWithUser?userId=${userId}`,
       );
       const data: PT[] = await res.json();
       setTrainers(data);
@@ -96,7 +96,7 @@ export default function PTListScreen() {
       onPress={() => navigation.navigate("PTDetails", { trainer: item })}
     >
       <Image
-        source={{ uri: `https://gawifit.com/${item.url}` }}
+        source={{ uri: `http://192.168.1.16/${item.url}` }}
         style={s.image}
       />
       <LinearGradient

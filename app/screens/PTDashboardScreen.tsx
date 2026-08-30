@@ -371,7 +371,7 @@ const PtInfoCard = React.memo(
         >
           {selectedPT?.photoUrlPt ? (
             <Image
-              source={{ uri: `https://gawifit.com/${selectedPT.photoUrlPt}` }}
+              source={{ uri: `http://192.168.1.16/${selectedPT.photoUrlPt}` }}
               style={S.ptInfoImg}
             />
           ) : (
@@ -580,7 +580,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
       const userId = await AsyncStorage.getItem("MemberId");
       console.log("Fetching PTs for userId:", userId);
       const res = await fetch(
-        `https://gawifit.com/api/PT/GetPTWithHourShift?userId=${userId}`,
+        `http://192.168.1.16/api/PT/GetPTWithHourShift?userId=${userId}`,
         {
           method: "GET",
           headers: { accept: "text/plain", "Content-Type": "application/json" },
@@ -658,7 +658,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
         Alert.alert("Error", "No token");
         return;
       }
-      const res = await fetch("https://gawifit.com/api/PTWorkShifts", {
+      const res = await fetch("http://192.168.1.16/api/PTWorkShifts", {
         method: "POST",
         headers: {
           accept: "text/plain",
@@ -716,7 +716,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
         return;
       }
       const res = await fetch(
-        `https://gawifit.com/api/PTWorkShifts/${editingWD.workshiftId}`,
+        `http://192.168.1.16/api/PTWorkShifts/${editingWD.workshiftId}`,
         {
           method: "PUT",
           headers: {
@@ -764,7 +764,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
         return;
       }
       const res = await fetch(
-        `https://gawifit.com/api/PTWorkShifts/${shiftToDelete.workshiftId}`,
+        `http://192.168.1.16/api/PTWorkShifts/${shiftToDelete.workshiftId}`,
         {
           method: "DELETE",
           headers: { accept: "*/*", Authorization: `Bearer ${token}` },
@@ -799,7 +799,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
         <View style={[S.cardPtRow, dir(isRTL)]}>
           {item?.photoUrlPt ? (
             <Image
-              source={{ uri: `https://gawifit.com/${item.photoUrlPt}` }}
+              source={{ uri: `http://192.168.1.16/${item.photoUrlPt}` }}
               style={S.cardPtImg}
             />
           ) : (
@@ -1559,7 +1559,7 @@ const PTDashboardScreen = ({ navigation }: any) => {
                 {selectedPT?.photoUrlPt ? (
                   <Image
                     source={{
-                      uri: `https://gawifit.com/${selectedPT.photoUrlPt}`,
+                      uri: `http://192.168.1.16/${selectedPT.photoUrlPt}`,
                     }}
                     style={S.delPtImg}
                   />

@@ -171,7 +171,7 @@ export default function MyProfileScreen() {
     const MemberId = await AsyncStorage.getItem("MemberId");
     try {
       const response = await fetch(
-        `https://gawifit.com/api/MemberShips/MemberShipsforuser/${MemberId}`,
+        `http://192.168.1.16/api/MemberShips/MemberShipsforuser/${MemberId}`,
         { method: "GET", headers: { accept: "application/json" } },
       );
       if (!response.ok) throw new Error("Failed to fetch membership");
@@ -259,7 +259,7 @@ export default function MyProfileScreen() {
               }
 
               const response = await fetch(
-                `https://gawifit.com/api/User/deleteUserByEmail?id=${memberId}`,
+                `http://192.168.1.16/api/User/deleteUserByEmail?id=${memberId}`,
                 {
                   method: "PUT",
                   headers: {
@@ -340,7 +340,7 @@ export default function MyProfileScreen() {
       setLoadingPlan(true);
 
       const response = await fetch(
-        `https://gawifit.com/api/MemberShips/generate-dietary-chart/${memberIdApi}?lang=${lang}`,
+        `http://192.168.1.16/api/MemberShips/generate-dietary-chart/${memberIdApi}?lang=${lang}`,
         {
           method: "POST",
           headers: { accept: "*/*" },
@@ -510,7 +510,7 @@ export default function MyProfileScreen() {
       } as any);
 
       const response = await fetch(
-        `https://gawifit.com/api/User/updateuser${genderQuery(personalData.gender)}`,
+        `http://192.168.1.16/api/User/updateuser${genderQuery(personalData.gender)}`,
         {
           method: "PUT",
           headers: { accept: "*/*", Authorization: `Bearer ${token}` },
@@ -577,7 +577,7 @@ export default function MyProfileScreen() {
         form.append("Email", personalData.email || "");
 
         const response = await fetch(
-          `https://gawifit.com/api/User/updateuser${genderQuery(personalData.gender)}`,
+          `http://192.168.1.16/api/User/updateuser${genderQuery(personalData.gender)}`,
           {
             method: "PUT",
             headers: { accept: "*/*", Authorization: `Bearer ${token}` },
@@ -631,7 +631,7 @@ export default function MyProfileScreen() {
         console.log("personalData.gender =", personalData.gender);
         console.log(body);
         const response = await fetch(
-          `https://gawifit.com/api/MemberShips/UpdateMemberHealthData/${memberIdApi}`,
+          `http://192.168.1.16/api/MemberShips/UpdateMemberHealthData/${memberIdApi}`,
           {
             method: "PUT",
             headers: {
@@ -875,7 +875,7 @@ export default function MyProfileScreen() {
     { label: i18n.t("profile.arabic_name"), key: "nameAr" },
     { label: i18n.t("profile.email"), key: "email" },
     { label: i18n.t("profile.phone"), key: "phoneNumber" },
-    { label: i18n.t("profile.gender"), key: "gender" },
+    // { label: i18n.t("profile.gender"), key: "gender" },
   ];
 
   const physicalFields = [

@@ -49,7 +49,7 @@ const CartItemCard: React.FC<Props> = ({
     try {
       setIsLoading(true);
       const token = await handleGetToken();
-      const URL = `https://gawifit.com/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=-1`;
+      const URL = `http://192.168.1.16/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=-1`;
       const response = await fetch(URL, {
         method: "POST",
         headers: { accept: "text/plain", Authorization: `Bearer ${token}` },
@@ -77,7 +77,7 @@ const CartItemCard: React.FC<Props> = ({
     try {
       setIsLoading(true);
       const token = await handleGetToken();
-      const URL = `https://gawifit.com/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=1`;
+      const URL = `http://192.168.1.16/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=1`;
       const response = await fetch(URL, {
         method: "POST",
         headers: { accept: "text/plain", Authorization: `Bearer ${token}` },
@@ -100,7 +100,7 @@ const CartItemCard: React.FC<Props> = ({
     try {
       setIsLoading(true);
       const token = await handleGetToken();
-      const URL = `https://gawifit.com/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=-${quantity}`;
+      const URL = `http://192.168.1.16/api/Cart/addToCart?itemsId=${cartItem.id}&quantity=-${quantity}`;
       const response = await fetch(URL, {
         method: "POST",
         headers: { accept: "text/plain", Authorization: `Bearer ${token}` },
@@ -128,7 +128,7 @@ const CartItemCard: React.FC<Props> = ({
           source={{
             uri:
               cartItem.photoUrl && cartItem.photoUrl.trim() !== ""
-                ? `https://gawifit.com/${cartItem.photoUrl.replace(/^\//, "")}`
+                ? `http://192.168.1.16/${cartItem.photoUrl.replace(/^\//, "")}`
                 : "https://via.placeholder.com/300x300.png?text=No+Image",
           }}
         />

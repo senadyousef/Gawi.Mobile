@@ -156,7 +156,7 @@ const ProductDetailsScreen: React.FC<
       const note = cartNote?.trim() ?? "";
 
       const url =
-        `https://gawifit.com/api/Cart/addToCart` +
+        `http://192.168.1.16/api/Cart/addToCart` +
         `?itemsId=${productDetails.id}` +
         `&quantity=${qty}` +
         `&note=${encodeURIComponent(note)}`;
@@ -232,7 +232,7 @@ const ProductDetailsScreen: React.FC<
               imageUrl && imageUrl.trim() !== ""
                 ? imageUrl.startsWith("http")
                   ? imageUrl
-                  : `https://gawifit.com/${imageUrl.replace(/^\//, "")}`
+                  : `http://192.168.1.16/${imageUrl.replace(/^\//, "")}`
                 : "https://via.placeholder.com/300x300.png?text=No+Image",
           }}
           resizeMode="cover"
@@ -325,7 +325,7 @@ const ProductDetailsScreen: React.FC<
                 <Text style={s.title}>{i18n.t("add_to_cart")}</Text>
 
                 <Image
-                  source={{ uri: `https://gawifit.com/${imageUrl}` }}
+                  source={{ uri: `http://192.168.1.16/${imageUrl}` }}
                   style={s.productImage}
                 />
 

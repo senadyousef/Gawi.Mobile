@@ -39,7 +39,7 @@ export default function QRCodeScreen() {
     setLoading(true);
     try {
       const response = await fetch(
-        `https://gawifit.com/api/QR/getallQR`,
+        `http://192.168.1.16/api/QR/getallQR`,
       );
       if (!response.ok) throw new Error("Failed to fetch QR codes");
 

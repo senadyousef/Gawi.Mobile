@@ -24,7 +24,7 @@ const AudienceSection: React.FC = () => {
   //       const token = await AsyncStorage.getItem("authToken");
   //       const MemberId = await AsyncStorage.getItem("MemberId");
 
-  //       const url = `https://gawifit.com/api/MemberShips/currentMembersForMember?memberId=${MemberId}`;
+  //       const url = `http://192.168.1.16/api/MemberShips/currentMembersForMember?memberId=${MemberId}`;
   //       console.log("📡 Fetching:", url);
 
   //       const res = await fetch(url, {

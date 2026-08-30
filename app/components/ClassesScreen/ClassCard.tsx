@@ -74,7 +74,7 @@ const ClassCard: React.FC<Props> = ({
       <View style={s.container}>
         <View>
           <Image
-            source={{ uri: `https://gawifit.com/${item.photoUrl}` }}
+            source={{ uri: `http://192.168.1.16/${item.photoUrl}` }}
             style={[s.image, imageStyle]}
             resizeMode="cover"
           />

@@ -33,7 +33,7 @@ const getTheme = (dark: boolean) => ({
   footerText: dark ? "#666666" : Colors.gray,
 });
 
-const API_BASE_URL = "https://gawifit.com/api";
+const API_BASE_URL = "http://192.168.1.16/api";
 
 // ─── Drawer Row ───────────────────────────────────────────────────────────────
 function DrawerRow({

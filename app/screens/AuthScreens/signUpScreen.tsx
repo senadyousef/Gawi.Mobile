@@ -136,7 +136,7 @@ const SignUpScreen = () => {
 
       console.log("📦 Sending payload:", payload);
 
-      const response = await fetch("https://gawifit.com/api/User/signUp", {
+      const response = await fetch("http://192.168.1.16/api/User/signUp", {
         method: "POST",
         headers: {
           accept: "text/plain",

@@ -172,13 +172,9 @@ const LoginScreen = () => {
       console.log("👤 User:", { nameEn, email, role, userId });
 
       // 4️⃣ Determine PT
-      const isPT = role === "PT";
+      const currentRole = role; // PT | GymMember | GymEmployee
 
-      const currentRole = await AsyncStorage.getItem("UserRole");
-
-      if (!currentRole) {
-        await AsyncStorage.setItem("UserRole", isPT ? "PT" : "GymMember");
-      }
+      await AsyncStorage.setItem("UserRole", currentRole);
 
       // 5️⃣ Build IUserProfile (FINAL)
       const userProfile: IUserProfile = {
@@ -188,6 +184,7 @@ const LoginScreen = () => {
         nameAr: "",
         role,
         phoneNumber: 0,
+        gender:0,
         photoUri: undefined,
         token: authResponse.token,
         refreshToken: authResponse.refreshToken,
@@ -207,7 +204,22 @@ const LoginScreen = () => {
 
       // 8️⃣ Navigate - Use a small delay to ensure context updates
       setTimeout(() => {
-        const targetRoute = isPT ? "PTRoot" : "Root";
+        let targetRoute = "Root";
+
+        switch (role) {
+          case "PT":
+            targetRoute = "PTRoot";
+            break;
+
+          case "GymEmployee":
+            targetRoute = "GymEmployeeRoot";
+            break;
+
+          case "GymMember":
+          default:
+            targetRoute = "Root";
+            break;
+        }
         console.log("targetRoute", targetRoute);
 
         // Get the root navigator from ref or navigation container
@@ -224,7 +236,7 @@ const LoginScreen = () => {
         try {
           const pushToken = await registerForPushNotificationsAsync();
           if (pushToken) {
-            await fetch("https://gawifit.com/api/Notification", {
+            await fetch("http://192.168.1.16/api/Notification", {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${authResponse.token}`,

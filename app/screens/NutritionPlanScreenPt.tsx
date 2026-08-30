@@ -92,7 +92,7 @@ const NutritionPlanScreen = () => {
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const textInputRef = useRef(null);
 
-  const API_URL = "https://gawifit.com/api/NutritionPlan";
+  const API_URL = "http://192.168.1.16/api/NutritionPlan";
 
   const fetchNutritionPlans = async () => {
     try {

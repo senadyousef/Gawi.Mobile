@@ -18,7 +18,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAppContext } from "../context";
 import { handleGetToken } from "../helpers";
 
-const API_BASE = "https://gawifit.com/api/mobile/workout-schedules";
+const API_BASE = "http://192.168.1.16/api/mobile/workout-schedules";
 
 const WEEKDAY_SHORT = [
   { en: "Su", ar: "أح" },

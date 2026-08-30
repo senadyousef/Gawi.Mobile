@@ -98,6 +98,9 @@ import SplashScreen from "../screens/SplashScreen";
 import WalletHistoryScreen from "../screens/WalletHistoryScreen";
 import ComplaintScreen from "../screens/Complaintscreen";
 import ComplaintHistoryScreen from "../screens/Mycomplaintsscreen";
+import GymEmployeeScreen from "../screens/GymEmployeeScreen";
+import GymEmployeeExampleScreen from "../screens/GymEmployeeExampleScreen";
+import PageHeader from "../components/PageHeader";
 
 // ✅ Navigation Creators
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -769,6 +772,28 @@ export function BottomTabNavigator() {
   );
 }
 
+function GymEmployeeNavigator() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="GymEmployeeHome"
+        component={GymEmployeeScreen}
+        options={{
+          title: "Gym Employee",
+          header: () => <PageHeader />,
+        }}
+      />
+
+      <Stack.Screen
+        name="GymEmployeeExample"
+        component={GymEmployeeExampleScreen}
+        options={{
+          title: "Example",
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
 // ✅ Drawer Navigator
 // ✅ Drawer Navigator
 function DrawerNavigator() {
@@ -912,7 +937,17 @@ function RootNavigator({ isFirstTime }: { isFirstTime: boolean }) {
       return "Login";
     }
 
-    return userType === "pt" ? "PTRoot" : "Root";
+    switch (userType) {
+      case "pt":
+        return "PTRoot";
+
+      case "employee":
+        return "GymEmployeeRoot";
+
+      case "member":
+      default:
+        return "Root";
+    }
   };
 
   return (
@@ -979,6 +1014,11 @@ function RootNavigator({ isFirstTime }: { isFirstTime: boolean }) {
           <Stack.Screen
             name="PTRoot"
             component={PTDashboardTabs}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="GymEmployeeRoot"
+            component={GymEmployeeNavigator}
             options={{ headerShown: false }}
           />
 

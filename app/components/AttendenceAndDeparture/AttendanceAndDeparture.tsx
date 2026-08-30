@@ -76,9 +76,9 @@ export default function QRCodeScreen({ handleClose, memberId }: IProps) {
 
   const { width } = useWindowDimensions();
   const navigation = useNavigation();
-  const gymApiUrl = "https://gawifit.com/api/MemberShips/checkMemberInOrOut";
+  const gymApiUrl = "http://192.168.1.16/api/MemberShips/checkMemberInOrOut";
   const purchaseOpenTicketUrl =
-    "https://gawifit.com/api/MemberWallet/me/purchase-open-ticket";
+    "http://192.168.1.16/api/MemberWallet/me/purchase-open-ticket";
   const isRTL = i18n.locale === "ar";
 
   const memberIdRef = useRef<string | null>(null);
@@ -380,7 +380,7 @@ const handleCheckInOut = async () => {
     actionLockRef.current = true;
     setLoading(true);
     try {
-      const response = await fetch("https://gawifit.com/api/QR/getallQR");
+      const response = await fetch("http://192.168.1.16/api/QR/getallQR");
       if (!response.ok) throw new Error("Failed to fetch QR codes");
       const result = await response.json();
       const qrItem = result.result.find(

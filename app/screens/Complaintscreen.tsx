@@ -22,7 +22,7 @@ import SweetAlert, {
   SweetAlertType,
 } from "../components/SweetAlert";
 
-const API_URL = "https://gawifit.com/api/Complaints";
+const API_URL = "http://192.168.1.16/api/Complaints";
 
 const getTheme = (dark: boolean) => ({
   bg: dark ? "#121212" : "#F5F0E8",

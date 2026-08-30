@@ -30,7 +30,7 @@ export default function ClassesSection({ refreshTrigger = 0 }: Props) {
       try {
         setIsLoading(true);
         const response = await fetch(
-          `https://gawifit.com/api/GymClass/getAllGymClassByUser?userId=${MemberId}`,
+          `http://192.168.1.16/api/GymClass/getAllGymClassByUser?userId=${MemberId}`,
           { headers: { accept: "text/plain" } },
         );
         if (!response.ok) throw new Error("Failed to load gym classes");

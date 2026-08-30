@@ -112,7 +112,7 @@ const GalleryScreen = () => {
             // ✅ معالجة الرابط
             const sourceUrl =
               rawUrl && !rawUrl.startsWith("http")
-                ? `https://gawifit.com${rawUrl}`
+                ? `http://192.168.1.16${rawUrl}`
                 : rawUrl;
 
             const isYoutube = sourceUrl?.includes("youtube.com/watch?v=");
